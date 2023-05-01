@@ -1,0 +1,38 @@
+---
+title: "Merge LA refinery data ses"
+subtitle: ""
+author: "Jerry Wu"
+date: "5/1/2023"
+abstract: ""
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+library(tidyverse)
+```
+
+```{r}
+# load data sets
+full_data <- tibble()
+for (file in list.files('data')){
+  full_data <- bind_rows(full_data, read.csv(paste0('data/', file)))
+}
+```
+
+```{r}
+glimpse(full_data)
+```
+
+```{r}
+summary(full_data)
+```
+
+
+```{r}
+# full_data %>%
+#   ggplot(aes(x=DateTime, y=H2S, group=Monitor, color=Monitor)) +
+#     geom_line() +
+#     labs(title = "H2S concentration by monitor", y = 'H2S', x = 'time') +
+#     theme_minimal()
+```
+
