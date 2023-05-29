@@ -5,6 +5,7 @@ date: "5/1/2023"
 output:
   html_document:
     df_print: paged
+  pdf_document: default
 abstract: ''
 subtitle: ''
 ---
@@ -15,6 +16,9 @@ library(mgcv)
 library(plotly)
 library(tidyquant)
 library(openair)
+library(caret)
+library(xgboost)
+library(fastDummies)
 ```
 
 ```{r}
@@ -90,7 +94,7 @@ H2S_ma_graph_b <- H2S_ma %>%
 ggplotly(H2S_ma_graph_b) %>% layout(dragmode = 'pan')
 ```
 The line with the largest deviation/peak corresponds to the 213th&Chico monitor, in 2021-10
-
+Maybe we should start from January 2022 to start modelling to remove the extreme values, or simply removing the 213 monitor since that's set up specifically for the event.
 ```{r}
 
 full_data %>%
@@ -98,6 +102,17 @@ full_data %>%
             key.position = "bottom",
             key.header = "mean H2S", 
             key.footer = NULL, title = 'hi')
+```
+```{r}
+# Compute daily average wd/ws
+daily_full <- full_data %>%
+              select(c(H2S, ws, wd, latitude, longitude, Monitor, MinDist, Converted_Angle, Refinery, year, month, day)) %>%
+  group_by(Monitor, day, latitude, longitude, Refinery, Converted_Angle, year, month, MinDist) %>%
+  summarise(H2S_daily_max = max(H2S, na.rm=TRUE),
+            H2S_daily_avg = mean(H2S, na.rm=TRUE),
+            ws_avg = mean(ws, na.rm=TRUE),
+            wd_avg = mean(wd, na.rm=TRUE)) %>%
+  mutate(H2S_daily_max = if_else(H2S_daily_max == -Inf, NA, H2S_daily_max))
 ```
 
 # Explore some GAM models
@@ -108,9 +123,9 @@ plot(h2s_model_a)
 ```
 
 ```{r}
-h2s_model_b <- gam(H2S~s(as.numeric(month),bs='cc')+year+wd_sec+ws+I(1/MinDist^2)+
-                   Refinery+s(latitude, bs = 'tp')+s(longitude, bs='tp'), 
-                   data = full_data)
+h2s_model_b <- gam(H2S~s(as.numeric(month),bs='cc')+wd_sec+ws+I(1/MinDist^2)+
+                   Refinery+s(latitude, longitude, bs='tp', k = 5), 
+                   data = full_data %>% filter(day >= '2022-02-01'))
 summary(h2s_model_b)
 plot(h2s_model_b)
 ```
@@ -122,9 +137,21 @@ plot(h2s_dm_model_a)
 ```
 
 ```{r}
-h2s_dm_model_b <- gam(H2S_daily_max~s(as.numeric(month),bs='cc')+year+wd_sec+ws+I(1/MinDist^2)+Refinery+s(latitude, bs = 'tp')+s(longitude, bs='tp'), data = full_data)
+h2s_dm_model_b <- gam(H2S_daily_max~s(as.numeric(month),bs='cc')+wd_sec+ws+
+                        I(1/MinDist^2)+Refinery+s(latitude, longitude, bs='tp', k=5), 
+                      data = full_data %>% filter(day >= '2022-02-01'))
 summary(h2s_dm_model_b)
 plot(h2s_dm_model_b)
+```
+
+```{r}
+# Also include angle to refinery
+h2s_dm_model_c <- gam(H2S_daily_max~s(as.numeric(month),bs='cc')+wd_avg+ws_avg+
+                        I(1/MinDist^2)+Refinery+Converted_Angle+
+                        s(latitude, longitude, bs='tp', k=5), 
+                      data = daily_full %>% filter(day >= '2022-02-01'))
+summary(h2s_dm_model_c)
+plot(h2s_dm_model_c)
 ```
 
 ```{r}
@@ -133,8 +160,76 @@ summary(h2s_ma_model_a)
 plot(h2s_ma_model_a)
 ```
 
+
 ```{r}
-h2s_ma_model_b <- gam(H2S_monthly_average~s(as.numeric(month),bs='cc')+year+wd_sec+ws+I(1/MinDist^2)+Refinery+s(latitude, bs = 'tp')+s(longitude, bs='tp'), data = full_data)
+h2s_ma_model_b <- gam(H2S_monthly_average~s(as.numeric(month),bs='cc')+year+wd_sec+ws+I(1/MinDist^2)+Refinery+s(latitude, longitude, bs='tp', k=10), data = full_data)
 summary(h2s_ma_model_b)
 plot(h2s_ma_model_b)
+```
+
+# Try XGBoost on Daily Max
+
+```{r echo = T, results = 'hide'}
+daily_full <- daily_full %>%
+  mutate(Refinery = str_replace_all(str_replace_all(Refinery, '[()]', ''), ' ', '_'),
+         Monitor = str_replace_all(Refinery, ' ', '_'))
+
+## Try for a continuous month
+tune_grid <- expand.grid(nrounds = c(100, 200),
+                         max_depth = c(2, 3, 4),
+                         eta = c(0.1, 0.3),
+                         gamma = c(0.01, 0.001),
+                         colsample_bytree = c(0.5, 1),
+                         min_child_weight = 0,
+                         subsample = c(0.5, 0.75, 1))
+# Run algorithms using 10-fold cross validation
+control <- trainControl(method="cv", number=10,verboseIter=TRUE, search='grid')
+
+fit.xgb <- train(H2S_daily_max~., 
+                 method = 'xgbTree', 
+                 data = fastDummies::dummy_cols(daily_full[complete.cases(daily_full),] %>% 
+                   ungroup() %>% 
+                   filter(day >= '2022-02-01') %>% 
+                   select(-c(year, day, H2S_daily_avg)), 
+                   remove_selected_columns = TRUE)
+                 ,
+                 trControl=control,
+                 tuneGrid = tune_grid,
+                 tuneLength = 10, importance=TRUE, verbosity = 0, verbose=FALSE)
+```
+
+```{r}
+getTrainPerf(fit.xgb)
+```
+
+```{r}
+fit.xgb$finalModel
+```
+
+
+```{r}
+imp<-varImp(fit.xgb,scale=FALSE)
+plot(imp, top=10)
+```
+
+## SHAP for XGBoost above (Caret)
+```{r}
+xgb.plot.shap(data = 
+                fastDummies::dummy_cols(daily_full[complete.cases(daily_full),] %>% 
+                   ungroup() %>% 
+                   filter(day >= '2022-02-01') %>% 
+                   select(-c(year, day, H2S_daily_avg, H2S_daily_max)), 
+                   remove_selected_columns = TRUE) %>% 
+                as.matrix(), 
+              model = fit.xgb$finalModel, top_n = 12, n_col = 3)
+```
+
+```{r}
+xgb.ggplot.shap.summary(data = fastDummies::dummy_cols(daily_full[complete.cases(daily_full),] %>% 
+                   ungroup() %>% 
+                   filter(day >= '2022-02-01') %>% 
+                   select(-c(year, day, H2S_daily_avg, H2S_daily_max)), 
+                   remove_selected_columns = TRUE) %>% 
+                as.matrix(), 
+              model = fit.xgb$finalModel, top_n = 10)
 ```

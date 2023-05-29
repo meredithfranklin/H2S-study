@@ -49,8 +49,9 @@ summary(full_data)
 Some concerns for the data include:
 For TorranceAir_H2SWind, there are actually three sites, but only one site contains ws/wd information
 What's the difference between DateTime and Date/Time?
+DateTime would be the time after converting
 What's the difference between Date/Time and Date/Time.First? The latter is present in FirstMethodist
-
+For missing H2S, it could be missing due to mismatch from merging, or flagged due to issues such as low detection (minimm detection limit: 0.4)
 # Compute Daily Max H2S
 ```{r}
 H2S_dm <- full_data %>%
