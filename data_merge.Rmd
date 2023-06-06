@@ -17,7 +17,8 @@ library(mgcv)
 ```{r}
 # load data sets
 full_data <- tibble()
-names <- c(ws = 'windSpeed', wd = 'windDirection', H2S = 'Value')
+names <- c(ws = 'windSpeed', wd = 'windDirection', H2S = 'Value', QC.Code = 'qcCode',
+           Monitor = 'siteName')
 for (file in list.files('data/raw_csv')){
   new_data <- read.csv(paste0('data/raw_csv/', file)) %>% rename(any_of(names))
   print(sum(is.na(new_data$H2S)))
@@ -26,18 +27,65 @@ for (file in list.files('data/raw_csv')){
 ```
 
 ```{r}
-full_data <- full_data %>% mutate(DateTime = as.POSIXct(DateTime, format="%m/%d/%Y %H:%M", tz = 'UTC'),
-                                  Date.Time = as.POSIXct(Date.Time, format="%m/%d/%Y %H:%M", tz = 'UTC'),
-                                  Date.Time.First = as.POSIXct(Date.Time.First, format="%m/%d/%Y %H:%M", tz = 'UTC'))
+full_data <- full_data %>% mutate(DateTime = parse_date_time(full_data$DateTime, c('mdy HM', 'ymd HMS')),
+                                  DateTime = as.POSIXct(DateTime, "%Y-%m-%d %H:%M:%OS", tz = 'UTC'))
+
 full_data <- full_data %>% 
-  mutate(day = format(DateTime, "%Y-%m-%d")) %>%
-  mutate(day = if_else(is.na(day), format(Date.Time, "%Y-%m-%d"), day)) %>%
-  mutate(day = if_else(is.na(day), format(Date.Time.First, "%Y-%m-%d"), day)) %>%
-  mutate(day = as.POSIXct(day, format="%Y-%m-%d")) %>%
-  mutate(yearmonth = format(day, "%Y-%m")) %>%
-  mutate(year = format(day, "%Y")) %>%
-  mutate(month = format(day, "%m"))
+  mutate(day = as.POSIXct(format(DateTime, "%Y-%m-%d"), format="%Y-%m-%d", tz = 'UTC'))
+ 
+# Remove observations before 2020
+full_data <- full_data %>% filter(day >= '2020-01-01') %>% distinct()
+ 
+full_data <- full_data %>% 
+  mutate(yearmonth = format(day, "%Y-%m"),
+         year = format(day, "%Y"),
+         month = format(day, "%m"),
+         weekday = wday(full_data$day, label=TRUE))
 ```
+
+```{r}
+# Check for duplicate time
+full_data %>%
+   group_by(DateTime, Monitor) %>%
+   summarise(n = n()) %>%
+   filter(n > 1)
+```
+We observe multiple rows for the same date time and monitor. 
+From a quick glance, this could be a conversion issue from Date.Time to DateTime, since the H2S measurements are different. 
+In other occasions, multiple rows exist as complements, where one row contains data on the missing values of the other.
+It also appears that some times we get different measurements for the same time when it's not daylight saving conversion days?
+
+- example: January 31, G Street, wd and ws are recorded more than once.
+```{r}
+full_data %>%
+    group_by(DateTime, Monitor) %>%
+    summarise(n = n()) %>%
+    filter(n > 1) %>%
+    mutate(day = as.POSIXct(format(DateTime, "%Y-%m-%d"), format="%Y-%m-%d", tz = 'UTC')) %>%
+    group_by(day, Monitor) %>%
+    summarise(n = n())
+```
+
+
+```{r}
+# Deal with duplicate rows for same time
+
+# For the 213 monitor it seems like the duplicate rows are complements to the other
+#https://stackoverflow.com/questions/45515218/combine-rows-in-data-frame-containing-na-to-make-complete-row
+coalesce_by_column <- function(df) {
+  return(dplyr::coalesce(!!! as.list(df)))
+}
+
+data_213 <- full_data %>%
+  filter(Monitor == '213th & Chico') %>%
+  group_by(DateTime) %>%
+  summarise_all(coalesce_by_column)
+
+full_data <- full_data %>% 
+  filter(Monitor != '213th & Chico') %>%
+  rbind(data_213)
+```
+
 
 ```{r}
 glimpse(full_data)
@@ -52,8 +100,28 @@ What's the difference between DateTime and Date/Time?
 DateTime would be the time after converting
 What's the difference between Date/Time and Date/Time.First? The latter is present in FirstMethodist
 For missing H2S, it could be missing due to mismatch from merging, or flagged due to issues such as low detection (minimm detection limit: 0.4)
+
+# Any additional cleaning
+```{r}
+# For Judson, it appeared that longitude had some significant figure issues
+full_data <- full_data %>%
+  mutate(longitude = case_when(Monitor == 'Judson' ~ -118.268128,
+                               Monitor == 'West HS' ~ -118.3659363,
+                               Monitor == 'Elm Ave' ~ -118.3396301,
+                               Monitor == 'North HS' ~ -118.3312225,
+                               .default = longitude),
+         latitude = case_when(Monitor == 'West HS' ~ 33.84825516,
+                               Monitor == 'Elm Ave' ~ 33.86428452,
+                               Monitor == 'North HS' ~ 33.83779526,
+                               .default = latitude))
+```
+
+
+
 # Compute Daily Max H2S
 ```{r}
+# Compute daily max
+# -Inf (all NA) is converted to NA for that day
 H2S_dm <- full_data %>%
   group_by(day, Monitor) %>%
   summarise(H2S_daily_max = max(H2S, na.rm = TRUE)) %>%
@@ -73,6 +141,18 @@ full_data <- full_data %>%
   left_join(H2S_ma, by = c('yearmonth', 'Monitor'))
 ```
 
+## Compute daily average H2S
+```{r}
+# Compute daily average
+H2S_da <- full_data %>%
+  group_by(day, Monitor) %>%
+  summarise(H2S_daily_avg = mean(H2S, na.rm=TRUE))
+
+full_data <- full_data %>%
+  left_join(H2S_da, by = c('day', 'Monitor'))
+```
+
+## Compute wind sector
 ```{r}
 full_data <- full_data %>%
   mutate(wd_sec = case_when(0 <= wd & wd < 90 ~ 'Q1',
@@ -85,3 +165,5 @@ full_data <- full_data %>%
 saveRDS(full_data, 'data/full_data.rds')
 ```
 
+# Other issues
+- Seems like for Torrance Refinery, the three monitors had different locations recorded at first, but stayed the same for many observations.
