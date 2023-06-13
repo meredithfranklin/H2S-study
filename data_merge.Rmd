@@ -12,6 +12,8 @@ subtitle: ''
 ```{r setup, include=FALSE}
 library(tidyverse)
 library(mgcv)
+library(rgdal)
+library(sf)
 ```
 
 ```{r}
@@ -72,18 +74,18 @@ full_data %>%
 
 # For the 213 monitor it seems like the duplicate rows are complements to the other
 #https://stackoverflow.com/questions/45515218/combine-rows-in-data-frame-containing-na-to-make-complete-row
-coalesce_by_column <- function(df) {
-  return(dplyr::coalesce(!!! as.list(df)))
-}
-
-data_213 <- full_data %>%
-  filter(Monitor == '213th & Chico') %>%
-  group_by(DateTime) %>%
-  summarise_all(coalesce_by_column)
-
-full_data <- full_data %>% 
-  filter(Monitor != '213th & Chico') %>%
-  rbind(data_213)
+# coalesce_by_column <- function(df) {
+#   return(dplyr::coalesce(!!! as.list(df)))
+# }
+# 
+# data_213 <- full_data %>%
+#   filter(Monitor == '213th & Chico') %>%
+#   group_by(DateTime) %>%
+#   summarise_all(coalesce_by_column)
+# 
+# full_data <- full_data %>% 
+#   filter(Monitor != '213th & Chico') %>%
+#   rbind(data_213)
 ```
 
 
@@ -109,10 +111,16 @@ full_data <- full_data %>%
                                Monitor == 'West HS' ~ -118.3659363,
                                Monitor == 'Elm Ave' ~ -118.3396301,
                                Monitor == 'North HS' ~ -118.3312225,
+                               Monitor == 'G Street' ~ -118.2818168,
+                               Monitor == 'Guenser Park' ~ -118.313499,
+                               Monitor == 'Harbor Park' ~ -118.286028,
                                .default = longitude),
          latitude = case_when(Monitor == 'West HS' ~ 33.84825516,
                                Monitor == 'Elm Ave' ~ 33.86428452,
                                Monitor == 'North HS' ~ 33.83779526,
+                               Monitor == 'G Street' ~ 33.77785794,
+                               Monitor == 'Guenser Park' ~ 33.869231,
+                               Monitor == 'Harbor Park' ~ 33.786252,
                                .default = latitude))
 ```
 
@@ -160,6 +168,133 @@ full_data <- full_data %>%
                             180 <= wd & wd < 270 ~ 'Q3',
                             270 <= wd & wd <= 360 ~ 'Q4'))
 ```
+
+## Read shape file of water treatment plants
+```{r}
+la_wrp <- readOGR('shapefiles/LA_WRP.shp', verbose=FALSE)
+
+CRS_UTM <- CRS("+proj=utm +zone=11 ellps=WGS84")
+utm_coord <- spTransform(la_wrp, CRS_UTM)
+
+la_wrp <- tibble(name = la_wrp$CWP_NAM, capacity = la_wrp$cpcty_m, 
+                 wrp_merc_x = coordinates(la_wrp)[,c(1)], 
+                 wrp_merc_y = coordinates(la_wrp)[,c(2)],
+                 wrp_utm_x =  coordinates(utm_coord)[,c(1)],
+                 wrp_utm_y =  coordinates(utm_coord)[,c(2)])
+
+monitors <- full_data %>%
+  select(Monitor, latitude, longitude) %>%
+  distinct()
+
+monitors <- cbind(monitors, 
+                  as.data.frame(project(as.matrix(cbind(monitors$longitude,
+                                                        monitors$latitude)), 
+                                        proj= "+proj=utm +zone=11 ellps=WGS84"))) %>%
+  rename(mon_utm_x = V1,
+         mon_utm_y = V2)
+
+monitor_wrp <- monitors %>%
+  full_join(la_wrp, by=character(), suffix = c(".m", ".w"))
+
+monitor_wrp <- monitor_wrp %>%
+  mutate(dist_wrp = sqrt((mon_utm_x - wrp_utm_x)^2 + (mon_utm_y - wrp_utm_y)^2))
+
+monitor_wrp <- monitor_wrp %>%
+  select(Monitor, dist_wrp, everything()) %>%
+  arrange(Monitor) %>%
+  group_by(Monitor) %>%
+  slice_min(order_by = dist_wrp)
+
+full_data <- full_data %>%
+  left_join(monitor_wrp, join_by('Monitor'))
+```
+
+## Well production data
+```{r}
+well_prod <- read_csv('data/Los Angeles Production Well Monthly Production.CSV', show_col_types = FALSE)
+well_info <- read_csv('data/Los Angeles Wells Well Headers.CSV', show_col_types = FALSE)
+```
+
+```{r}
+well_prod <- well_prod %>%
+  left_join(well_info, join_by(`API/UWI` == API14))
+
+well_prod <- well_prod %>%
+  select(`API/UWI`, `Monthly Production Date`, `Monthly Oil`, `Monthly Gas`, 
+         `Monthly Water`, `Monthly BOE`, Days, `Operator Company Name.x`, 
+         `Production Type.x`, `Well Status.x`, `Drill Type`, 
+         `Surface Hole Latitude (WGS84)`, `Surface Hole Longitude (WGS84)`) %>%
+  rename(lon = `Surface Hole Longitude (WGS84)`,
+         lat = `Surface Hole Latitude (WGS84)`)
+
+# add the projected sampler locations
+well_location <- cbind(well_prod, 
+                  as.data.frame(project(as.matrix(cbind(well_prod$lon,
+                                                        well_prod$lat)), 
+                                        proj= "+proj=utm +zone=11 ellps=WGS84"))) %>%
+  select(`API/UWI`, lon, lat, V1, V2) %>%
+  rename(well_lon = lon,
+         well_lat = lat,
+         well_utm_x = V1,
+         well_utm_y = V2) %>%
+  distinct()
+
+monitor_well <- monitors %>%
+  full_join(well_location, by=character(), suffix = c(".m", ".w"))
+
+monitor_well <- monitor_well %>%
+  mutate(distance = sqrt((mon_utm_x - well_utm_x)^2 + (mon_utm_y - well_utm_y)^2),
+         `1km` = ifelse(distance<=1000, TRUE, FALSE),
+         `2p5km` = ifelse(distance<=2500, TRUE, FALSE),
+         `5km` = ifelse(distance<=5000, TRUE, FALSE))
+
+# Keep closest
+monitor_well <- monitor_well %>%
+  select(Monitor, `API/UWI`, distance, everything()) %>%
+  arrange(`API/UWI`) %>%
+  group_by(`API/UWI`) %>%
+  slice_min(order_by = distance)
+
+well_prod <- well_prod %>%
+  left_join(monitor_well, join_by(`API/UWI`))
+```
+
+```{r}
+prod_data <- list(
+    well_prod %>% 
+      filter(`1km` == TRUE) %>% 
+      group_by(`Monthly Production Date`) %>% 
+      summarise(active_1km = n(),
+                monthly_oil_1km = sum(`Monthly Oil`, na.rm = TRUE),
+                monthly_gas_1km = sum(`Monthly Gas`, na.rm = TRUE),
+                monthly_water_1km = sum(`Monthly Water`, na.rm = TRUE),
+                monthly_boe_1km = sum(`Monthly BOE`, na.rm = TRUE))
+    ,
+    well_prod %>% 
+      filter(`2p5km` == TRUE) %>% 
+      group_by(`Monthly Production Date`) %>% 
+      summarise(active_2p5km = n(),
+            monthly_oil_2p5km = sum(`Monthly Oil`, na.rm = TRUE),
+            monthly_gas_2p5km = sum(`Monthly Gas`, na.rm = TRUE),
+            monthly_water_2p5km = sum(`Monthly Water`, na.rm = TRUE),
+            monthly_boe_2p5km = sum(`Monthly BOE`, na.rm = TRUE))
+    ,
+    well_prod %>% 
+      filter(`5km` == TRUE) %>% 
+      group_by(`Monthly Production Date`) %>% 
+      summarise(active_5km = n(),
+            monthly_oil_5km = sum(`Monthly Oil`, na.rm = TRUE),
+            monthly_gas_5km = sum(`Monthly Gas`, na.rm = TRUE),
+            monthly_water_5km = sum(`Monthly Water`, na.rm = TRUE),
+            monthly_boe_5km = sum(`Monthly BOE`, na.rm = TRUE))
+  ) %>%
+  reduce(inner_join, by = 'Monthly Production Date') %>%
+  mutate(yearmonth = format(`Monthly Production Date`, '%Y-%m'))
+
+full_data <- full_data %>%
+  left_join(prod_data, join_by(yearmonth))
+```
+
 
 ```{r}
 saveRDS(full_data, 'data/full_data.rds')
