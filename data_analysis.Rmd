@@ -8,11 +8,14 @@ output:
   pdf_document: default
 abstract: ''
 subtitle: ''
+editor_options: 
+  chunk_output_type: inline
 ---
 
 ```{r setup, include=FALSE}
 library(tidyverse)
 library(mgcv)
+library(mgcViz)
 library(plotly)
 library(tidyquant)
 library(openair)
@@ -200,7 +203,7 @@ full_data <- full_data %>%
 ```{r}
 # Compute daily average wd/ws
 daily_full <- full_data %>%
-  select(H2S, ws, wd, latitude.x, longitude.x, Monitor, MinDist, 
+  select(H2S, ws, wd, latitude.x, longitude.x, mon_utm_x, mon_utm_y, Monitor, MinDist, 
          Converted_Angle, Refinery, year, month, day, weekday, 
          monthly_oil_1km, monthly_gas_1km, monthly_oil_2p5km, 
          monthly_gas_2p5km, monthly_oil_5km, monthly_gas_5km,
@@ -214,7 +217,7 @@ daily_full <- full_data %>%
   mutate(daily_downwind = abs(Converted_Angle - 180 - wd_avg) <= 15) %>%
   ungroup() %>%
   rename(monitor_lat = latitude.x, monitor_lon = longitude.x) %>%
-  mutate(H2S_daily_max = if_else(H2S_daily_max == -Inf, NA, H2S_daily_max)) %>%
+  mutate(H2S_daily_max = ifelse(H2S_daily_max == -Inf, NA, H2S_daily_max)) %>%
   select(-c(H2S, wd, ws)) %>%
   distinct()
 ```
@@ -314,12 +317,44 @@ h2s_da_model_a <- gam(H2S_daily_avg~s(as.numeric(month),bs='cc') + year + as.fac
                          wd_avg + ws_avg + daily_downwind + 
                          I(1/MinDist^2) + I(1/dist_wrp^2) + capacity +
                          Converted_Angle + 
-                         s(monitor_lat, monitor_lon, bs='tp', k = 10) + 
+                         s(monitor_lon, monitor_lat, bs='tp', k = 10) + 
                          monthly_oil_1km + monthly_gas_1km + active_1km, 
                       data = daily_full %>% filter(day >= '2022-02-01'))
 summary(h2s_da_model_a)
 plot(h2s_da_model_a)
+a <- getViz(h2s_da_model_a)
+plot(sm(a, 2)) + l_fitRaster() + l_fitContour() + l_points()
 ```
+
+```{r}
+# Look at daily average
+h2s_da_model_b <- gam(H2S_daily_avg~s(as.numeric(month),bs='cc') + year + as.factor(weekday) +
+                         wd_avg + ws_avg + daily_downwind + 
+                         I(1/MinDist^2) + I(1/dist_wrp^2) + capacity +
+                         Converted_Angle + 
+                         s(I(mon_utm_x/10^3), I(mon_utm_y/10^3), bs='tp', k = 10) + 
+                         monthly_oil_1km + monthly_gas_1km + active_1km, 
+                      data = daily_full %>% filter(day >= '2022-02-01'))
+summary(h2s_da_model_b)
+plot(h2s_da_model_b)
+b <- getViz(h2s_da_model_b)
+plot(sm(b, 2)) + l_fitRaster() + l_fitContour() + l_points()
+```
+
+```{r}
+h2s_da_model_c <- gam(H2S_daily_avg~s(as.numeric(month),bs='cc') + year + as.factor(weekday) +
+                         wd_avg + ws_avg + daily_downwind + 
+                          I(1/dist_wrp^2) +
+                          
+                         s(I(mon_utm_x/10^3), I(mon_utm_y/10^3), bs='tp', k = 10) + 
+                         monthly_oil_1km + monthly_gas_1km + active_1km, 
+                      data = daily_full %>% filter(day >= '2022-02-01'))
+summary(h2s_da_model_c)
+plot(h2s_da_model_c)
+c <- getViz(h2s_da_model_c)
+plot(sm(c, 2)) + l_fitRaster() + l_fitContour() + l_points()
+```
+
 
 # Monthly 
 ```{r}
