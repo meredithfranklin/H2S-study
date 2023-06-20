@@ -25,6 +25,11 @@ library(fastDummies)
 library(openairmaps)
 library(htmlwidgets)
 library(circular)
+library(raster)
+library(geosphere)
+library(terra)
+library(rgl)
+select <- dplyr::select
 ```
 
 ```{r}
@@ -62,8 +67,7 @@ full_data %>%
   theme(axis.text.x = element_text(angle = 45))
 ```
 
-
-# Compute Daily Max H2S
+# Visualizing Daily Max H2S
 ```{r}
 H2S_dm <- full_data %>%
   group_by(day, Monitor) %>%
@@ -132,7 +136,7 @@ ggplotly(H2S_ma_graph_b) %>% layout(dragmode = 'pan')
 The line with the largest deviation/peak corresponds to the 213th&Chico monitor, in 2021-10
 Maybe we should start from January 2022 to start modelling to remove the extreme values, or simply removing the 213 monitor since that's set up specifically for the event.
 
-# Daily average
+# Visualizing Daily Average H2S
 ```{r}
 # Compute daily average
 H2S_da <- full_data %>%
@@ -193,11 +197,55 @@ polarplot
 ```
 
 ```{r}
-# Create variable to indicate downwind or upwind
-full_data <- full_data %>%
-  mutate(downwind = abs(Converted_Angle - 180 - wd) <= 15)
+# Create variable to indicate downwind wrt refinery
+wind_diff <- abs(full_data$Converted_Angle - 180 - full_data$wd)
+wind_diff <- ifelse(wind_diff > 180, 360 - wind_diff, wind_diff)
+full_data$downwind_ref <- as.integer(wind_diff <= 15)
 ```
 
+# Find angle between monitor and nearest water treatment plant
+```{r}
+# Function to calculate the angle between two lat/long points
+calculate_angle <- function(lat1, lon1, lat2, lon2) {
+
+  # Calculate the bearing between the two points
+  angle <- bearing(cbind(lon1, lat1), cbind(lon2, lat2))
+  
+  # Return the angle
+  return(angle)
+}
+
+wrp <- full_data %>% 
+  select(name, wrp_utm_x, wrp_utm_y) %>%
+  distinct()
+
+wrp_coord <- cbind(wrp, terra::project(as.matrix(cbind(wrp$wrp_utm_x, wrp$wrp_utm_y)), 
+                            "+proj=utm +zone=11 ellps=WGS84", 
+                            "+proj=longlat +datum=WGS84")) %>%
+  rename(longitude.wrp = '1',
+         latitude.wrp = '2')
+
+full_data <- full_data %>%
+  left_join(wrp_coord %>% select(name, latitude.wrp, longitude.wrp), join_by(name), keep=F)
+
+mon_wrp <- full_data %>% 
+              select(Monitor, name, latitude.x, longitude.x, latitude.wrp, longitude.wrp) %>%
+              distinct()
+
+mon_wrp$wrp_angle <- calculate_angle(mon_wrp$latitude.x, mon_wrp$longitude.x, 
+                                     mon_wrp$latitude.wrp, mon_wrp$longitude.wrp)
+
+mon_wrp$wrp_angle <- if_else(mon_wrp$wrp_angle < 0, mon_wrp$wrp_angle + 360, mon_wrp$wrp_angle)
+
+full_data <- full_data %>%
+  left_join(mon_wrp %>% select(Monitor, name, wrp_angle), join_by(Monitor, name), keep=F)
+
+# Finally, check if wind direction is downwind w.r.t wrp
+wind_diff <- abs(full_data$wrp_angle - full_data$wd)
+wind_diff <- ifelse(wind_diff > 180, 360 - wind_diff, wind_diff)
+
+full_data$downwind_wrp <- as.integer(wind_diff <= 15)
+```
 
 
 ```{r}
@@ -207,19 +255,71 @@ daily_full <- full_data %>%
          Converted_Angle, Refinery, year, month, day, weekday, 
          monthly_oil_1km, monthly_gas_1km, monthly_oil_2p5km, 
          monthly_gas_2p5km, monthly_oil_5km, monthly_gas_5km,
-         dist_wrp, capacity, active_1km, active_2p5km, active_5km) %>%
+         dist_wrp, capacity, active_1km, active_2p5km, active_5km,
+         wrp_angle) %>%
   group_by(Monitor, day) %>%
   mutate(H2S_daily_max = max(H2S, na.rm=TRUE),
             H2S_daily_avg = mean(H2S, na.rm=TRUE),
             ws_avg = mean(ws, na.rm=TRUE),
             wd_avg = as.numeric(mean(circular(wd, units = 'degrees'), na.rm=TRUE))) %>%
   mutate(wd_avg = if_else(wd_avg < 0, wd_avg+360, wd_avg)) %>%
-  mutate(daily_downwind = abs(Converted_Angle - 180 - wd_avg) <= 15) %>%
   ungroup() %>%
   rename(monitor_lat = latitude.x, monitor_lon = longitude.x) %>%
   mutate(H2S_daily_max = ifelse(H2S_daily_max == -Inf, NA, H2S_daily_max)) %>%
   select(-c(H2S, wd, ws)) %>%
   distinct()
+```
+
+```{r}
+# Get the downwind indicators for daily data
+wind_diff <- abs(daily_full$Converted_Angle - 180 - daily_full$wd_avg)
+wind_diff <- ifelse(wind_diff > 180, 360 - wind_diff, wind_diff)
+daily_full$daily_downwind_ref <- wind_diff
+
+wind_diff <- abs(daily_full$wrp_angle - daily_full$wd_avg)
+wind_diff <- ifelse(wind_diff > 180, 360 - wind_diff, wind_diff)
+
+daily_full$daily_downwind_wrp <- as.integer(wind_diff <= 15)
+```
+
+
+# Get monitor locations
+```{r}
+monitors_coord <- full_data %>%
+  select(Monitor, latitude.x, longitude.x) %>%
+  distinct()
+
+monitors <- monitors_coord %>%
+  select(Monitor)
+  
+coordinates(monitors_coord) <- ~ longitude.x + latitude.x
+```
+
+# Load in elevation data
+```{r}
+elevation <- raster('shapefiles/N33W119.hgt')
+
+monitors <- cbind(monitors, extract(elevation, monitors_coord)) %>%
+  as.data.frame() %>%
+  rename(elevation = 2)
+```
+
+# Load in EVI data
+```{r}
+evi <- raster('shapefiles/MOD13Q1.006__250m_16_days_EVI_doy2022177_aid0001.tif')
+
+monitors <- cbind(monitors, extract(evi, monitors_coord) * 0.0001) %>%
+  as.data.frame() %>%
+  rename(EVI = 3)
+```
+
+# Merge EVI and elevation to data
+```{r}
+full_data <- full_data %>%
+  left_join(monitors, join_by(Monitor))
+
+daily_full <- daily_full %>%
+  left_join(monitors, join_by(Monitor))
 ```
 
 # Explore some GAM models
@@ -254,7 +354,7 @@ plot(h2s_model_c)
 # Include converted angle and weekday
 h2s_model_d <- gam(H2S ~ 
                      s(as.numeric(month),bs='cc') + year + as.factor(weekday) +
-                     wd_sec + ws + downwind +
+                     wd_sec + ws + downwind_ref + downwind_wrp +
                      I(1/MinDist^2) + dist_wrp + capacity +
                      Converted_Angle + 
                      s(latitude.x, longitude.x, bs='tp', k = 10) + 
@@ -295,10 +395,9 @@ plot(h2s_dm_model_c)
 ```
 
 ```{r}
-# Try to include as many variables as possible
 h2s_dm_model_d <- gam(H2S_daily_max ~ 
                          s(as.numeric(month),bs='cc') + year + as.factor(weekday) +
-                         wd_avg + ws_avg + daily_downwind + 
+                         wd_avg + ws_avg + daily_downwind_ref + 
                          I(1/MinDist^2) + dist_wrp + capacity +
                          Converted_Angle + 
                          s(monitor_lat, monitor_lon, bs='tp', k = 10) + 
@@ -309,12 +408,36 @@ summary(h2s_dm_model_d)
 plot(h2s_dm_model_d)
 ```
 
+```{r}
+# Try to include as many variables as possible
+h2s_dm_model_e <- gam(H2S_daily_max ~ s(as.numeric(month),bs='cc') + year + as.character(weekday) +
+                         wd_avg + ws_avg + daily_downwind_ref + 
+                          I(1/dist_wrp^2) +
+                         s(I(mon_utm_x/10^3), I(mon_utm_y/10^3), bs='tp', k = 10) + 
+                        te(I(mon_utm_x/10^3), I(mon_utm_y/10^3),as.numeric(day),k=c(10,10),d=c(2,1),bs=c('tp','cc')) +
+                         monthly_oil_1km + monthly_gas_1km + active_1km + 
+                        daily_downwind_wrp + elevation + EVI, 
+                      data = daily_full %>% filter(day >= '2022-02-01'))
+
+summary(h2s_dm_model_e)
+plot(h2s_dm_model_e)
+
+e <- getViz(h2s_dm_model_e)
+plot(sm(e, 2)) + l_fitRaster() + l_fitContour() + l_points()
+
+plotRGL(sm(e, 3), fix = c(`as.numeric(day)` = 0), residuals = F)
+
+# try a plot using wireframe
+plot3d <- matrix(fitted(h2s_dm_model_e), ncol = 20)
+wireframe(plot3d, drape=TRUE, colorkey=TRUE)
+```
+
 
 ### Daily Average
 ```{r}
 # Look at daily average
 h2s_da_model_a <- gam(H2S_daily_avg~s(as.numeric(month),bs='cc') + year + as.factor(weekday) +
-                         wd_avg + ws_avg + daily_downwind + 
+                         wd_avg + ws_avg + daily_downwind_ref + 
                          I(1/MinDist^2) + I(1/dist_wrp^2) + capacity +
                          Converted_Angle + 
                          s(monitor_lon, monitor_lat, bs='tp', k = 10) + 
@@ -329,7 +452,7 @@ plot(sm(a, 2)) + l_fitRaster() + l_fitContour() + l_points()
 ```{r}
 # Look at daily average
 h2s_da_model_b <- gam(H2S_daily_avg~s(as.numeric(month),bs='cc') + year + as.factor(weekday) +
-                         wd_avg + ws_avg + daily_downwind + 
+                         wd_avg + ws_avg + daily_downwind_ref + 
                          I(1/MinDist^2) + I(1/dist_wrp^2) + capacity +
                          Converted_Angle + 
                          s(I(mon_utm_x/10^3), I(mon_utm_y/10^3), bs='tp', k = 10) + 
@@ -343,7 +466,7 @@ plot(sm(b, 2)) + l_fitRaster() + l_fitContour() + l_points()
 
 ```{r}
 h2s_da_model_c <- gam(H2S_daily_avg~s(as.numeric(month),bs='cc') + year + as.factor(weekday) +
-                         wd_avg + ws_avg + daily_downwind + 
+                         wd_avg + ws_avg + daily_downwind_ref + 
                           I(1/dist_wrp^2) +
                           
                          s(I(mon_utm_x/10^3), I(mon_utm_y/10^3), bs='tp', k = 10) + 
@@ -355,6 +478,42 @@ c <- getViz(h2s_da_model_c)
 plot(sm(c, 2)) + l_fitRaster() + l_fitContour() + l_points()
 ```
 
+```{r}
+h2s_da_model_d <- gam(H2S_daily_avg~s(as.numeric(month),bs='cc') + year + as.character(weekday) +
+                         wd_avg + ws_avg + daily_downwind_ref + 
+                          I(1/dist_wrp^2) +
+                          
+                         s(I(mon_utm_x/10^3), I(mon_utm_y/10^3), bs='tp', k = 10) + 
+                         monthly_oil_1km + monthly_gas_1km + active_1km + 
+                        daily_downwind_wrp + elevation + EVI, 
+                      data = daily_full %>% filter(day >= '2022-02-01'))
+summary(h2s_da_model_d)
+plot(h2s_da_model_d)
+d <- getViz(h2s_da_model_d)
+plot(sm(d, 2)) + l_fitRaster() + l_fitContour() + l_points()
+```
+
+```{r}
+h2s_da_model_e <- gam(H2S_daily_avg~s(as.numeric(month),bs='cc') + year + as.character(weekday) +
+                         wd_avg + ws_avg + daily_downwind_ref + 
+                          I(1/dist_wrp^2) +
+                         s(I(mon_utm_x/10^3), I(mon_utm_y/10^3), bs='tp', k = 10) + 
+                        te(I(mon_utm_x/10^3), I(mon_utm_y/10^3),as.numeric(day),k=c(10,10),d=c(2,1),bs=c('tp','cc')) +
+                         monthly_oil_1km + monthly_gas_1km + active_1km + 
+                        daily_downwind_wrp + elevation + EVI, 
+                      data = daily_full %>% filter(day >= '2022-02-01'))
+summary(h2s_da_model_e)
+plot(h2s_da_model_e)
+
+d <- getViz(h2s_da_model_e)
+plot(sm(d, 2)) + l_fitRaster() + l_fitContour() + l_points()
+
+plotRGL(sm(d, 3), fix = c(`as.numeric(day)` = 0), residuals = F)
+
+# try a plot using wireframe
+plot3d <- matrix(fitted(h2s_da_model_e), ncol = 20)
+wireframe(plot3d, drape=TRUE, colorkey=TRUE)
+```
 
 # Monthly 
 ```{r}
@@ -370,19 +529,43 @@ summary(h2s_ma_model_b)
 plot(h2s_ma_model_b)
 ```
 
-# Try XGBoost on Daily Max
+
+
+# Try XGBoost on Daily Average
 
 ```{r echo = T, results = 'hide'}
+# Cross validation by leaving one monitor out 
 daily_full <- daily_full %>%
   mutate(Refinery = str_replace_all(str_replace_all(Refinery, '[()]', ''), ' ', '_'),
          Monitor = str_replace_all(Monitor, ' ', '_'),
-         weekday = as.character(weekday))
+         weekday = as.character(weekday),
+         daily_downwind_ref = as.integer(daily_downwind_ref),
+         daily_downwind_wrp = as.integer(daily_downwind_wrp))
 
 train <- daily_full %>%
   filter(Monitor != 'Harbor_Park')
 
+train <- train[complete.cases(train),] %>%
+  filter(day >= '2022-02-01')
+
+train <- fastDummies::dummy_cols(train %>%
+                   select(-c(Refinery, Monitor, day, active_2p5km, active_5km, monthly_oil_2p5km,
+                             monthly_gas_2p5km, monthly_oil_5km, monthly_gas_5km, H2S_daily_max,
+                             mon_utm_x, mon_utm_y)) %>%
+                   mutate(MinDist = 1/(MinDist^2)),
+                   remove_selected_columns = TRUE)
+
 test <- daily_full %>%
   filter(Monitor == 'Harbor_Park')
+
+test <- fastDummies::dummy_cols(test[complete.cases(test),] %>%
+                   ungroup() %>%
+                   filter(day >= '2022-02-01') %>%
+                   select(-c(Refinery, Monitor, day, active_2p5km, active_5km, monthly_oil_2p5km,
+                             monthly_gas_2p5km, monthly_oil_5km, monthly_gas_5km, H2S_daily_max,
+                             mon_utm_x, mon_utm_y)) %>%
+                   mutate(MinDist = 1/(MinDist^2)),
+                   remove_selected_columns = TRUE)
 
 # Try for a continuous month
 tune_grid <- expand.grid(nrounds = c(100, 200, 500),
@@ -392,20 +575,17 @@ tune_grid <- expand.grid(nrounds = c(100, 200, 500),
                          colsample_bytree = c(0.5, 1),
                          min_child_weight = 0,
                          subsample = c(0.5, 0.75, 1))
+
 # Run algorithms using 10-fold cross validation
-control <- trainControl(method="cv", number=10,verboseIter=TRUE, search='grid')
+control <- trainControl(method="cv", 
+                        number=10,
+                        verboseIter=TRUE, 
+                        search='grid')
 
 fit.xgb_da <- readRDS('rfiles/fit.xgb_da.rds')
 # fit.xgb_da <- train(H2S_daily_avg~.,
 #                  method = 'xgbTree',
-#                  data = fastDummies::dummy_cols(train[complete.cases(train),] %>%
-#                    ungroup() %>%
-#                    filter(day >= '2022-02-01') %>%
-#                    select(-c(Refinery, Monitor, day, active_2p5km, active_5km, monthly_oil_2p5km,
-#                              monthly_gas_2p5km, monthly_oil_5km, monthly_gas_5km, H2S_daily_max)) %>%
-#                    mutate(MinDist = 1/(MinDist^2)),
-#                    remove_selected_columns = TRUE)
-#                  ,
+#                  data = train,
 #                  trControl=control,
 #                  tuneGrid = tune_grid,
 #                  tuneLength = 10, importance=TRUE, verbosity = 0, verbose=FALSE)
@@ -419,16 +599,8 @@ getTrainPerf(fit.xgb_da)
 ```{r}
 # Get testing performance on Harbor Park monitor
 predictions <- predict(fit.xgb_da$finalModel, 
-                       newdata = fastDummies::dummy_cols(test[complete.cases(test),] %>%
-                         ungroup() %>%
-                         filter(day >= '2022-02-01') %>%
-                         select(-c(Refinery, Monitor, day, active_2p5km, active_5km, monthly_oil_2p5km,
-                                   monthly_gas_2p5km, monthly_oil_5km, monthly_gas_5km, H2S_daily_max, H2S_daily_avg)) %>%
-                         mutate(MinDist = 1/(MinDist^2),
-                                daily_downwindTRUE = if_else(daily_downwind, 1, 0)) %>%
-                         select(-daily_downwind),
-                         remove_selected_columns = TRUE) %>% as.matrix())
-R2(test[complete.cases(test),] %>% filter(day >= '2022-02-01') %>% pull(H2S_daily_avg), predictions)
+                       newdata = test %>% select(-H2S_daily_avg) %>% as.matrix())
+R2(test[complete.cases(test),] %>% pull(H2S_daily_avg), predictions)
 ```
 
 ```{r}
@@ -443,16 +615,7 @@ plot(imp, top=10)
 
 ## SHAP for XGBoost above (Caret)
 ```{r}
-matrix <- fastDummies::dummy_cols(train[complete.cases(train),] %>% 
-                   ungroup() %>% 
-                   filter(day >= '2022-02-01') %>% 
-                   select(-c(Refinery, Monitor, day, active_2p5km, active_5km, 
-                             monthly_oil_2p5km, monthly_gas_2p5km, monthly_oil_5km, 
-                             monthly_gas_5km, H2S_daily_max, H2S_daily_avg)) %>%
-                   mutate(MinDist = 1/(MinDist^2),
-                          daily_downwindTRUE = if_else(daily_downwind, 1, 0)) %>%
-                     select(-daily_downwind), 
-                   remove_selected_columns = TRUE)
+matrix <- test %>% select(-H2S_daily_avg)
 matrix <- as.matrix(sapply(matrix, as.numeric))  
 xgb.plot.shap(data = matrix, 
               model = fit.xgb_da$finalModel, top_n = 12, n_col = 3)
@@ -461,4 +624,91 @@ xgb.plot.shap(data = matrix,
 ```{r}
 xgb.ggplot.shap.summary(data = matrix, 
               model = fit.xgb_da$finalModel, top_n = 10)
+```
+
+# CV by leaving each monitor out once
+```{r}
+post2022feb <- daily_full %>% 
+  filter(day >= '2022-02-01')
+
+monitor_names <- unique(post2022feb$Monitor)
+
+# for (i in 1:length(monitor_names)) {
+#   train <- post2022feb %>%
+#     filter(Monitor != monitor_names[i])
+#   
+#   train <- train[complete.cases(train),]
+# 
+#   train <- fastDummies::dummy_cols(train %>%
+#                      select(-c(Refinery, Monitor, day, active_2p5km, active_5km, monthly_oil_2p5km,
+#                                monthly_gas_2p5km, monthly_oil_5km, monthly_gas_5km, H2S_daily_max,
+#                                mon_utm_x, mon_utm_y)) %>%
+#                      mutate(MinDist = 1/(MinDist^2)),
+#                      remove_selected_columns = TRUE)
+# 
+#   fit.xgb_da <- train(H2S_daily_avg~.,
+#                  method = 'xgbTree',
+#                  data = train,
+#                  trControl=control,
+#                  tuneGrid = tune_grid,
+#                  tuneLength = 10, importance=TRUE, verbosity = 0, verbose=FALSE)
+#   
+#   saveRDS(fit.xgb_da, paste0('rfiles/fit.xgb_da_', monitor_names[i], '.rds'))
+# }
+```
+
+```{r}
+model_stats <- tibble(Monitor = character(), train_r2 = numeric(), test_r2 = numeric())
+
+add_cols <- function(df, cols) {
+  add <- cols[!cols %in% names(df)]
+  if(length(add) !=0 ) df[add] <- NA
+  return(df)
+}
+
+for (i in setdiff(1:length(monitor_names), c(9))) {
+
+  fit.xgb_da <- readRDS(paste0('rfiles/fit.xgb_da_', monitor_names[i], '.rds'))
+  
+  test <- post2022feb %>%
+    filter(Monitor == monitor_names[i])
+
+  test <- fastDummies::dummy_cols(test[complete.cases(test),] %>%
+                     ungroup() %>%
+                     select(-c(Refinery, Monitor, day, active_2p5km, active_5km, monthly_oil_2p5km,
+                           monthly_gas_2p5km, monthly_oil_5km, monthly_gas_5km, H2S_daily_max,
+                           mon_utm_x, mon_utm_y)) %>%
+                       add_cols(c('year_2022', 'year_2023', 'month_01', 'month_02',
+                                  'month_03', 'month_04', 'month_05', 'month_06', 
+                                  'month_07', 'month_08', 'month_09', 'month_10',
+                                  'month_11', 'month_12')) %>%
+                     mutate(MinDist = 1/(MinDist^2),
+                            year_2022 = ifelse(is.na(year_2022), 0, year_2022),
+                            year_2023 = ifelse(is.na(year_2023), 0, year_2023),
+                            month_01 = ifelse(is.na(month_01), 0, month_01),
+                            month_02 = ifelse(is.na(month_02), 0, month_02),
+                            month_03 = ifelse(is.na(month_03), 0, month_03),
+                            month_04 = ifelse(is.na(month_04), 0, month_04),
+                            month_05 = ifelse(is.na(month_05), 0, month_05),
+                            month_06 = ifelse(is.na(month_06), 0, month_06),
+                            month_07 = ifelse(is.na(month_07), 0, month_07),
+                            month_08 = ifelse(is.na(month_08), 0, month_08),
+                            month_09 = ifelse(is.na(month_09), 0, month_09),
+                            month_10 = ifelse(is.na(month_10), 0, month_10),
+                            month_11 = ifelse(is.na(month_11), 0, month_11),
+                            month_12 = ifelse(is.na(month_12), 0, month_12)),
+                     remove_selected_columns = TRUE)
+  
+  train_r2 <- getTrainPerf(fit.xgb_da)$TrainRsquared
+  
+  predictions <- predict(fit.xgb_da$finalModel, 
+                         newdata = test %>% select(-H2S_daily_avg) %>% as.matrix())
+  
+  test_r2 <- R2(test %>% pull(H2S_daily_avg), predictions)
+  
+  model_stats <- rbind(model_stats, tibble(Monitor = monitor_names[i], train_r2, test_r2))
+}
+
+model_stats %>% rbind(tibble(Monitor = 'Total Average', train_r2 = mean(model_stats$train_r2, na.rm = T),
+                             test_r2 = mean(model_stats$test_r2, na.rm = T)))
 ```
