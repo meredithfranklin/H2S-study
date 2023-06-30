@@ -29,6 +29,7 @@ library(raster)
 library(geosphere)
 library(terra)
 library(rgl)
+library(sf)
 select <- dplyr::select
 ```
 
@@ -196,6 +197,8 @@ polarplot
 #saveWidget(polarplot, file="polarplot.html")
 ```
 
+
+# Downwind Indicator wrp Refinery
 ```{r}
 # Create variable to indicate downwind wrt refinery
 wind_diff <- abs(full_data$Converted_Angle - 180 - full_data$wd)
@@ -274,7 +277,7 @@ daily_full <- full_data %>%
 # Get the downwind indicators for daily data
 wind_diff <- abs(daily_full$Converted_Angle - 180 - daily_full$wd_avg)
 wind_diff <- ifelse(wind_diff > 180, 360 - wind_diff, wind_diff)
-daily_full$daily_downwind_ref <- wind_diff
+daily_full$daily_downwind_ref <- as.integer(wind_diff <= 15)
 
 wind_diff <- abs(daily_full$wrp_angle - daily_full$wd_avg)
 wind_diff <- ifelse(wind_diff > 180, 360 - wind_diff, wind_diff)
@@ -322,6 +325,63 @@ daily_full <- daily_full %>%
   left_join(monitors, join_by(Monitor))
 ```
 
+# Merge Odor Complaint data
+```{r}
+odor <- read_csv('data/SCAQMD_odorcomplaints_2018_2022.csv')
+la_county <- read_sf('shapefiles/Zip_Codes_(LA_County)/Zip_Codes_(LA_County).shp')
+```
+
+```{r}
+# https://gis.stackexchange.com/questions/282750/identify-polygon-containing-point-with-r-sf-package
+pnts_sf <- do.call("st_sfc",c(lapply(1:nrow(monitors_coord@coords), 
+function(i) {st_point(as.numeric(monitors_coord@coords[i, ]))}), list("crs" = 4326))) 
+
+pnts_trans <- st_transform(pnts_sf, 2163) # apply transformation to pnts sf
+la_county_trans <- st_transform(la_county, 2163)      # apply transformation to polygons sf
+
+# intersect and extract state name
+monitors_coord@data$county <- apply(st_intersects(la_county_trans, pnts_trans, sparse = FALSE), 2, 
+               function(col) { 
+                  la_county_trans[which(col), ]$ZIPCODE
+               })
+```
+
+```{r}
+# Plot results to double check
+la_county_present <- la_county[la_county$ZIPCODE %in% unique(monitors_coord$county), ]
+
+la_county_present %>% 
+  ggplot() +
+  geom_sf(aes(fill = ZIPCODE)) +
+  geom_point(data = as_tibble(monitors_coord@coords), aes(x = longitude.x, y = latitude.x))
+```
+```{r}
+odor <- odor[odor$zip %in% unique(monitors_coord$county), ]
+
+monitor_odor <- monitors_coord@data %>%
+  left_join(odor %>% mutate(zip = as.character(zip)), join_by(county == zip)) %>%
+  select(-`...1`)
+
+full_data <- full_data %>%
+  left_join(monitors_coord@data, join_by(Monitor))
+
+daily_full <- daily_full %>%
+  left_join(monitors_coord@data, join_by(Monitor))
+
+full_data <- full_data %>%
+  left_join(monitor_odor %>% select(Monitor, date, num_odor_complaints), join_by(Monitor, day == date))
+
+full_data <- full_data %>%
+  mutate(num_odor_complaints = coalesce(num_odor_complaints, 0))
+
+daily_full <- daily_full %>%
+  left_join(monitor_odor %>% select(Monitor, date, num_odor_complaints), join_by(Monitor, day == date))
+
+daily_full <- daily_full %>%
+  mutate(num_odor_complaints = coalesce(num_odor_complaints, 0))
+```
+
+
 # Explore some GAM models
 ### Five minute H2S
 ```{r}
@@ -363,6 +423,57 @@ h2s_model_d <- gam(H2S ~
                    data = full_data %>% filter(day >= '2022-02-01'))
 summary(h2s_model_d)
 plot(h2s_model_d)
+```
+
+```{r}
+# Include elvation, EVI, 3D smooth, odor
+h2s_model_e <- gam(H2S ~ 
+                     s(as.numeric(month),bs='cc') + year + as.factor(weekday) +
+                     wd_sec + ws + downwind_ref + downwind_wrp +
+                     I(1/MinDist^2) + I(1/dist_wrp^2) + capacity + wrp_angle +
+                     Converted_Angle + elevation + EVI + 
+                     s(latitude.x, longitude.x, bs='tp', k = 10) + 
+                     te(I(mon_utm_x/10^3), I(mon_utm_y/10^3),as.numeric(day),k=c(10,10),d=c(2,1),bs=c('tp','cc')) +
+                     monthly_oil_1km + monthly_gas_1km + active_1km +
+                     num_odor_complaints
+                     , 
+                   data = full_data %>% filter(day >= '2022-02-01'))
+summary(h2s_model_e)
+plot(h2s_model_e)
+gc()
+```
+
+```{r}
+# Model only the month of the event, October 2021
+h2s_model_f <- gam(H2S ~ wd_sec + ws + downwind_ref + downwind_wrp +
+                     I(1/MinDist^2) + I(1/dist_wrp^2) + capacity + wrp_angle +
+                     Converted_Angle + elevation + EVI + 
+                     s(latitude.x, longitude.x, bs='tp', k = 10) + 
+                     te(I(mon_utm_x/10^3), I(mon_utm_y/10^3),as.numeric(day),k=c(10,10),d=c(2,1),bs=c('tp','cc')) +
+                     monthly_oil_1km + monthly_gas_1km + active_1km +
+                     num_odor_complaints
+                     , 
+                   data = full_data %>% filter(year == '2021', month == '10'))
+summary(h2s_model_f)
+plot(h2s_model_f)
+gc()
+```
+
+```{r}
+# Model data excluding the month of the event, October 2021
+h2s_model_g <- gam(H2S ~ s(as.numeric(month),bs='cc') + year + 
+                     wd_sec + ws + downwind_ref + downwind_wrp +
+                     I(1/MinDist^2) + I(1/dist_wrp^2) + capacity + wrp_angle +
+                     Converted_Angle + elevation + EVI + 
+                     s(latitude.x, longitude.x, bs='tp', k = 10) + 
+                     te(I(mon_utm_x/10^3), I(mon_utm_y/10^3),as.numeric(day),k=c(10,10),d=c(2,1),bs=c('tp','cc')) +
+                     monthly_oil_1km + monthly_gas_1km + active_1km +
+                     num_odor_complaints
+                     , 
+                   data = full_data %>% filter(year != '2021', month != '10'))
+summary(h2s_model_g)
+plot(h2s_model_g)
+gc()
 ```
 
 ### Daily max H2S
@@ -411,12 +522,11 @@ plot(h2s_dm_model_d)
 ```{r}
 # Try to include as many variables as possible
 h2s_dm_model_e <- gam(H2S_daily_max ~ s(as.numeric(month),bs='cc') + year + as.character(weekday) +
-                         wd_avg + ws_avg + daily_downwind_ref + 
-                          I(1/dist_wrp^2) +
+                         wd_avg + ws_avg + daily_downwind_ref + I(1/dist_wrp^2) +
                          s(I(mon_utm_x/10^3), I(mon_utm_y/10^3), bs='tp', k = 10) + 
                         te(I(mon_utm_x/10^3), I(mon_utm_y/10^3),as.numeric(day),k=c(10,10),d=c(2,1),bs=c('tp','cc')) +
                          monthly_oil_1km + monthly_gas_1km + active_1km + 
-                        daily_downwind_wrp + elevation + EVI, 
+                        daily_downwind_wrp + elevation + EVI + num_odor_complaints, 
                       data = daily_full %>% filter(day >= '2022-02-01'))
 
 summary(h2s_dm_model_e)
@@ -425,13 +535,43 @@ plot(h2s_dm_model_e)
 e <- getViz(h2s_dm_model_e)
 plot(sm(e, 2)) + l_fitRaster() + l_fitContour() + l_points()
 
-plotRGL(sm(e, 3), fix = c(`as.numeric(day)` = 0), residuals = F)
+# plotRGL(sm(e, 3), fix = c(`as.numeric(day)` = 0), residuals = F)
+# 
+# # try a plot using wireframe
+# plot3d <- matrix(fitted(h2s_dm_model_e), ncol = 20)
+# wireframe(plot3d, drape=TRUE, colorkey=TRUE)
+```
+```{r}
+h2s_dm_model_f <- gam(H2S_daily_max ~ as.character(weekday) +
+                         wd_avg + ws_avg + daily_downwind_ref + I(1/dist_wrp^2) +
+                         s(I(mon_utm_x/10^3), I(mon_utm_y/10^3), bs='tp', k = 10) + 
+                        te(I(mon_utm_x/10^3), I(mon_utm_y/10^3),as.numeric(day),k=c(10,10),d=c(2,1),bs=c('tp','cc')) +
+                         monthly_oil_1km + monthly_gas_1km + active_1km + 
+                        daily_downwind_wrp + elevation + EVI + num_odor_complaints, 
+                      data = daily_full %>% filter(year == '2021', month == '10'))
 
-# try a plot using wireframe
-plot3d <- matrix(fitted(h2s_dm_model_e), ncol = 20)
-wireframe(plot3d, drape=TRUE, colorkey=TRUE)
+summary(h2s_dm_model_f)
+plot(h2s_dm_model_f)
+
+f <- getViz(h2s_dm_model_f)
+plot(sm(f, 1)) + l_fitRaster() + l_fitContour() + l_points()
 ```
 
+```{r}
+h2s_dm_model_g <- gam(H2S_daily_max ~ s(as.numeric(month),bs='cc') + year + as.character(weekday) +
+                         wd_avg + ws_avg + daily_downwind_ref + I(1/dist_wrp^2) +
+                         s(I(mon_utm_x/10^3), I(mon_utm_y/10^3), bs='tp', k = 10) + 
+                        te(I(mon_utm_x/10^3), I(mon_utm_y/10^3),as.numeric(day),k=c(10,10),d=c(2,1),bs=c('tp','cc')) +
+                         monthly_oil_1km + monthly_gas_1km + active_1km + 
+                        daily_downwind_wrp + elevation + EVI + num_odor_complaints, 
+                      data = daily_full %>% filter(year != '2021', month != '10'))
+
+summary(h2s_dm_model_g)
+plot(h2s_dm_model_g)
+
+g <- getViz(h2s_dm_model_g)
+plot(sm(g, 2)) + l_fitRaster() + l_fitContour() + l_points()
+```
 
 ### Daily Average
 ```{r}
@@ -505,15 +645,459 @@ h2s_da_model_e <- gam(H2S_daily_avg~s(as.numeric(month),bs='cc') + year + as.cha
 summary(h2s_da_model_e)
 plot(h2s_da_model_e)
 
-d <- getViz(h2s_da_model_e)
-plot(sm(d, 2)) + l_fitRaster() + l_fitContour() + l_points()
+e <- getViz(h2s_da_model_e)
+plot(sm(e, 2)) + l_fitRaster() + l_fitContour() + l_points()
 
-plotRGL(sm(d, 3), fix = c(`as.numeric(day)` = 0), residuals = F)
-
-# try a plot using wireframe
-plot3d <- matrix(fitted(h2s_da_model_e), ncol = 20)
-wireframe(plot3d, drape=TRUE, colorkey=TRUE)
+# plotRGL(sm(d, 3), fix = c(`as.numeric(day)` = 0), residuals = F)
+# 
+# # try a plot using wireframe
+# plot3d <- matrix(fitted(h2s_da_model_e), ncol = 20)
+# wireframe(plot3d, drape=TRUE, colorkey=TRUE)
 ```
+
+```{r}
+h2s_da_model_f <- gam(H2S_daily_avg~s(as.numeric(month),bs='cc') + year + as.character(weekday) +
+                         wd_avg + ws_avg + daily_downwind_ref + 
+                          I(1/dist_wrp^2) +
+                         s(I(mon_utm_x/10^3), I(mon_utm_y/10^3), bs='tp', k = 10) + 
+                        te(I(mon_utm_x/10^3), I(mon_utm_y/10^3),as.numeric(day),k=c(10,10),d=c(2,1),bs=c('tp','cc')) +
+                         monthly_oil_1km + monthly_gas_1km + active_1km + 
+                        daily_downwind_wrp + elevation + EVI + num_odor_complaints, 
+                      data = daily_full %>% filter(day >= '2022-02-01'))
+summary(h2s_da_model_f)
+plot(h2s_da_model_f)
+
+f <- getViz(h2s_da_model_f)
+plot(sm(e, 2)) + l_fitRaster() + l_fitContour() + l_points()
+
+# plotRGL(sm(d, 3), fix = c(`as.numeric(day)` = 0), residuals = F)
+# 
+# # try a plot using wireframe
+# plot3d <- matrix(fitted(h2s_da_model_e), ncol = 20)
+# wireframe(plot3d, drape=TRUE, colorkey=TRUE)
+```
+
+```{r}
+h2s_da_model_g <- gam(H2S_daily_avg~ as.character(weekday) +
+                         wd_avg + ws_avg + daily_downwind_ref + 
+                          I(1/dist_wrp^2) +
+                         s(I(mon_utm_x/10^3), I(mon_utm_y/10^3), bs='tp', k = 10) + 
+                        te(I(mon_utm_x/10^3), I(mon_utm_y/10^3),as.numeric(day),k=c(10,10),d=c(2,1),bs=c('tp','cc')) +
+                         monthly_oil_1km + monthly_gas_1km + active_1km + 
+                        daily_downwind_wrp + elevation + EVI + num_odor_complaints, 
+                      data = daily_full %>% filter(year == '2021', month == '10'))
+summary(h2s_da_model_g)
+plot(h2s_da_model_g)
+
+g <- getViz(h2s_da_model_g)
+plot(sm(g, 1)) + l_fitRaster() + l_fitContour() + l_points()
+```
+
+```{r}
+h2s_da_model_h <- gam(H2S_daily_avg~s(as.numeric(month),bs='cc') + year + as.character(weekday) +
+                         wd_avg + ws_avg + daily_downwind_ref + 
+                          I(1/dist_wrp^2) +
+                         s(I(mon_utm_x/10^3), I(mon_utm_y/10^3), bs='tp', k = 10) + 
+                        te(I(mon_utm_x/10^3), I(mon_utm_y/10^3),as.numeric(day),k=c(10,10),d=c(2,1),bs=c('tp','cc')) +
+                         monthly_oil_1km + monthly_gas_1km + active_1km + 
+                        daily_downwind_wrp + elevation + EVI + num_odor_complaints, 
+                      data = daily_full %>% filter(year != '2021', month != '10'))
+summary(h2s_da_model_h)
+plot(h2s_da_model_h)
+
+h <- getViz(h2s_da_model_h)
+plot(sm(h, 2)) + l_fitRaster() + l_fitContour() + l_points()
+```
+
+```{r}
+h2s_da_model_i <- gam(H2S_daily_avg~s(as.numeric(month),bs='cc') + year + as.character(weekday) +
+                         wd_avg + ws_avg + daily_downwind_ref + 
+                          I(1/dist_wrp^2) +
+                         s(I(mon_utm_x/10^3), I(mon_utm_y/10^3), bs='tp', k = 10) + 
+                        te(I(mon_utm_x/10^3), I(mon_utm_y/10^3),as.numeric(day),k=c(10,10),d=c(2,1),bs=c('tp','cc')) +
+                         monthly_oil_1km + monthly_gas_1km + active_1km + 
+                        daily_downwind_wrp + elevation + EVI + num_odor_complaints + october2021, 
+                      data = daily_full %>% mutate(october2021 = if_else(year == '2021', month == '10', 1, 0)))
+summary(h2s_da_model_i)
+plot(h2s_da_model_i)
+
+i <- getViz(h2s_da_model_i)
+plot(sm(i, 2)) + l_fitRaster() + l_fitContour() + l_points()
+```
+
+```{r}
+knitr::kable(tibble(Model = c('Since Feb 2022',
+                              'October 2021 Only',
+                              'Exclude October 2021',
+                              'October 2021 Indicator'),
+                    'R-Sq' = c(round(summary(h2s_da_model_f)$r.sq, 2),
+                                    round(summary(h2s_da_model_g)$r.sq, 2),
+                                    round(summary(h2s_da_model_h)$r.sq, 2),
+                                    round(summary(h2s_da_model_i)$r.sq, 2))))
+```
+
+# 80/20 Cross Validation on Daily Average models
+```{r}
+result <- tibble(Model = character(),
+                 '80/20 Train R-Sq' = numeric(),
+                 '80/20 Test R-Sq' = numeric())
+
+predictors <- c('H2S_daily_avg', 'month', 'year', 'weekday', 'wd_avg', 'ws_avg', 'daily_downwind_ref', 'dist_wrp', 
+                'mon_utm_x', 'mon_utm_y', 'day', 'monthly_oil_1km', 'monthly_gas_1km', 
+                'active_1km', 'daily_downwind_wrp', 'elevation', 'EVI', 'num_odor_complaints') 
+
+set.seed(313)
+
+# model 1: since Feb 2022
+train <- daily_full %>% 
+  filter(day >= '2022-02-01') %>% 
+  select(all_of(predictors)) %>% 
+  filter(complete.cases(.)) %>% 
+  sample_frac(0.8)
+
+test <- anti_join(daily_full %>% 
+                  filter(day >= '2022-02-01') %>% 
+                  select(all_of(predictors)) %>% 
+                  filter(complete.cases(.)), train)
+
+h2s_da_model_f2 <- gam(H2S_daily_avg~s(as.numeric(month),bs='cc') + year + as.character(weekday) +
+                         wd_avg + ws_avg + daily_downwind_ref + I(1/dist_wrp^2) +
+                         s(I(mon_utm_x/10^3), I(mon_utm_y/10^3), bs='tp', k = 10) + 
+                         te(I(mon_utm_x/10^3), I(mon_utm_y/10^3), as.numeric(day),
+                            k = c(10,10), d = c(2,1), bs = c('tp','cc')) +
+                         monthly_oil_1km + monthly_gas_1km + active_1km + 
+                         daily_downwind_wrp + elevation + EVI + num_odor_complaints, 
+                        data = train)
+
+predictions <- predict(h2s_da_model_f2, newdata = test)
+r2_test <- R2(test$H2S_daily_avg, predictions)
+adj_r2_test <- 1 - (1-r2_test)*(summary(h2s_da_model_f2)$n - 1)/
+  (summary(h2s_da_model_f2)$n - summary(h2s_da_model_f2)$np - 1)
+
+result <- rbind(result, tibble(Model = 'Since Feb 2022',
+                               '80/20 Train R-Sq' = summary(h2s_da_model_f2)$r.sq,
+                               '80/20 Test R-Sq' = adj_r2_test))
+
+
+# Model 2: October 2021 only
+train <- daily_full %>% 
+  filter(year == '2021', month == '10') %>% 
+  select(all_of(predictors)) %>% 
+  filter(complete.cases(.)) %>% 
+  sample_frac(0.8)
+
+test <- anti_join(daily_full %>% 
+                  filter(year == '2021', month == '10') %>% 
+                  select(all_of(predictors)) %>% 
+                  filter(complete.cases(.)), train)
+
+h2s_da_model_f3 <- gam(H2S_daily_avg~as.character(weekday) +
+                         wd_avg + ws_avg + daily_downwind_ref + I(1/dist_wrp^2) +
+                         s(I(mon_utm_x/10^3), I(mon_utm_y/10^3), bs='tp', k = 10) + 
+                         te(I(mon_utm_x/10^3), I(mon_utm_y/10^3), as.numeric(day),
+                            k = c(10,10), d = c(2,1), bs = c('tp','cc')) +
+                         monthly_oil_1km + monthly_gas_1km + active_1km + 
+                         daily_downwind_wrp + elevation + EVI + num_odor_complaints, 
+                        data = train)
+
+predictions <- predict(h2s_da_model_f3, newdata = test)
+r2_test <- R2(test$H2S_daily_avg, predictions)
+adj_r2_test <- 1 - (1-r2_test)*(summary(h2s_da_model_f3)$n - 1)/
+  (summary(h2s_da_model_f3)$n - summary(h2s_da_model_f3)$np - 1)
+
+result <- rbind(result, tibble(Model = 'October 2021 Only',
+                               '80/20 Train R-Sq' = summary(h2s_da_model_f3)$r.sq,
+                               '80/20 Test R-Sq' = adj_r2_test))
+
+# Model 3: Excluding October 2021
+train <- daily_full %>% 
+  filter(year != '2021', month != '10') %>% 
+  select(all_of(predictors)) %>% 
+  filter(complete.cases(.)) %>% 
+  sample_frac(0.8)
+
+test <- anti_join(daily_full %>% 
+                  filter(year != '2021', month != '10') %>% 
+                  select(all_of(predictors)) %>% 
+                  filter(complete.cases(.)), train)
+
+h2s_da_model_f4 <- gam(H2S_daily_avg ~ s(as.numeric(month),bs='cc') + year + as.character(weekday) +
+                         wd_avg + ws_avg + daily_downwind_ref + I(1/dist_wrp^2) +
+                         s(I(mon_utm_x/10^3), I(mon_utm_y/10^3), bs='tp', k = 10) + 
+                         te(I(mon_utm_x/10^3), I(mon_utm_y/10^3), as.numeric(day),
+                            k = c(10,10), d = c(2,1), bs = c('tp','cc')) +
+                         monthly_oil_1km + monthly_gas_1km + active_1km + 
+                         daily_downwind_wrp + elevation + EVI + num_odor_complaints, 
+                        data = train)
+
+predictions <- predict(h2s_da_model_f4, newdata = test)
+r2_test <- R2(test$H2S_daily_avg, predictions)
+adj_r2_test <- 1 - (1-r2_test)*(summary(h2s_da_model_f4)$n - 1)/
+  (summary(h2s_da_model_f4)$n - summary(h2s_da_model_f4)$np - 1)
+
+result <- rbind(result, tibble(Model = 'Exclude October 2021',
+                               '80/20 Train R-Sq' = summary(h2s_da_model_f4)$r.sq,
+                               '80/20 Test R-Sq' = adj_r2_test))
+
+# Model 4: October 2021 Indicator
+train <- daily_full %>% 
+  select(all_of(predictors)) %>% 
+  mutate(october2021 = if_else(year == '2021', month == '10', 1, 0)) %>% 
+  filter(complete.cases(.)) %>% 
+  sample_frac(0.8)
+
+test <- anti_join(daily_full %>% 
+                  select(all_of(predictors)) %>% 
+                    mutate(october2021 = if_else(year == '2021', month == '10', 1, 0)) %>% 
+                  filter(complete.cases(.)), train)
+
+h2s_da_model_f5 <- gam(H2S_daily_avg ~ s(as.numeric(month),bs='cc') + year + as.character(weekday) +
+                         wd_avg + ws_avg + daily_downwind_ref + I(1/dist_wrp^2) +
+                         s(I(mon_utm_x/10^3), I(mon_utm_y/10^3), bs='tp', k = 10) + 
+                         te(I(mon_utm_x/10^3), I(mon_utm_y/10^3), as.numeric(day),
+                            k = c(10,10), d = c(2,1), bs = c('tp','cc')) +
+                         monthly_oil_1km + monthly_gas_1km + active_1km + 
+                         daily_downwind_wrp + elevation + EVI + num_odor_complaints +
+                         october2021, 
+                        data = train)
+
+predictions <- predict(h2s_da_model_f5, newdata = test)
+r2_test <- R2(test$H2S_daily_avg, predictions)
+adj_r2_test <- 1 - (1-r2_test)*(summary(h2s_da_model_f5)$n - 1)/
+  (summary(h2s_da_model_f5)$n - summary(h2s_da_model_f5)$np - 1)
+
+result <- rbind(result, tibble(Model = 'October 2021 Indicator',
+                               '80/20 Train R-Sq' = summary(h2s_da_model_f5)$r.sq,
+                               '80/20 Test R-Sq' = adj_r2_test))
+```
+
+```{r}
+knitr::kable(tibble(Model = c('Since Feb 2022',
+                              'October 2021 Only',
+                              'Exclude October 2021',
+                              'October 2021 Indicator'),
+                    'R-Sq' = c(round(summary(h2s_da_model_f)$r.sq, 2),
+                                    round(summary(h2s_da_model_g)$r.sq, 2),
+                                    round(summary(h2s_da_model_h)$r.sq, 2),
+                                    round(summary(h2s_da_model_i)$r.sq, 2))) %>% 
+               left_join(result, join_by(Model)))
+```
+
+# Cross Validation on each monitor
+```{r}
+result_cv <- tibble(Model = character(),
+                 'CV Avg Train R-Sq' = numeric(),
+                 'CV Avg Test R-Sq' = numeric())
+
+# model 1: since Feb 2022
+post2022feb <- daily_full %>% 
+  filter(day >= '2022-02-01') %>% 
+  select(all_of(predictors), Monitor) %>% 
+  filter(complete.cases(.))
+
+monitors <- unique(post2022feb$Monitor)
+
+cv1_result <- tibble(Monitor = character(),
+                     'Train Adj-R2' = numeric(),
+                     'Train N' = numeric(),
+                     'Test Adj-R2' = numeric(),
+                     'Test B' = numeric()
+                     )
+
+for (i in 1:length(monitors)) {
+  train <- post2022feb %>%
+    filter(Monitor != monitors[i])
+  
+  test <- post2022feb %>%
+    filter(Monitor == monitors[i])
+  
+  h2s_da_model_f2b <- gam(H2S_daily_avg~s(as.numeric(month),bs='cc') + year + as.character(weekday) +
+                         wd_avg + ws_avg + daily_downwind_ref + I(1/dist_wrp^2) +
+                         s(I(mon_utm_x/10^3), I(mon_utm_y/10^3), bs='tp', k = 10) + 
+                         te(I(mon_utm_x/10^3), I(mon_utm_y/10^3), as.numeric(day),
+                            k = c(10,10), d = c(2,1), bs = c('tp','cc')) +
+                         monthly_oil_1km + monthly_gas_1km + active_1km + 
+                         daily_downwind_wrp + elevation + EVI + num_odor_complaints, 
+                        data = train)
+  
+  predictions <- predict(h2s_da_model_f2b, newdata = test)
+  r2_test <- R2(test$H2S_daily_avg, predictions)
+  adj_r2_test <- 1 - (1-r2_test)*(summary(h2s_da_model_f2b)$n - 1)/
+    (summary(h2s_da_model_f2b)$n - summary(h2s_da_model_f2b)$np - 1)
+  
+  cv1_result <- rbind(cv1_result, tibble(monitors[i],
+                                         summary(h2s_da_model_f2b)$r.sq, 
+                                         summary(h2s_da_model_f2b)$n, 
+                                         adj_r2_test, 
+                                         nrow(test)))
+}
+
+result_cv <- rbind(result_cv, tibble(tibble(Model = 'Since Feb 2022',
+                                           'CV Avg Train R-Sq' = mean(cv1_result$`summary(h2s_da_model_f2b)$r.sq`),
+                                           'CV Avg Test R-Sq' = mean(cv1_result$adj_r2_test))))
+
+# model 2: October 2021 only
+october2021 <- daily_full %>% 
+  filter(year == '2021', month == '10') %>% 
+  select(all_of(predictors), Monitor) %>% 
+  filter(complete.cases(.))
+
+monitors <- unique(october2021$Monitor)
+
+cv2_result <- tibble(Monitor = character(),
+                     'Train Adj-R2' = numeric(),
+                     'Train N' = numeric(),
+                     'Test Adj-R2' = numeric(),
+                     'Test B' = numeric()
+                     )
+
+for (i in 1:length(monitors)) {
+  train <- october2021 %>%
+    filter(Monitor != monitors[i])
+  
+  test <- october2021 %>%
+    filter(Monitor == monitors[i])
+  
+  h2s_da_model_f2b <- gam(H2S_daily_avg~as.character(weekday) +
+                         wd_avg + ws_avg + daily_downwind_ref + I(1/dist_wrp^2) +
+                         s(I(mon_utm_x/10^3), I(mon_utm_y/10^3), bs='tp', k = 10) + 
+                         te(I(mon_utm_x/10^3), I(mon_utm_y/10^3), as.numeric(day),
+                            k = c(10,10), d = c(2,1), bs = c('tp','cc')) +
+                         monthly_oil_1km + monthly_gas_1km + active_1km + 
+                         daily_downwind_wrp + elevation + EVI + num_odor_complaints, 
+                        data = train)
+  
+  predictions <- predict(h2s_da_model_f2b, newdata = test)
+  r2_test <- R2(test$H2S_daily_avg, predictions)
+  adj_r2_test <- 1 - (1-r2_test)*(summary(h2s_da_model_f2b)$n - 1)/
+    (summary(h2s_da_model_f2b)$n - summary(h2s_da_model_f2b)$np - 1)
+  
+  cv2_result <- rbind(cv2_result, tibble(monitors[i],
+                                         summary(h2s_da_model_f2b)$r.sq, 
+                                         summary(h2s_da_model_f2b)$n, 
+                                         adj_r2_test, 
+                                         nrow(test)))
+}
+
+result_cv <- rbind(result_cv, tibble(tibble(Model = 'October 2021 Only',
+                                           'CV Avg Train R-Sq' = mean(cv2_result$`summary(h2s_da_model_f2b)$r.sq`),
+                                           'CV Avg Test R-Sq' = mean(cv2_result$adj_r2_test))))
+
+# model 3: Exclude October 2021 
+exclude_oct2021 <- daily_full %>% 
+  filter(year != '2021', month != '10') %>% 
+  select(all_of(predictors), Monitor) %>% 
+  filter(complete.cases(.))
+
+monitors <- unique(exclude_oct2021$Monitor)
+
+cv3_result <- tibble(Monitor = character(),
+                     'Train Adj-R2' = numeric(),
+                     'Train N' = numeric(),
+                     'Test Adj-R2' = numeric(),
+                     'Test B' = numeric()
+                     )
+
+for (i in 1:length(monitors)) {
+  train <- exclude_oct2021 %>%
+    filter(Monitor != monitors[i])
+  
+  test <- exclude_oct2021 %>%
+    filter(Monitor == monitors[i])
+  
+  h2s_da_model_f2b <- gam(H2S_daily_avg~as.character(weekday) +
+                         wd_avg + ws_avg + daily_downwind_ref + I(1/dist_wrp^2) +
+                         s(I(mon_utm_x/10^3), I(mon_utm_y/10^3), bs='tp', k = 10) + 
+                         te(I(mon_utm_x/10^3), I(mon_utm_y/10^3), as.numeric(day),
+                            k = c(10,10), d = c(2,1), bs = c('tp','cc')) +
+                         monthly_oil_1km + monthly_gas_1km + active_1km + 
+                         daily_downwind_wrp + elevation + EVI + num_odor_complaints, 
+                        data = train)
+  
+  predictions <- predict(h2s_da_model_f2b, newdata = test)
+  r2_test <- R2(test$H2S_daily_avg, predictions)
+  adj_r2_test <- 1 - (1-r2_test)*(summary(h2s_da_model_f2b)$n - 1)/
+    (summary(h2s_da_model_f2b)$n - summary(h2s_da_model_f2b)$np - 1)
+  
+  cv3_result <- rbind(cv3_result, tibble(monitors[i],
+                                         summary(h2s_da_model_f2b)$r.sq, 
+                                         summary(h2s_da_model_f2b)$n, 
+                                         adj_r2_test, 
+                                         nrow(test)))
+}
+
+result_cv <- rbind(result_cv, tibble(tibble(Model = 'Exclude October 2021',
+                                           'CV Avg Train R-Sq' = mean(cv3_result$`summary(h2s_da_model_f2b)$r.sq`),
+                                           'CV Avg Test R-Sq' = mean(cv3_result$adj_r2_test))))
+
+# model 4: October 2021 Indicator 
+full_complete <- daily_full %>% 
+  filter(year != '2021', month != '10') %>% 
+  select(all_of(predictors), Monitor) %>% 
+  filter(complete.cases(.)) %>%
+  mutate(october2021 = if_else(year == '2021', month == '10', 1, 0))
+
+monitors <- unique(full_complete$Monitor)
+
+cv4_result <- tibble(Monitor = character(),
+                     'Train Adj-R2' = numeric(),
+                     'Train N' = numeric(),
+                     'Test Adj-R2' = numeric(),
+                     'Test B' = numeric()
+                     )
+
+for (i in 1:length(monitors)) {
+  train <- full_complete %>%
+    filter(Monitor != monitors[i])
+  
+  test <- full_complete %>%
+    filter(Monitor == monitors[i])
+  
+  h2s_da_model_f2b <- gam(H2S_daily_avg~as.character(weekday) +
+                         wd_avg + ws_avg + daily_downwind_ref + I(1/dist_wrp^2) +
+                         s(I(mon_utm_x/10^3), I(mon_utm_y/10^3), bs='tp', k = 10) + 
+                         te(I(mon_utm_x/10^3), I(mon_utm_y/10^3), as.numeric(day),
+                            k = c(10,10), d = c(2,1), bs = c('tp','cc')) +
+                         monthly_oil_1km + monthly_gas_1km + active_1km + 
+                         daily_downwind_wrp + elevation + EVI + num_odor_complaints +
+                         october2021, 
+                        data = train)
+  
+  predictions <- predict(h2s_da_model_f2b, newdata = test)
+  r2_test <- R2(test$H2S_daily_avg, predictions)
+  adj_r2_test <- 1 - (1-r2_test)*(summary(h2s_da_model_f2b)$n - 1)/
+    (summary(h2s_da_model_f2b)$n - summary(h2s_da_model_f2b)$np - 1)
+  
+  cv4_result <- rbind(cv4_result, tibble(monitors[i],
+                                         summary(h2s_da_model_f2b)$r.sq, 
+                                         summary(h2s_da_model_f2b)$n, 
+                                         adj_r2_test, 
+                                         nrow(test)))
+}
+
+result_cv <- rbind(result_cv, tibble(tibble(Model = 'October 2021 Indicator',
+                                           'CV Avg Train R-Sq' = mean(cv4_result$`summary(h2s_da_model_f2b)$r.sq`),
+                                           'CV Avg Test R-Sq' = mean(cv4_result$adj_r2_test))))
+
+cv1_result
+cv2_result
+cv3_result
+cv4_result
+```
+
+```{r}
+knitr::kable(tibble(Model = c('Since Feb 2022',
+                              'October 2021 Only',
+                              'Exclude October 2021',
+                              'October 2021 Indicator'),
+                    'Train R-sq' = c(round(summary(h2s_da_model_f)$r.sq, 2),
+                                    round(summary(h2s_da_model_g)$r.sq, 2),
+                                    round(summary(h2s_da_model_h)$r.sq, 2),
+                                    round(summary(h2s_da_model_i)$r.sq, 2))) %>% 
+               left_join(result, join_by(Model)) %>%
+               left_join(result_cv, join_by(Model)))
+```
+
 
 # Monthly 
 ```{r}
@@ -534,7 +1118,6 @@ plot(h2s_ma_model_b)
 # Try XGBoost on Daily Average
 
 ```{r echo = T, results = 'hide'}
-# Cross validation by leaving one monitor out 
 daily_full <- daily_full %>%
   mutate(Refinery = str_replace_all(str_replace_all(Refinery, '[()]', ''), ' ', '_'),
          Monitor = str_replace_all(Monitor, ' ', '_'),
@@ -542,29 +1125,15 @@ daily_full <- daily_full %>%
          daily_downwind_ref = as.integer(daily_downwind_ref),
          daily_downwind_wrp = as.integer(daily_downwind_wrp))
 
-train <- daily_full %>%
-  filter(Monitor != 'Harbor_Park')
-
-train <- train[complete.cases(train),] %>%
+train <- daily_full[complete.cases(daily_full),] %>%
   filter(day >= '2022-02-01')
 
 train <- fastDummies::dummy_cols(train %>%
                    select(-c(Refinery, Monitor, day, active_2p5km, active_5km, monthly_oil_2p5km,
                              monthly_gas_2p5km, monthly_oil_5km, monthly_gas_5km, H2S_daily_max,
-                             mon_utm_x, mon_utm_y)) %>%
-                   mutate(MinDist = 1/(MinDist^2)),
-                   remove_selected_columns = TRUE)
-
-test <- daily_full %>%
-  filter(Monitor == 'Harbor_Park')
-
-test <- fastDummies::dummy_cols(test[complete.cases(test),] %>%
-                   ungroup() %>%
-                   filter(day >= '2022-02-01') %>%
-                   select(-c(Refinery, Monitor, day, active_2p5km, active_5km, monthly_oil_2p5km,
-                             monthly_gas_2p5km, monthly_oil_5km, monthly_gas_5km, H2S_daily_max,
-                             mon_utm_x, mon_utm_y)) %>%
-                   mutate(MinDist = 1/(MinDist^2)),
+                             mon_utm_x, mon_utm_y, county)) %>%
+                   mutate(MinDist = 1/(MinDist^2),
+                          dist_wrp = 1/(dist_wrp^2)),
                    remove_selected_columns = TRUE)
 
 # Try for a continuous month
@@ -597,13 +1166,6 @@ getTrainPerf(fit.xgb_da)
 ```
 
 ```{r}
-# Get testing performance on Harbor Park monitor
-predictions <- predict(fit.xgb_da$finalModel, 
-                       newdata = test %>% select(-H2S_daily_avg) %>% as.matrix())
-R2(test[complete.cases(test),] %>% pull(H2S_daily_avg), predictions)
-```
-
-```{r}
 fit.xgb_da$finalModel
 ```
 
@@ -615,7 +1177,7 @@ plot(imp, top=10)
 
 ## SHAP for XGBoost above (Caret)
 ```{r}
-matrix <- test %>% select(-H2S_daily_avg)
+matrix <- train %>% select(-H2S_daily_avg)
 matrix <- as.matrix(sapply(matrix, as.numeric))  
 xgb.plot.shap(data = matrix, 
               model = fit.xgb_da$finalModel, top_n = 12, n_col = 3)
@@ -632,18 +1194,19 @@ post2022feb <- daily_full %>%
   filter(day >= '2022-02-01')
 
 monitor_names <- unique(post2022feb$Monitor)
-
+# 
 # for (i in 1:length(monitor_names)) {
 #   train <- post2022feb %>%
 #     filter(Monitor != monitor_names[i])
-#   
+# 
 #   train <- train[complete.cases(train),]
 # 
 #   train <- fastDummies::dummy_cols(train %>%
 #                      select(-c(Refinery, Monitor, day, active_2p5km, active_5km, monthly_oil_2p5km,
 #                                monthly_gas_2p5km, monthly_oil_5km, monthly_gas_5km, H2S_daily_max,
-#                                mon_utm_x, mon_utm_y)) %>%
-#                      mutate(MinDist = 1/(MinDist^2)),
+#                                mon_utm_x, mon_utm_y, county)) %>%
+#                      mutate(MinDist = 1/(MinDist^2),
+#                             dist_wrp = 1/(dist_wrp^2)),
 #                      remove_selected_columns = TRUE)
 # 
 #   fit.xgb_da <- train(H2S_daily_avg~.,
@@ -652,7 +1215,7 @@ monitor_names <- unique(post2022feb$Monitor)
 #                  trControl=control,
 #                  tuneGrid = tune_grid,
 #                  tuneLength = 10, importance=TRUE, verbosity = 0, verbose=FALSE)
-#   
+# 
 #   saveRDS(fit.xgb_da, paste0('rfiles/fit.xgb_da_', monitor_names[i], '.rds'))
 # }
 ```
@@ -677,12 +1240,13 @@ for (i in setdiff(1:length(monitor_names), c(9))) {
                      ungroup() %>%
                      select(-c(Refinery, Monitor, day, active_2p5km, active_5km, monthly_oil_2p5km,
                            monthly_gas_2p5km, monthly_oil_5km, monthly_gas_5km, H2S_daily_max,
-                           mon_utm_x, mon_utm_y)) %>%
+                           mon_utm_x, mon_utm_y, county)) %>%
                        add_cols(c('year_2022', 'year_2023', 'month_01', 'month_02',
                                   'month_03', 'month_04', 'month_05', 'month_06', 
                                   'month_07', 'month_08', 'month_09', 'month_10',
                                   'month_11', 'month_12')) %>%
                      mutate(MinDist = 1/(MinDist^2),
+                            dist_wrp = 1/(dist_wrp^2),
                             year_2022 = ifelse(is.na(year_2022), 0, year_2022),
                             year_2023 = ifelse(is.na(year_2023), 0, year_2023),
                             month_01 = ifelse(is.na(month_01), 0, month_01),

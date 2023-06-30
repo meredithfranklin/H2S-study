@@ -19,7 +19,7 @@ library(sf)
 # load data sets
 full_data <- tibble()
 names <- c(ws = 'windSpeed', wd = 'windDirection', H2S = 'Value', QC.Code = 'qcCode',
-           Monitor = 'siteName')
+           Monitor = 'siteName', MinDist = 'NEAR_DIST')
 for (file in list.files('data/raw_csv')){
   new_data <- read.csv(paste0('data/raw_csv/', file)) %>% rename(any_of(names))
   print(sum(is.na(new_data$H2S)))
