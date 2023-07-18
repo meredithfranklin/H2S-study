@@ -1,0 +1,212 @@
+---
+title: "Data Visualizations"
+author: "Jerry Wu"
+date: "7/18/2023"
+output:
+  html_document:
+    df_print: paged
+  pdf_document: default
+abstract: ''
+subtitle: ''
+editor_options: 
+  chunk_output_type: inline
+---
+
+```{r setup, include=FALSE}
+library(tidyverse)
+library(plotly)
+library(openairmaps)
+library(htmlwidgets)
+library(openair)
+```
+
+```{r}
+full_data <- readRDS('data/full_data.rds')
+daily_full <- readRDS('data/daily_full.rds')
+```
+
+# Monthly Production Data
+```{r}
+prod_by_month <- full_data %>% 
+    select(yearmonth, active_1km, monthly_oil_1km, monthly_gas_1km, 
+           monthly_water_1km, monthly_boe_1km) %>%
+  distinct() %>%
+  filter(yearmonth <= '2023-03')
+
+coef <- median(1032*prod_by_month$monthly_gas_1km/10^9)/median(prod_by_month$monthly_oil_1km/10^6)
+
+full_data %>%
+  ggplot(aes(x = yearmonth, group = 1)) + 
+  geom_line(aes(y = monthly_oil_1km/10^6, color = 'Oil'), size=1) + 
+  geom_line(aes(y = 1032*monthly_gas_1km/10^9/coef, color = 'Natural Gas'), linewidth=1) +
+  scale_y_continuous(
+    name = "Monthly Oil in Million Barrels",
+    sec.axis = sec_axis(~.*coef, name="Monthly Gas in Billion Cubic Feet")
+  ) +
+  theme(
+    axis.title.y = element_text(color = 'tomato'),
+    axis.title.y.right = element_text(color = 'skyblue')
+  ) +
+  scale_color_manual(values = c("skyblue", "tomato")) +
+  scale_x_discrete(breaks = prod_by_month$yearmonth[seq(1, length(prod_by_month$yearmonth), by = 7)]) +
+  xlab("Date") + labs(colour="Production Type") +
+    theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45))
+```
+
+# Visualizing Daily Max H2S
+```{r}
+H2S_dm <- full_data %>%
+  group_by(day, Monitor) %>%
+  summarise(H2S_daily_max = max(H2S, na.rm = TRUE)) %>%
+  mutate(H2S_daily_max = if_else(H2S_daily_max == -Inf, NA, H2S_daily_max))
+```
+
+```{r}
+H2S_ma <- H2S_dm %>%
+  mutate(yearmonth = format(day, "%Y-%m")) %>%
+  group_by(yearmonth, Monitor) %>%
+  summarise(H2S_monthly_average = mean(H2S_daily_max, na.rm = TRUE))
+```
+
+```{r}
+H2S_dm_graph <- H2S_dm %>%
+ ggplot(aes(x=day, y=H2S_daily_max, group=Monitor, color=Monitor)) +
+   geom_line() +
+   labs(title = "Daily Max H2S concentration by monitor", y = 'Daily Max H2S', x = 'time') +
+   theme_minimal() +
+   theme(axis.text.x = element_text(angle = 45))
+
+ggplotly(H2S_dm_graph) %>% layout(dragmode = 'pan')
+```
+
+```{r}
+H2S_dm_graph_b <- H2S_dm %>%
+ ggplot(aes(x=day, y=H2S_daily_max, group=Monitor, color=Monitor)) +
+   geom_line() +
+   labs(title = "Daily Max H2S concentration by monitor w/o outlier", y = 'Daily Max H2S', x = 'time') +
+   scale_y_continuous(limits = c(0, 100)) +
+   theme_minimal() +
+   theme(axis.text.x = element_text(angle = 45))
+
+ggplotly(H2S_dm_graph_b) %>% layout(dragmode = 'pan')
+```
+
+
+
+
+
+```{r}
+H2S_ma_graph <- H2S_ma %>%
+ ggplot(aes(x=yearmonth, y=H2S_monthly_average, group=Monitor, color=Monitor)) +
+   geom_line() +
+   labs(title = "Monthly Average H2S concentration by monitor", y = 'Monthly Average H2S', x = 'time') +
+   scale_x_discrete(breaks = unique(H2S_ma$yearmonth)[seq(1, length(unique(H2S_ma$yearmonth)), by = 6)]) +
+   theme_minimal() +
+   theme(axis.text.x = element_text(angle = 45))
+
+ggplotly(H2S_ma_graph) %>% layout(dragmode = 'pan')
+```
+
+```{r}
+H2S_ma_graph_b <- H2S_ma %>%
+ ggplot(aes(x=yearmonth, y=H2S_monthly_average, group=Monitor, color=Monitor)) +
+   geom_line() +
+   labs(title = "Monthly Average H2S concentration by monitor w/o outlier", y = 'Monthly Average H2S', x = 'time') +
+   scale_x_discrete(breaks = unique(H2S_ma$yearmonth)[seq(1, length(unique(H2S_ma$yearmonth)), by = 6)]) +
+  scale_y_continuous(limits=c(0, 50)) +
+   theme_minimal() +
+   theme(axis.text.x = element_text(angle = 45))
+
+ggplotly(H2S_ma_graph_b) %>% layout(dragmode = 'pan')
+```
+The line with the largest deviation/peak corresponds to the 213th&Chico monitor, in 2021-10
+Maybe we should start from January 2022 to start modelling to remove the extreme values, or simply removing the 213 monitor since that's set up specifically for the event.
+
+# Visualizing Daily Average H2S
+```{r}
+# Compute daily average
+H2S_da <- full_data %>%
+  group_by(day, Monitor) %>%
+  summarise(H2S_daily_avg = mean(H2S, na.rm=TRUE))
+```
+
+```{r}
+H2S_da_graph <- H2S_da %>%
+ ggplot(aes(x=day, y=H2S_daily_avg, group=Monitor, color=Monitor)) +
+   geom_line() +
+   labs(title = "Daily Average H2S concentration by monitor", y = 'Daily Average H2S', x = 'time') +
+   theme_minimal() +
+   theme(axis.text.x = element_text(angle = 45))
+
+ggplotly(H2S_da_graph) %>% layout(dragmode = 'pan')
+```
+
+```{r}
+H2S_da_graph_b <- H2S_da %>%
+ ggplot(aes(x=day, y=H2S_daily_avg, group=Monitor, color=Monitor)) +
+   geom_line() +
+   labs(title = "Daily Average H2S concentration by monitor w/o outlier", y = 'Daily Avearge H2S', x = 'time') +
+   scale_y_continuous(limits = c(0, 100)) +
+   theme_minimal() +
+   theme(axis.text.x = element_text(angle = 45))
+
+ggplotly(H2S_dm_graph_b) %>% layout(dragmode = 'pan')
+```
+
+```{r}
+full_data %>%
+  polarPlot(pollutant = "H2S", col = "turbo", 
+            key.position = "bottom",
+            key.header = "mean H2S", 
+            key.footer = NULL, title = 'hi')
+```
+
+```{r}
+# Create a polar map
+# TBD: include markers for refineries
+polarplot <- polarMap(
+  full_data %>% 
+    filter(!(is.na(latitude) | is.na(H2S) | is.na(wd) | is.na(ws))) %>%
+    rename(date = DateTime),
+  pollutant = "H2S",
+  latitude = "latitude",
+  longitude = "longitude",
+  popup = "Monitor",
+  provider = "Esri.WorldImagery",
+  d.icon = 150,
+  d.fig = 2.5,
+  alpha = 0.75
+)
+polarplot
+
+#saveWidget(polarplot, file="polarplot.html")
+```
+
+# Visualize Odor Complaint data
+```{r}
+odor <- daily_full %>%
+  select(day, county, num_odor_complaints) %>%
+  distinct()
+
+odor_graph <- odor %>%
+   ggplot(aes(x=day, y=num_odor_complaints, group=county, color=county)) +
+   geom_line() +
+   labs(title = "Number of odor complaints over time", y = 'Number of odor complaints', x = 'time') +
+   theme_minimal() +
+   theme(axis.text.x = element_text(angle = 45))
+
+ggplotly(odor_graph) %>% layout(dragmode = 'pan')
+```
+
+```{r}
+odor_graph_b <- odor %>%
+   ggplot(aes(x=day, y=num_odor_complaints, group=county, color=county)) +
+   geom_line() +
+   labs(title = "Number of odor complaints over time", y = 'Number of odor complaints', x = 'time') +
+  scale_y_continuous(limits = c(0, 30)) +
+   theme_minimal() +
+   theme(axis.text.x = element_text(angle = 45))
+
+ggplotly(odor_graph_b) %>% layout(dragmode = 'pan')
+```
