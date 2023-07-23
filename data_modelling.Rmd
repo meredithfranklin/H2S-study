@@ -548,8 +548,12 @@ result <- rbind(result, tibble(Model = 'Exclude Disaster',
 train <- daily_full %>% 
   select(all_of(predictors)) %>% 
   mutate(disaster = if_else(year == '2021' & month %in% c('10', '11', '12'), 1, 0)) %>% 
-  filter(complete.cases(.)) %>% 
-  sample_frac(0.8)
+  filter(complete.cases(.)) 
+
+train <- rbind(
+  train %>% filter(disaster==1) %>% sample_frac(0.8),
+  train %>% filter(disaster==0) %>% sample_frac(0.8)
+)
 
 test <- anti_join(daily_full %>% 
                   select(all_of(predictors)) %>% 
@@ -581,6 +585,11 @@ train <- daily_full %>%
   select(all_of(predictors)) %>% 
   filter(complete.cases(.)) %>% 
   sample_frac(0.8)
+
+train <- rbind(
+  train %>% filter(year == '2021' & month %in% c('10', '11', '12')) %>% sample_frac(0.8),
+  train %>% filter(!(year == '2021' & month %in% c('10', '11', '12'))) %>% sample_frac(0.8)
+  )
 
 test <- anti_join(daily_full %>% 
                   select(all_of(predictors)) %>% 
@@ -904,9 +913,14 @@ plot(h2s_ma_model_a)
 
 
 
-# Try XGBoost on Daily Average
+# XGBoost Since 2022 Feb
 
 ```{r echo = T, results = 'hide'}
+xgb_result <- tibble(Model = character(),
+                 'R-Sq' = numeric(),
+                 '80/20 Train R-Sq' = numeric(),
+                 '80/20 Test R-Sq' = numeric())
+
 daily_full <- daily_full %>%
   mutate(Refinery = str_replace_all(str_replace_all(Refinery, '[()]', ''), ' ', '_'),
          Monitor = str_replace_all(Monitor, ' ', '_'),
@@ -957,7 +971,6 @@ getTrainPerf(fit.xgb_da)
 fit.xgb_da$finalModel
 ```
 
-
 ```{r}
 imp<-varImp(fit.xgb_da,scale=FALSE)
 plot(imp, top = 20)
@@ -976,7 +989,7 @@ xgb.ggplot.shap.summary(data = matrix,
               model = fit.xgb_da$finalModel, top_n = 20)
 ```
 
-# 80/20 CV
+## 80/20 CV
 
 ```{r echo = T, results = 'hide'}
 set.seed(313)
@@ -1033,11 +1046,18 @@ getTrainPerf(fit.xgb_da_8020)
 ```
 
 ```{r}
-predictions <- predict(fit.xgb_da_8020$finalModel, 
-                       newdata = test %>% select(-H2S_daily_avg) %>% as.matrix())
+# Test statistics
+test_stat <- postResample(predict(fit.xgb_da_8020$finalModel, 
+                       newdata = test %>% select(-H2S_daily_avg) %>% as.matrix()), 
+             test %>% pull(H2S_daily_avg))
+```
 
-test_r2 <- R2(test %>% pull(H2S_daily_avg), predictions)
-test_r2
+```{r}
+xgb_result <- rbind(xgb_result, 
+                    tibble(Model = 'Since Feb 2022',
+                           'R-Sq' = getTrainPerf(fit.xgb_da)$TrainRsquared,
+                           '80/20 Train R-Sq' = getTrainPerf(fit.xgb_da_8020)$TrainRsquared,
+                           '80/20 Test R-Sq' = test_stat[[2]]))
 ```
 
 
@@ -1064,7 +1084,7 @@ xgb.ggplot.shap.summary(data = matrix,
               model = fit.xgb_da_8020$finalModel, top_n = 20)
 ```
 
-# CV by leaving each monitor out once
+## CV by leaving each monitor out once
 ```{r}
 post2022feb <- daily_full %>% 
   filter(day >= '2022-02-01')
@@ -1105,68 +1125,73 @@ add_cols <- function(df, cols) {
   return(df)
 }
 
-# for (i in setdiff(1:length(monitor_names), c(9))) {
-# 
-#   fit.xgb_da <- readRDS(paste0('rfiles/fit.xgb_da_', monitor_names[i], '.rds'))
-#   
-#   test <- post2022feb %>%
-#     filter(Monitor == monitor_names[i])
-# 
-#   test <- fastDummies::dummy_cols(test[complete.cases(test),] %>%
-#                      ungroup() %>%
-#                      select(-c(Refinery, Monitor, day, H2S_daily_max, H2S_monthly_average,
-#                              monitor_lat, monitor_lon, county, dist_213)) %>%
-#                        add_cols(c('year_2022', 'year_2023', 'month_01', 'month_02',
-#                                   'month_03', 'month_04', 'month_05', 'month_06', 
-#                                   'month_07', 'month_08', 'month_09', 'month_10',
-#                                   'month_11', 'month_12')) %>%
-#                      mutate(MinDist = 1/(MinDist^2),
-#                             dist_wrp = 1/(dist_wrp^2),
-#                             year_2022 = ifelse(is.na(year_2022), 0, year_2022),
-#                             year_2023 = ifelse(is.na(year_2023), 0, year_2023),
-#                             month_01 = ifelse(is.na(month_01), 0, month_01),
-#                             month_02 = ifelse(is.na(month_02), 0, month_02),
-#                             month_03 = ifelse(is.na(month_03), 0, month_03),
-#                             month_04 = ifelse(is.na(month_04), 0, month_04),
-#                             month_05 = ifelse(is.na(month_05), 0, month_05),
-#                             month_06 = ifelse(is.na(month_06), 0, month_06),
-#                             month_07 = ifelse(is.na(month_07), 0, month_07),
-#                             month_08 = ifelse(is.na(month_08), 0, month_08),
-#                             month_09 = ifelse(is.na(month_09), 0, month_09),
-#                             month_10 = ifelse(is.na(month_10), 0, month_10),
-#                             month_11 = ifelse(is.na(month_11), 0, month_11),
-#                             month_12 = ifelse(is.na(month_12), 0, month_12)),
-#                      remove_selected_columns = TRUE)
-#   
-#   train_r2 <- getTrainPerf(fit.xgb_da)$TrainRsquared
-#   
-#   predictions <- predict(fit.xgb_da$finalModel, 
-#                          newdata = test %>% select(-H2S_daily_avg) %>% as.matrix())
-#   
-#   test_r2 <- R2(test %>% pull(H2S_daily_avg), predictions)
-#   
-#   model_stats <- rbind(model_stats, tibble(Monitor = monitor_names[i], train_r2, test_r2))
-# }
-# 
-# model_stats %>% rbind(tibble(Monitor = 'Total Average', train_r2 = mean(model_stats$train_r2, na.rm = T),
-#                              test_r2 = mean(model_stats$test_r2, na.rm = T)))
+for (i in setdiff(1:length(monitor_names), c(9))) {
+
+  fit.xgb_da <- readRDS(paste0('rfiles/fit.xgb_da_', monitor_names[i], '.rds'))
+
+  test <- post2022feb %>%
+    filter(Monitor == monitor_names[i])
+
+  test <- fastDummies::dummy_cols(test[complete.cases(test),] %>%
+                     ungroup() %>%
+                     select(-c(Refinery, Monitor, day, H2S_daily_max, H2S_monthly_average,
+                             monitor_lat, monitor_lon, county, dist_213)) %>%
+                       add_cols(c('year_2022', 'year_2023', 'month_01', 'month_02',
+                                  'month_03', 'month_04', 'month_05', 'month_06',
+                                  'month_07', 'month_08', 'month_09', 'month_10',
+                                  'month_11', 'month_12')) %>%
+                     mutate(MinDist = 1/(MinDist^2),
+                            dist_wrp = 1/(dist_wrp^2),
+                            year_2022 = ifelse(is.na(year_2022), 0, year_2022),
+                            year_2023 = ifelse(is.na(year_2023), 0, year_2023),
+                            month_01 = ifelse(is.na(month_01), 0, month_01),
+                            month_02 = ifelse(is.na(month_02), 0, month_02),
+                            month_03 = ifelse(is.na(month_03), 0, month_03),
+                            month_04 = ifelse(is.na(month_04), 0, month_04),
+                            month_05 = ifelse(is.na(month_05), 0, month_05),
+                            month_06 = ifelse(is.na(month_06), 0, month_06),
+                            month_07 = ifelse(is.na(month_07), 0, month_07),
+                            month_08 = ifelse(is.na(month_08), 0, month_08),
+                            month_09 = ifelse(is.na(month_09), 0, month_09),
+                            month_10 = ifelse(is.na(month_10), 0, month_10),
+                            month_11 = ifelse(is.na(month_11), 0, month_11),
+                            month_12 = ifelse(is.na(month_12), 0, month_12)),
+                     remove_selected_columns = TRUE)
+
+  train_r2 <- getTrainPerf(fit.xgb_da)$TrainRsquared
+
+  predictions <- predict(fit.xgb_da$finalModel,
+                         newdata = test %>% select(-H2S_daily_avg) %>% as.matrix())
+
+  test_r2 <- R2(test %>% pull(H2S_daily_avg), predictions)
+
+  model_stats <- rbind(model_stats, tibble(Monitor = monitor_names[i], train_r2, test_r2))
+}
+
+model_stats
 ```
 
-# XGBoost models for disaster period only
+```{r}
+tibble(Monitor = 'Total Average', train_r2 = mean(model_stats$train_r2, na.rm = T),
+                             test_r2 = mean(model_stats$test_r2, na.rm = T))
+```
+
+
+# XGBoost Disaster 
 
 ## Daily average model
 ```{r echo = T, results = 'hide'}
-# train <- daily_full[complete.cases(daily_full),] %>%
-#   filter(year == '2021', month %in% c('10', '11', '12'))
-# 
-# train <- fastDummies::dummy_cols(train %>%
-#                    select(-c(Refinery, Monitor, day, H2S_daily_max, H2S_monthly_average,
-#                              monitor_lat, monitor_lon, county, dist_213, year)) %>%
-#                    mutate(MinDist = 1/(MinDist^2),
-#                           dist_wrp = 1/(dist_wrp^2)),
-#                    remove_selected_columns = TRUE)
-# 
-# #fit.xgb_da_dis <- readRDS('rfiles/fit.xgb_da.rds')
+train <- daily_full[complete.cases(daily_full),] %>%
+  filter(year == '2021', month %in% c('10', '11', '12'))
+
+train <- fastDummies::dummy_cols(train %>%
+                   select(-c(Refinery, Monitor, day, H2S_daily_max, H2S_monthly_average,
+                             monitor_lat, monitor_lon, county, dist_213, year)) %>%
+                   mutate(MinDist = 1/(MinDist^2),
+                          dist_wrp = 1/(dist_wrp^2)),
+                   remove_selected_columns = TRUE)
+
+fit.xgb_da_dis <- readRDS('rfiles/fit.xgb_da_dis.rds')
 # fit.xgb_da_dis <- train(H2S_daily_avg~.,
 #                  method = 'xgbTree',
 #                  data = train,
@@ -1177,33 +1202,33 @@ add_cols <- function(df, cols) {
 ```
 
 ```{r}
-# getTrainPerf(fit.xgb_da_dis)
+getTrainPerf(fit.xgb_da_dis)
 ```
 
 ```{r}
-# fit.xgb_da_dis$finalModel
+fit.xgb_da_dis$finalModel
 ```
 
 
 ```{r}
-# imp<-varImp(fit.xgb_da_dis,scale=FALSE)
-# plot(imp, top = 20)
+imp<-varImp(fit.xgb_da_dis,scale=FALSE)
+plot(imp, top = 20)
 ```
 
 ## SHAP for XGBoost above (Caret)
 ```{r}
-# matrix <- train %>% select(-H2S_daily_avg)
-# matrix <- as.matrix(sapply(matrix, as.numeric))  
-# xgb.plot.shap(data = matrix, 
-#               model = fit.xgb_da_dis$finalModel, top_n = 12, n_col = 3)
+matrix <- train %>% select(-H2S_daily_avg)
+matrix <- as.matrix(sapply(matrix, as.numeric))
+xgb.plot.shap(data = matrix,
+              model = fit.xgb_da_dis$finalModel, top_n = 12, n_col = 3)
 ```
 
 ```{r}
-# xgb.ggplot.shap.summary(data = matrix, 
-#               model = fit.xgb_da_dis$finalModel, top_n = 20)
+xgb.ggplot.shap.summary(data = matrix,
+              model = fit.xgb_da_dis$finalModel, top_n = 20)
 ```
 
-# 80/20 CV
+## 80/20 CV
 
 ```{r echo = T, results = 'hide'}
 set.seed(313)
@@ -1244,11 +1269,18 @@ getTrainPerf(fit.xgb_da_dis_8020)
 ```
 
 ```{r}
-predictions <- predict(fit.xgb_da_dis_8020$finalModel, 
-                       newdata = test %>% select(-H2S_daily_avg) %>% as.matrix())
+# Test statistics
+test_stat <- postResample(predict(fit.xgb_da_dis_8020$finalModel, 
+                       newdata = test %>% select(-H2S_daily_avg) %>% as.matrix()), 
+             test %>% pull(H2S_daily_avg))
+```
 
-test_r2 <- R2(test %>% pull(H2S_daily_avg), predictions)
-test_r2
+```{r}
+xgb_result <- rbind(xgb_result, 
+                    tibble(Model = 'Disaster Only',
+                           'R-Sq' = getTrainPerf(fit.xgb_da_dis)$TrainRsquared,
+                           '80/20 Train R-Sq' = getTrainPerf(fit.xgb_da_dis_8020)$TrainRsquared,
+                           '80/20 Test R-Sq' = test_stat[[2]]))
 ```
 
 
@@ -1273,6 +1305,139 @@ xgb.plot.shap(data = matrix,
 ```{r}
 xgb.ggplot.shap.summary(data = matrix, 
               model = fit.xgb_da_dis_8020$finalModel, top_n = 20)
+```
+
+# XGBoost Full
+
+## Daily average model
+```{r echo = T, results = 'hide'}
+train <- daily_full[complete.cases(daily_full),]
+
+train <- fastDummies::dummy_cols(train %>%
+                   select(-c(Refinery, Monitor, day, H2S_daily_max, H2S_monthly_average,
+                             monitor_lat, monitor_lon, county, dist_213, year)) %>%
+                   mutate(MinDist = 1/(MinDist^2),
+                          dist_wrp = 1/(dist_wrp^2)),
+                   remove_selected_columns = TRUE)
+
+fit.xgb_da_full <- readRDS('rfiles/fit.xgb_da_full.rds')
+# fit.xgb_da_full <- train(H2S_daily_avg~.,
+#                  method = 'xgbTree',
+#                  data = train,
+#                  trControl=control,
+#                  tuneGrid = tune_grid,
+#                  tuneLength = 10, importance=TRUE, verbosity = 0, verbose=FALSE)
+# saveRDS(fit.xgb_da_full, 'rfiles/fit.xgb_da_full.rds')
+```
+
+```{r}
+getTrainPerf(fit.xgb_da_full)
+```
+
+```{r}
+fit.xgb_da_full$finalModel
+```
+
+
+```{r}
+imp<-varImp(fit.xgb_da_full,scale=FALSE)
+plot(imp, top = 20)
+```
+
+## SHAP for XGBoost above (Caret)
+```{r}
+matrix <- train %>% select(-H2S_daily_avg)
+matrix <- as.matrix(sapply(matrix, as.numeric))
+xgb.plot.shap(data = matrix,
+              model = fit.xgb_da_full$finalModel, top_n = 12, n_col = 3)
+```
+
+```{r}
+xgb.ggplot.shap.summary(data = matrix,
+              model = fit.xgb_da_full$finalModel, top_n = 20)
+```
+
+## 80/20 CV
+
+```{r echo = T, results = 'hide'}
+set.seed(313)
+
+train <- rbind(
+  daily_full[complete.cases(daily_full),] %>%
+    filter(!(year == '2021' & month %in% c('10', '11', '12'))) %>%
+    sample_frac(0.8),
+  daily_full[complete.cases(daily_full),] %>%
+    filter(year == '2021', month %in% c('10', '11', '12')) %>%
+    sample_frac(0.8)
+)
+
+test <- anti_join(daily_full[complete.cases(daily_full),], train)
+
+train <- fastDummies::dummy_cols(train %>%
+                   select(-c(Refinery, Monitor, day, H2S_daily_max, H2S_monthly_average,
+                             monitor_lat, monitor_lon, county, dist_213, year)) %>%
+                   mutate(MinDist = 1/(MinDist^2),
+                          dist_wrp = 1/(dist_wrp^2)),
+                   remove_selected_columns = TRUE)
+
+test <- fastDummies::dummy_cols(test %>%
+                 select(-c(Refinery, Monitor, day, H2S_daily_max, H2S_monthly_average,
+                           monitor_lat, monitor_lon, county, dist_213, year)) %>%
+                 mutate(MinDist = 1/(MinDist^2),
+                        dist_wrp = 1/(dist_wrp^2)),
+                 remove_selected_columns = TRUE)
+
+fit.xgb_da_full_8020 <- readRDS('rfiles/fit.xgb_da_full_8020.rds')
+# fit.xgb_da_full_8020 <- train(H2S_daily_avg~.,
+#                  method = 'xgbTree',
+#                  data = train,
+#                  trControl=control,
+#                  tuneGrid = tune_grid,
+#                  tuneLength = 10, importance=TRUE, verbosity = 0, verbose=FALSE)
+# saveRDS(fit.xgb_da_full_8020, 'rfiles/fit.xgb_da_full_8020.rds')
+```
+
+```{r}
+getTrainPerf(fit.xgb_da_full_8020)
+```
+
+```{r}
+# Test statistics
+test_stat <- postResample(predict(fit.xgb_da_full_8020$finalModel, 
+                       newdata = test %>% select(-H2S_daily_avg) %>% as.matrix()), 
+             test %>% pull(H2S_daily_avg))
+```
+
+```{r}
+xgb_result <- rbind(xgb_result, 
+                    tibble(Model = 'Everything',
+                           'R-Sq' = getTrainPerf(fit.xgb_da_full)$TrainRsquared,
+                           '80/20 Train R-Sq' = getTrainPerf(fit.xgb_da_full_8020)$TrainRsquared,
+                           '80/20 Test R-Sq' = test_stat[[2]]))
+```
+
+
+```{r}
+fit.xgb_da_full_8020$finalModel
+```
+
+
+```{r}
+imp<-varImp(fit.xgb_da_full_8020,scale=FALSE)
+plot(imp, top = 20)
+```
+
+## SHAP for XGBoost above (Caret)
+```{r}
+matrix <- train %>% select(-H2S_daily_avg)
+matrix <- as.matrix(sapply(matrix, as.numeric))  
+xgb.plot.shap(data = matrix, 
+              model = fit.xgb_da_full_8020$finalModel, top_n = 12, n_col = 3)
+```
+
+```{r}
+xgb.ggplot.shap.summary(data = matrix, 
+              model = fit.xgb_da_full_8020$finalModel, top_n = 20)
 ```
 
 # Extreme Value Models
