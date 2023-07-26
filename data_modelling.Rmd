@@ -1050,6 +1050,7 @@ getTrainPerf(fit.xgb_da_8020)
 test_stat <- postResample(predict(fit.xgb_da_8020$finalModel, 
                        newdata = test %>% select(-H2S_daily_avg) %>% as.matrix()), 
              test %>% pull(H2S_daily_avg))
+test_stat
 ```
 
 ```{r}
@@ -1273,6 +1274,7 @@ getTrainPerf(fit.xgb_da_dis_8020)
 test_stat <- postResample(predict(fit.xgb_da_dis_8020$finalModel, 
                        newdata = test %>% select(-H2S_daily_avg) %>% as.matrix()), 
              test %>% pull(H2S_daily_avg))
+test_stat
 ```
 
 ```{r}
@@ -1406,15 +1408,29 @@ getTrainPerf(fit.xgb_da_full_8020)
 test_stat <- postResample(predict(fit.xgb_da_full_8020$finalModel, 
                        newdata = test %>% select(-H2S_daily_avg) %>% as.matrix()), 
              test %>% pull(H2S_daily_avg))
+test_stat
 ```
 
 ```{r}
 xgb_result <- rbind(xgb_result, 
                     tibble(Model = 'Everything',
-                           'R-Sq' = getTrainPerf(fit.xgb_da_full)$TrainRsquared,
+                           'R-Sq' = getTrainPerf(fit.xgb_da_full_8020)$TrainRsquared,
                            '80/20 Train R-Sq' = getTrainPerf(fit.xgb_da_full_8020)$TrainRsquared,
                            '80/20 Test R-Sq' = test_stat[[2]]))
 ```
+
+```{r}
+predictions <- predict(fit.xgb_da_full_8020$finalModel, 
+                       newdata = test %>% select(-H2S_daily_avg) %>% as.matrix())
+par(mfrow=c(1,2))
+plot(test %>% pull(H2S_daily_avg) ~ predictions, asp=1, pch=20,
+     ylab="Observed", xlab="Predicted", main="Full graph")
+abline(0,1); grid()
+plot(test %>% pull(H2S_daily_avg) ~ predictions, asp=1, pch=20,
+     ylab="Observed",xlab="Predicted",  main="Zoomed in",
+     xlim = c(0, 15), ylim = c(0, 15))
+grid(); abline(0,1)
+``` 
 
 
 ```{r}
@@ -1439,6 +1455,12 @@ xgb.plot.shap(data = matrix,
 xgb.ggplot.shap.summary(data = matrix, 
               model = fit.xgb_da_full_8020$finalModel, top_n = 20)
 ```
+
+# XGBoost Result
+```{r}
+xgb_result
+```
+
 
 # Extreme Value Models
 
