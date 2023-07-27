@@ -25,6 +25,7 @@ library(terra)
 library(rgl)
 library(sf)
 library(evgam)
+library(ggpubr)
 select <- dplyr::select
 ```
 
@@ -428,8 +429,8 @@ plot(h2s_da_model_j)
 knitr::kable(tibble(Model = c('Since Feb 2022',
                               'Disaster Only',
                               'Exclude Disaster',
-                              'Disaster Indicator',
-                              'Everything'),
+                              'Everything w Disaster Indicator',
+                              'Everything w.o Disaster Indicator'),
                     'R-Sq' = c(round(summary(h2s_da_model_f)$r.sq, 2),
                                     round(summary(h2s_da_model_g)$r.sq, 2),
                                     round(summary(h2s_da_model_h)$r.sq, 2),
@@ -481,6 +482,14 @@ result <- rbind(result, tibble(Model = 'Since Feb 2022',
                                '80/20 Train R-Sq' = summary(h2s_da_model_f2)$r.sq,
                                '80/20 Test R-Sq' = adj_r2_test))
 
+f2_obs_vs_pred_plot <- ggplot(tibble(obs = test %>% pull(H2S_daily_avg), pred = predictions),
+                             aes(x = pred, y = obs)) +
+                        geom_point() +
+                        geom_abline(intercept = 0, slope = 1, color = 'red') +
+                        geom_smooth(method = 'lm', formula = y ~ x, geom = 'smooth') +
+                        labs(y = 'Observed', x = 'Predicted', 
+                             title = 'Observed vs Predicted for Since 2022 GAM') +
+                        theme_bw()
 
 # Model 2: Disaster (Oct-Dec 2021) only
 train <- daily_full %>% 
@@ -512,6 +521,14 @@ adj_r2_test <- 1 - (1-r2_test)*(summary(h2s_da_model_f3)$n - 1)/
 result <- rbind(result, tibble(Model = 'Disaster Only',
                                '80/20 Train R-Sq' = summary(h2s_da_model_f3)$r.sq,
                                '80/20 Test R-Sq' = adj_r2_test))
+f3_obs_vs_pred_plot <- ggplot(tibble(obs = test %>% pull(H2S_daily_avg), pred = predictions),
+                             aes(x = pred, y = obs)) +
+                        geom_point() +
+                        geom_abline(intercept = 0, slope = 1, color = 'red') +
+                        geom_smooth(method = 'lm', formula = y ~ x, geom = 'smooth') +
+                        labs(y = 'Observed', x = 'Predicted', 
+                             title = 'Observed vs Predicted for Disaster Only GAM') +
+                        theme_bw()
 
 # Model 3: Excluding Disaster
 train <- daily_full %>% 
@@ -544,7 +561,7 @@ result <- rbind(result, tibble(Model = 'Exclude Disaster',
                                '80/20 Train R-Sq' = summary(h2s_da_model_f4)$r.sq,
                                '80/20 Test R-Sq' = adj_r2_test))
 
-# Model 4: Disaster Indicator
+# Model 4: Everything with Disaster Indicator
 train <- daily_full %>% 
   select(all_of(predictors)) %>% 
   mutate(disaster = if_else(year == '2021' & month %in% c('10', '11', '12'), 1, 0)) %>% 
@@ -576,7 +593,7 @@ r2_test <- R2(test$H2S_daily_avg, predictions)
 adj_r2_test <- 1 - (1-r2_test)*(summary(h2s_da_model_f5)$n - 1)/
   (summary(h2s_da_model_f5)$n - summary(h2s_da_model_f5)$np - 1)
 
-result <- rbind(result, tibble(Model = 'Disaster Indicator',
+result <- rbind(result, tibble(Model = 'Everything w. Disaster Indicator',
                                '80/20 Train R-Sq' = summary(h2s_da_model_f5)$r.sq,
                                '80/20 Test R-Sq' = adj_r2_test))
 
@@ -610,17 +627,36 @@ r2_test <- R2(test$H2S_daily_avg, predictions)
 adj_r2_test <- 1 - (1-r2_test)*(summary(h2s_da_model_f6)$n - 1)/
   (summary(h2s_da_model_f5)$n - summary(h2s_da_model_f6)$np - 1)
 
-result <- rbind(result, tibble(Model = 'Everything',
+result <- rbind(result, tibble(Model = 'Everything w.o Disaster Indicator',
                                '80/20 Train R-Sq' = summary(h2s_da_model_f6)$r.sq,
                                '80/20 Test R-Sq' = adj_r2_test))
+
+f6_obs_vs_pred_plot <- ggplot(tibble(obs = test %>% pull(H2S_daily_avg), pred = predictions),
+                             aes(x = pred, y = obs)) +
+                        geom_point() +
+                        geom_abline(intercept = 0, slope = 1, color = 'red') +
+                        geom_smooth(method = 'lm', formula = y ~ x, geom = 'smooth') +
+                        labs(y = 'Observed', x = 'Predicted', 
+                             title = 'Everything w.o Disaster Indicator Gam') +
+                        theme_bw()
+
+f6_obs_vs_pred_plot_zoom <- ggplot(tibble(obs = test %>% pull(H2S_daily_avg), pred = predictions),
+                             aes(x = pred, y = obs)) +
+                        geom_point() +
+                        geom_abline(intercept = 0, slope = 1, color = 'red') +
+                        geom_smooth(method = 'lm', formula = y ~ x) +
+                        labs(y = 'Observed', x = 'Predicted', 
+                             title = 'Zoomed In') +
+                        xlim(NA, 15) + ylim(NA, 15) +
+                        theme_bw()
 ```
 
 ```{r}
 knitr::kable(tibble(Model = c('Since Feb 2022',
                               'Disaster Only',
                               'Exclude Disaster',
-                              'Disaster Indicator',
-                              'Everything'),
+                              'Everything w Disaster Indicator',
+                              'Everything w.o Disaster Indicator'),
                     'R-Sq' = c(round(summary(h2s_da_model_f)$r.sq, 2),
                                     round(summary(h2s_da_model_g)$r.sq, 2),
                                     round(summary(h2s_da_model_h)$r.sq, 2),
@@ -628,6 +664,9 @@ knitr::kable(tibble(Model = c('Since Feb 2022',
                                     round(summary(h2s_da_model_j)$r.sq, 2))) %>% 
                left_join(result, join_by(Model)))
 ```
+
+
+
 
 # Cross Validation on each monitor
 ```{r}
@@ -779,7 +818,7 @@ result_cv <- rbind(result_cv, tibble(tibble(Model = 'Exclude Disaster',
                                            'CV Avg Train R-Sq' = mean(cv3_result$`summary(h2s_da_model_f4b)$r.sq`),
                                            'CV Avg Test R-Sq' = mean(cv3_result$adj_r2_test))))
 
-# model 4: Disaster Indicator 
+# model 4: Everything w Disaster Indicator 
 full_complete <- daily_full %>% 
   select(all_of(predictors), Monitor) %>% 
   filter(complete.cases(.)) %>%
@@ -823,11 +862,11 @@ for (i in 1:length(monitors)) {
                                          nrow(test)))
 }
 
-result_cv <- rbind(result_cv, tibble(tibble(Model = 'Disaster Indicator',
+result_cv <- rbind(result_cv, tibble(tibble(Model = 'Everything w Disaster Indicator',
                                            'CV Avg Train R-Sq' = mean(cv4_result$`summary(h2s_da_model_f5b)$r.sq`),
                                            'CV Avg Test R-Sq' = mean(cv4_result$adj_r2_test))))
 
-# model 5: Everything 
+# model 5: Everything w.o Disaster Indicator 
 full_complete <- daily_full %>% 
   select(all_of(predictors), Monitor) %>% 
   filter(complete.cases(.))
@@ -870,7 +909,7 @@ for (i in 1:length(monitors)) {
                                          nrow(test)))
 }
 
-result_cv <- rbind(result_cv, tibble(tibble(Model = 'Everything',
+result_cv <- rbind(result_cv, tibble(tibble(Model = 'Everything w.o Disaster Indicator',
                                            'CV Avg Train R-Sq' = mean(cv5_result$`summary(h2s_da_model_f6b)$r.sq`),
                                            'CV Avg Test R-Sq' = mean(cv5_result$adj_r2_test))))
 
@@ -880,13 +919,15 @@ cv3_result
 cv4_result
 cv5_result
 ```
-
+ 
+# GAM result
+ 
 ```{r}
 knitr::kable(tibble(Model = c('Since Feb 2022',
                               'Disaster Only',
                               'Exclude Disaster',
-                              'Disaster Indicator',
-                              'Everything'),
+                              'Everything w Disaster Indicator',
+                              'Everything w.o Disaster Indicator'),
                     'Train R-sq' = c(round(summary(h2s_da_model_f)$r.sq, 2),
                                     round(summary(h2s_da_model_g)$r.sq, 2),
                                     round(summary(h2s_da_model_h)$r.sq, 2),
@@ -896,6 +937,14 @@ knitr::kable(tibble(Model = c('Since Feb 2022',
                left_join(result_cv, join_by(Model)))
 ```
 
+## Observed vs. Predicted plots
+```{r}
+ggarrange(f2_obs_vs_pred_plot, 
+          f3_obs_vs_pred_plot,
+          ggarrange(f6_obs_vs_pred_plot, f6_obs_vs_pred_plot_zoom, ncol = 2, labels = c("3", "4")), 
+          labels = c("1", "2"),
+          nrow = 3)
+```
 
 # Monthly 
 ```{r}
@@ -1047,9 +1096,9 @@ getTrainPerf(fit.xgb_da_8020)
 
 ```{r}
 # Test statistics
-test_stat <- postResample(predict(fit.xgb_da_8020$finalModel, 
-                       newdata = test %>% select(-H2S_daily_avg) %>% as.matrix()), 
-             test %>% pull(H2S_daily_avg))
+predictions <- predict(fit.xgb_da_8020$finalModel, 
+                       newdata = test %>% select(-H2S_daily_avg) %>% as.matrix())
+test_stat <- postResample(predictions, test %>% pull(H2S_daily_avg))
 test_stat
 ```
 
@@ -1059,6 +1108,17 @@ xgb_result <- rbind(xgb_result,
                            'R-Sq' = getTrainPerf(fit.xgb_da)$TrainRsquared,
                            '80/20 Train R-Sq' = getTrainPerf(fit.xgb_da_8020)$TrainRsquared,
                            '80/20 Test R-Sq' = test_stat[[2]]))
+```
+
+```{r}
+xgb_sincefeb2022_obs_vs_pred_plot <- ggplot(tibble(obs = test %>% pull(H2S_daily_avg), pred = predictions),
+                             aes(x = pred, y = obs)) +
+                        geom_point() +
+                        geom_abline(intercept = 0, slope = 1, color = 'red') +
+                        geom_smooth(method = 'lm', formula = y ~ x, geom = 'smooth') +
+                        labs(y = 'Observed', x = 'Predicted', 
+                             title = 'Observed vs Predicted for Since 2022 XGBoost') +
+                        theme_bw()
 ```
 
 
@@ -1271,8 +1331,9 @@ getTrainPerf(fit.xgb_da_dis_8020)
 
 ```{r}
 # Test statistics
-test_stat <- postResample(predict(fit.xgb_da_dis_8020$finalModel, 
-                       newdata = test %>% select(-H2S_daily_avg) %>% as.matrix()), 
+predictions <- predict(fit.xgb_da_dis_8020$finalModel, 
+                       newdata = test %>% select(-H2S_daily_avg) %>% as.matrix())
+test_stat <- postResample(predictions, 
              test %>% pull(H2S_daily_avg))
 test_stat
 ```
@@ -1283,6 +1344,27 @@ xgb_result <- rbind(xgb_result,
                            'R-Sq' = getTrainPerf(fit.xgb_da_dis)$TrainRsquared,
                            '80/20 Train R-Sq' = getTrainPerf(fit.xgb_da_dis_8020)$TrainRsquared,
                            '80/20 Test R-Sq' = test_stat[[2]]))
+```
+
+```{r}
+xgb_dis_obs_vs_pred_plot <- ggplot(tibble(obs = test %>% pull(H2S_daily_avg), pred = predictions),
+                             aes(x = pred, y = obs)) +
+                        geom_point() +
+                        geom_abline(intercept = 0, slope = 1, color = 'red') +
+                        geom_smooth(method = 'lm', formula = y ~ x) +
+                        labs(y = 'Observed', x = 'Predicted', 
+                             title = 'Disaster Only XGBoost') +
+                        theme_bw()
+
+xgb_dis_obs_vs_pred_plot_zoom <- ggplot(tibble(obs = test %>% pull(H2S_daily_avg), pred = predictions),
+                             aes(x = pred, y = obs)) +
+                        geom_point() +
+                        geom_abline(intercept = 0, slope = 1, color = 'red') +
+                        geom_smooth(method = 'lm', formula = y ~ x) +
+                        labs(y = 'Observed', x = 'Predicted', 
+                             title = 'Zoomed In') +
+                        xlim(0, 10) + ylim(0, 10) +
+                        theme_bw()
 ```
 
 
@@ -1405,31 +1487,41 @@ getTrainPerf(fit.xgb_da_full_8020)
 
 ```{r}
 # Test statistics
-test_stat <- postResample(predict(fit.xgb_da_full_8020$finalModel, 
-                       newdata = test %>% select(-H2S_daily_avg) %>% as.matrix()), 
+predictions <- predict(fit.xgb_da_full_8020$finalModel, 
+                       newdata = test %>% select(-H2S_daily_avg) %>% as.matrix())
+test_stat <- postResample(predictions, 
              test %>% pull(H2S_daily_avg))
 test_stat
 ```
 
 ```{r}
 xgb_result <- rbind(xgb_result, 
-                    tibble(Model = 'Everything',
-                           'R-Sq' = getTrainPerf(fit.xgb_da_full_8020)$TrainRsquared,
+                    tibble(Model = 'Everything w.o Disaster Indicator',
+                           'R-Sq' = getTrainPerf(fit.xgb_da_full)$TrainRsquared,
                            '80/20 Train R-Sq' = getTrainPerf(fit.xgb_da_full_8020)$TrainRsquared,
                            '80/20 Test R-Sq' = test_stat[[2]]))
 ```
 
 ```{r}
-predictions <- predict(fit.xgb_da_full_8020$finalModel, 
-                       newdata = test %>% select(-H2S_daily_avg) %>% as.matrix())
-par(mfrow=c(1,2))
-plot(test %>% pull(H2S_daily_avg) ~ predictions, asp=1, pch=20,
-     ylab="Observed", xlab="Predicted", main="Full graph")
-abline(0,1); grid()
-plot(test %>% pull(H2S_daily_avg) ~ predictions, asp=1, pch=20,
-     ylab="Observed",xlab="Predicted",  main="Zoomed in",
-     xlim = c(0, 15), ylim = c(0, 15))
-grid(); abline(0,1)
+xgb_full_obs_vs_pred_plot <- ggplot(tibble(obs = test %>% pull(H2S_daily_avg), pred = predictions),
+                             aes(x = pred, y = obs)) +
+                        geom_point() +
+                        geom_abline(intercept = 0, slope = 1, color = 'red') +
+                        geom_smooth(method = 'lm', formula = y ~ x) +
+                        labs(y = 'Observed', x = 'Predicted', 
+                             title = 'Everything w.o Disaster Indicator XGBoost') +
+                        theme_bw()
+
+xgb_full_obs_vs_pred_plot_zoom <- ggplot(tibble(obs = test %>% pull(H2S_daily_avg), pred = predictions),
+                             aes(x = pred, y = obs)) +
+                        geom_point() +
+                        geom_abline(intercept = 0, slope = 1, color = 'red') +
+                        geom_smooth(method = 'lm', formula = y ~ x) +
+                        labs(y = 'Observed', x = 'Predicted', 
+                             title = 'Zoomed In') +
+                        xlim(0, 10) + ylim(0, 10) +
+                        theme_bw()
+
 ``` 
 
 
@@ -1461,6 +1553,16 @@ xgb.ggplot.shap.summary(data = matrix,
 xgb_result
 ```
 
+## Observed Vs. Predicted Plots
+```{r}
+ggarrange(xgb_sincefeb2022_obs_vs_pred_plot, 
+          ggarrange(xgb_dis_obs_vs_pred_plot, xgb_dis_obs_vs_pred_plot_zoom,  
+                    ncol = 2, labels = c("2", "3")),
+          ggarrange(xgb_full_obs_vs_pred_plot, xgb_full_obs_vs_pred_plot_zoom, 
+                    ncol = 2, labels = c("4", "5")), 
+                    labels = c("1"),
+                    nrow = 3)
+```
 
 # Extreme Value Models
 
