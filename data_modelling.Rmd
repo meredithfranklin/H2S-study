@@ -438,7 +438,7 @@ knitr::kable(tibble(Model = c('Since Feb 2022',
                                     round(summary(h2s_da_model_j)$r.sq, 2))))
 ```
 
-  # 80/20 Cross Validation on Daily Average models
+# 80/20 Cross Validation on Daily Average models
 ```{r}
 result <- tibble(Model = character(),
                  '80/20 Train R-Sq' = numeric(),
@@ -453,14 +453,14 @@ predictors <- c('H2S_daily_avg', 'month', 'year', 'weekday', 'wd_avg', 'ws_avg',
                 'active_1km', 'daily_downwind_wrp', 'elevation', 'EVI', 'num_odor_complaints',
                 'dist_dc', 'capacity', 'avg_temp', 'avg_hum', 'precip') 
 
-set.seed(313)
+set.seed(123)
 
 # model 1: since Feb 2022
 train <- daily_full %>% 
   filter(day >= '2022-02-01') %>% 
   select(all_of(predictors)) %>% 
   filter(complete.cases(.)) %>% 
-  sample_frac(0.8)
+  slice_sample(prop = 0.8)
 
 test <- anti_join(daily_full %>% 
                   filter(day >= '2022-02-01') %>% 
@@ -507,7 +507,7 @@ train <- daily_full %>%
   filter(year == '2021', month %in% c('10', '11', '12')) %>% 
   select(all_of(predictors)) %>% 
   filter(complete.cases(.)) %>% 
-  sample_frac(0.8)
+  slice_sample(prop = 0.8)
 
 test <- anti_join(daily_full %>% 
                   filter(year == '2021', month %in% c('10', '11', '12')) %>% 
@@ -554,7 +554,7 @@ train <- daily_full %>%
   filter(!(year == '2021' & month %in% c('10', '11', '12'))) %>% 
   select(all_of(predictors)) %>% 
   filter(complete.cases(.)) %>% 
-  sample_frac(0.8)
+  slice_sample(prop = 0.8)
 
 test <- anti_join(daily_full %>% 
                   filter(!(year == '2021' & month %in% c('10', '11', '12'))) %>% 
@@ -587,8 +587,8 @@ train <- daily_full %>%
   filter(complete.cases(.)) 
 
 train <- rbind(
-  train %>% filter(disaster==1) %>% sample_frac(0.8),
-  train %>% filter(disaster==0) %>% sample_frac(0.8)
+  train %>% filter(disaster==1) %>% slice_sample(prop = 0.8),
+  train %>% filter(disaster==0) %>% slice_sample(prop = 0.8)
 )
 
 test <- anti_join(daily_full %>% 
@@ -620,11 +620,11 @@ result <- rbind(result, tibble(Model = 'Everything w. Disaster Indicator',
 train <- daily_full %>% 
   select(all_of(predictors)) %>% 
   filter(complete.cases(.)) %>% 
-  sample_frac(0.8)
+  slice_sample(prop = 0.8)
 
 train <- rbind(
-  train %>% filter(year == '2021' & month %in% c('10', '11', '12')) %>% sample_frac(0.8),
-  train %>% filter(!(year == '2021' & month %in% c('10', '11', '12'))) %>% sample_frac(0.8)
+  train %>% filter(year == '2021' & month %in% c('10', '11', '12')) %>% slice_sample(prop = 0.8),
+  train %>% filter(!(year == '2021' & month %in% c('10', '11', '12'))) %>% slice_sample(prop = 0.8)
   )
 
 test <- anti_join(daily_full %>% 
@@ -670,7 +670,7 @@ f6_obs_vs_pred_plot_zoom <- ggplot(tibble(obs = test %>% pull(H2S_daily_avg), pr
                         theme_bw()
 
 validation_result <- rbind(validation_result, 
-                           tibble(Model = 'Everything  ',
+                           tibble(Model = 'Everything',
                                   'Coef' = summary(lm(test %>% pull(H2S_daily_avg) ~
                                                         predictions))$coefficients[2, 1], 
                                   'R-Sq' = summary(lm(test %>% pull(H2S_daily_avg) ~
@@ -1078,7 +1078,7 @@ validation_result <- tibble(Model = character(),
                             'R-Sq' = numeric())
 train <- daily_full[complete.cases(daily_full),] %>%
   filter(day >= '2022-02-01') %>%
-  sample_frac(0.8)
+  slice_sample(prop = 0.8)
 
 test <- anti_join(daily_full[complete.cases(daily_full),] %>% filter(day >= '2022-02-01'), 
                   train)
@@ -1338,7 +1338,7 @@ set.seed(313)
 
 train <- daily_full[complete.cases(daily_full),] %>%
   filter(year == '2021', month %in% c('10', '11', '12')) %>%
-  sample_frac(0.8)
+  slice_sample(prop = 0.8)
 
 test <- anti_join(daily_full[complete.cases(daily_full),] %>% filter(year == '2021', month %in% c('10', '11', '12')), 
                   train)
@@ -1500,10 +1500,10 @@ set.seed(313)
 train <- rbind(
   daily_full[complete.cases(daily_full),] %>%
     filter(!(year == '2021' & month %in% c('10', '11', '12'))) %>%
-    sample_frac(0.8),
+    slice_sample(prop = 0.8),
   daily_full[complete.cases(daily_full),] %>%
     filter(year == '2021', month %in% c('10', '11', '12')) %>%
-    sample_frac(0.8)
+    slice_sample(prop = 0.8)
 )
 
 test <- anti_join(daily_full[complete.cases(daily_full),], train)
