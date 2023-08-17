@@ -349,8 +349,8 @@ gc()
 
 # Well production data
 ```{r}
-well_prod <- read_csv('data/Los Angeles Production Well Monthly Production.CSV', show_col_types = FALSE)
-well_info <- read_csv('data/Los Angeles Wells Well Headers.CSV', show_col_types = FALSE)
+well_prod <- read_csv('data/LA Well August2023 Well Monthly Production.CSV', show_col_types = FALSE)
+well_info <- read_csv('data/LA Well August2023 Well Headers.CSV', show_col_types = FALSE)
 ```
 
 ```{r}
@@ -609,6 +609,7 @@ daily_full <- daily_full %>%
 daily_full <- daily_full %>%
   mutate(num_odor_complaints = coalesce(num_odor_complaints, 0))
 ```
+
 ```{r}
 odor_graph <- odor %>%
   filter(zip %in% unique(monitors_coord$county)) %>%
