@@ -34,6 +34,94 @@ full_data <- readRDS('data/full_data.rds')
 daily_full <- readRDS('data/daily_full.rds')
 ```
 
+# Explore some summary statistics
+## Fixed Monitor stats
+```{r}
+base_monitor_stat <- daily_full %>%
+  group_by(Monitor) %>%
+  summarise('Closest refinery' = unique(Refinery),
+            'Distance to nearest refinery' = unique(MinDist),
+            'Angle to refinery' = unique(Converted_Angle),
+            'Distance to nearest wrp' = unique(dist_wrp),
+            'Capacity of nearest wrp' = unique(capacity),
+            'Angle to wrp' = unique(wrp_angle),
+            'Distance to Dominguez Channel' = unique(dist_dc),
+            'Elevation' = unique(elevation),
+            'Enhanced Vegetation Index' = unique(EVI))
+
+knitr::kable(base_monitor_stat, digits = 2, format = 'html')
+```
+
+
+## Since Feb 2022
+```{r}
+sincefeb2022_stat <- daily_full %>%
+  filter(day >= '2022-02-01') %>%
+  group_by(Monitor) %>%
+  summarise('Daily observations' = n(),
+            'Max Daily Max' = max(H2S_daily_max, na.rm=T),
+            'Max Daily Average' = max(H2S_daily_avg, na.rm=T),
+            'Avg Daily Max' = mean(H2S_daily_max, na.rm=T),
+            'Avg Daily Average' = mean(H2S_daily_avg, na.rm=T),
+            'Average Wind Speed' = mean(ws_avg, na.rm=T),
+            'Average Wind Direction' = as.numeric(mean(circular(wd_avg, 
+                                                                units = 'degrees'), 
+                                                       na.rm=T)),
+            'Average daily odor complaints within county' = mean(num_odor_complaints, na.rm=T),
+            'Active wells 1km' = mean(active_1km, na.rm=T)) %>%
+  mutate('Average Wind Direction' = if_else(`Average Wind Direction` < 0, 
+                                            `Average Wind Direction`+360, 
+                                            `Average Wind Direction`))
+
+knitr::kable(sincefeb2022_stat, digits = 2, format = 'html')
+```
+
+## During Disaster (October 2021 - December 2021)
+```{r}
+disaster_stat <- daily_full %>%
+  filter(year == '2021', month %in% c('10', '11', '12')) %>%
+  group_by(Monitor) %>%
+  summarise('Daily observations' = n(),
+            'Max Daily Max' = max(H2S_daily_max, na.rm=T),
+            'Max Daily Average' = max(H2S_daily_avg, na.rm=T),
+            'Avg Daily Max' = mean(H2S_daily_max, na.rm=T),
+            'Avg Daily Average' = mean(H2S_daily_avg, na.rm=T),
+            'Average Wind Speed' = mean(ws_avg, na.rm=T),
+            'Average Wind Direction' = as.numeric(mean(circular(wd_avg, 
+                                                                units = 'degrees'), 
+                                                       na.rm=T)),
+            'Average daily odor complaints within county' = mean(num_odor_complaints, na.rm=T),
+            'Active wells 1km' = mean(active_1km, na.rm=T)) %>%
+  mutate('Average Wind Direction' = if_else(`Average Wind Direction` < 0, 
+                                            `Average Wind Direction`+360, 
+                                            `Average Wind Direction`))
+
+knitr::kable(disaster_stat, digits = 2, format = 'html')
+```
+
+## Normal Period (Jan 2020- May 2023) excluding disaster
+```{r}
+normal_stat <- daily_full %>%
+  filter(!(year == '2021' & month %in% c('10', '11', '12'))) %>%
+  group_by(Monitor) %>%
+  summarise('Daily observations' = n(),
+            'Max Daily Max' = max(H2S_daily_max, na.rm=T),
+            'Max Daily Average' = max(H2S_daily_avg, na.rm=T),
+            'Avg Daily Max' = mean(H2S_daily_max, na.rm=T),
+            'Avg Daily Average' = mean(H2S_daily_avg, na.rm=T),
+            'Average Wind Speed' = mean(ws_avg, na.rm=T),
+            'Average Wind Direction' = as.numeric(mean(circular(wd_avg, 
+                                                                units = 'degrees'), 
+                                                       na.rm=T)),
+            'Average daily odor complaints within county' = mean(num_odor_complaints, na.rm=T),
+            'Active wells 1km' = mean(active_1km, na.rm=T)) %>%
+  mutate('Average Wind Direction' = if_else(`Average Wind Direction` < 0, 
+                                            `Average Wind Direction`+360, 
+                                            `Average Wind Direction`))
+
+knitr::kable(normal_stat, digits = 2, format = 'html')
+```
+
 # Explore some GAM models
 ### Five minute H2S
 ```{r}
@@ -666,7 +754,7 @@ f6_obs_vs_pred_plot_zoom <- ggplot(tibble(obs = test %>% pull(H2S_daily_avg), pr
                         geom_smooth(method = 'lm', formula = y ~ x) +
                         labs(y = 'Observed', x = 'Predicted', 
                              title = 'Zoomed In') +
-                        xlim(NA, 15) + ylim(NA, 15) +
+                        coord_cartesian(xlim = c(NA, 4), ylim = c(NA, 4)) +
                         theme_bw()
 
 validation_result_8020 <- rbind(validation_result_8020, 
@@ -1226,7 +1314,7 @@ f6_10cv_obs_vs_pred_plot_zoom <- ggplot(tibble(obs = obs_10cv_everything, pred =
                         geom_smooth(method = 'lm', formula = y ~ x) +
                         labs(y = 'Observed', x = 'Predicted', 
                              title = 'Zoomed In') +
-                        xlim(NA, 15) + ylim(NA, 50) +
+                        coord_cartesian(xlim = c(NA, 15), ylim = c(NA, 50)) +
                         theme_bw()
 
 validation_result_10cv <- rbind(validation_result_10cv, 
@@ -1702,7 +1790,7 @@ xgb_disaster_obs_vs_pred_plot_zoom <- ggplot(tibble(obs = obs_xgb_disaster, pred
                         geom_smooth(method = 'lm', formula = y ~ x, geom = 'smooth') +
                         labs(y = 'Observed', x = 'Predicted', 
                              title = 'Zoomed In') +
-                        xlim(0, 50) + ylim(0, 50) +
+                        coord_cartesian(xlim = c(0, 50), ylim = c(0, 50)) +
                         theme_bw()
 ```
 
@@ -1802,7 +1890,7 @@ xgb_dis_obs_vs_pred_plot_zoom_8020 <- ggplot(tibble(obs = test %>% pull(H2S_dail
                         geom_smooth(method = 'lm', formula = y ~ x) +
                         labs(y = 'Observed', x = 'Predicted', 
                              title = 'Zoomed In') +
-                        xlim(0, 10) + ylim(0, 10) +
+                        coord_cartesian(xlim = c(0, 10), ylim = c(0, 10)) +
                         theme_bw()
 ```
 
@@ -1911,7 +1999,7 @@ xgb_everything_obs_vs_pred_plot_zoom <- ggplot(tibble(obs = obs_xgb_everything, 
                         geom_smooth(method = 'lm', formula = y ~ x, geom = 'smooth') +
                         labs(y = 'Observed', x = 'Predicted', 
                              title = 'Zoomed In') +
-                        xlim(0, 30) + ylim(0, 30) +
+                        coord_cartesian(xlim = c(0, 30), ylim = c(0, 30)) +
                         theme_bw()
 ```
 
@@ -2015,7 +2103,7 @@ xgb_full_obs_vs_pred_plot_zoom_8020 <- ggplot(tibble(obs = test %>% pull(H2S_dai
                         geom_smooth(method = 'lm', formula = y ~ x) +
                         labs(y = 'Observed', x = 'Predicted', 
                              title = 'Zoomed In') +
-                        xlim(0, 10) + ylim(0, 10) +
+                        coord_cartesian(xlim = c(0, 10), ylim = c(0, 10)) +
                         theme_bw()
 ``` 
 

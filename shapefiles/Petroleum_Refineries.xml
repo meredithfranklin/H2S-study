@@ -1,0 +1,200 @@
+<?xml version="1.0" encoding="UTF-8"?><metadata>
+    <idinfo>
+        <citation>
+            <citeinfo>
+                <pubdate>20200710</pubdate>
+                <title>Petroleum Refineries</title>
+                <geoform>vector digital data</geoform>
+            </citeinfo>
+        </citation>
+        <descript>
+            <abstract>The attribute data for this point dataset come from the U.S. Energy Information Administration, Refinery Capacity Report, Table 3, Capacity of Operable Petroleum Refineries by State report, which is sourced from U.S. Energy Information Administration, Form EIA-820, Annual Refinery Report. The geographic area the report covers is the 50 States, the District of Columbia, Puerto Rico, the U.S. Virgin Islands, Guam, and other U.S. possessions.  The facility location data represent the approximate location based on research of publicly available information from sources such as Federal agencies, company websites, and satellite images on public websites.</abstract>
+            <purpose>These data identify and provide detailed information on petroleum refineries in the United States as of January 1, 2022.</purpose>
+        </descript>
+        <status>
+            <update>Annually</update>
+        </status>
+        <spdom>
+            <bounding>
+                <westbc>-158.091400</westbc>
+                <eastbc>-64.748760</eastbc>
+                <northbc>70.324832</northbc>
+                <southbc>17.708570</southbc>
+            </bounding>
+        </spdom>
+        <keywords>
+            <theme>
+                <themekt>None</themekt>
+                <themekey>refinery, petroleum, energy, crude oil, infrastructure, EIA</themekey>
+            </theme>
+            <place>
+                <placekt>None</placekt>
+                <placekey>United States, USA</placekey>
+            </place>
+        </keywords>
+        <accconst>None</accconst>
+        <useconst>None (public use). Users are advised to thoroughly review the metadata to understand the appropriate use and limitations of the data. These data and related graphics, if available, are not legal documents and are not intended to be used as such. The information contained in these data is dynamic and may change over time. The U.S. Energy Information Administration gives no warranty, expressed or implied, as to the accuracy, reliability, or completeness of these data.</useconst>
+        <ptcontac>
+            <cntinfo>
+                <cntperp>
+                    <cntper>EIA Mapping Mailbox: mapping@eia.gov</cntper>
+                </cntperp>
+            </cntinfo>
+        </ptcontac>
+        <datacred>U.S. Energy Information Administration and publicly available information.</datacred>
+        <native>Esri ArcGIS 13.0.3.36057</native>
+    </idinfo>
+    <spdoinfo>
+        <direct>Vector</direct>
+        <ptvctinf>
+            <sdtsterm>
+                <sdtstype>Entity point</sdtstype>
+                <ptvctcnt>131</ptvctcnt>
+            </sdtsterm>
+        </ptvctinf>
+    </spdoinfo>
+    <eainfo>
+        <detailed>
+            <enttyp>
+                <enttypl>U.S. Petroleum Refineries</enttypl>
+            </enttyp>
+            <attr>
+                <attrlabl>OBJECTID</attrlabl>
+                <attrdef>Internal feature number.</attrdef>
+                <attrdefs>Esri</attrdefs>
+                <attrdomv>
+                                        
+                    <udom>Sequential unique whole numbers that are automatically generated.</udom>
+                                    
+                </attrdomv>
+            </attr>
+            <attr>
+                <attrlabl>site_id</attrlabl>
+                <attrdef>Unique stable identification number</attrdef>
+            </attr>
+            <attr>
+                <attrlabl>Company</attrlabl>
+                <attrdef>Company name</attrdef>
+                <attrdefs>EIA</attrdefs>
+            </attr>
+            <attr>
+                <attrlabl>Corp</attrlabl>
+                <attrdef>Corporation</attrdef>
+                <attrdefs>EIA</attrdefs>
+            </attr>
+            <attr>
+                <attrlabl>Site</attrlabl>
+                <attrdef>Site name (city)</attrdef>
+                <attrdefs>EIA</attrdefs>
+            </attr>
+            <attr>
+                <attrlabl>State</attrlabl>
+                <attrdef>State</attrdef>
+                <attrdefs>EIA</attrdefs>
+            </attr>
+            <attr>
+                <attrlabl>PADD</attrlabl>
+                <attrdef>Petroleum Administration for Defense District (PADD).</attrdef>
+                <attrdefs>EIA</attrdefs>
+            </attr>
+            <attr>
+                <attrlabl>AD_Mbpd</attrlabl>
+                <attrdef>Atmospheric crude oil distillation capacity in thousand barrels per stream day (Mbpd).</attrdef>
+                <attrdefs>EIA</attrdefs>
+            </attr>
+            <attr>
+                <attrlabl>VDist_Mbpd</attrlabl>
+                <attrdef>Vacuum distillation charge capacity in thousand barrels per stream day (Mbpd).</attrdef>
+                <attrdefs>EIA</attrdefs>
+            </attr>
+            <attr>
+                <attrlabl>CaDis_Mbpd</attrlabl>
+                <attrdef>Catalytic cracking charge capacity in thousand barrels per stream day (Mbpd).</attrdef>
+                <attrdefs>EIA</attrdefs>
+            </attr>
+            <attr>
+                <attrlabl>HyCrk_Mbpd</attrlabl>
+                <attrdef>Catalytic hydrocracking charge capacity in thousand barrels per stream day (Mbpd).</attrdef>
+                <attrdefs>EIA</attrdefs>
+            </attr>
+            <attr>
+                <attrlabl>VRedu_Mbpd</attrlabl>
+                <attrdef>Thermal cracking, visbreaking charge capacity in thousand barrels per stream day (Mbpd).</attrdef>
+                <attrdefs>EIA</attrdefs>
+            </attr>
+            <attr>
+                <attrlabl>CaRef_Mbpd</attrlabl>
+                <attrdef>Catalytic reforming charge capacity in thousand barrels per stream day (Mbpd).</attrdef>
+                <attrdefs>EIA</attrdefs>
+            </attr>
+            <attr>
+                <attrlabl>Isal_Mbpd</attrlabl>
+                <attrdef>Alkylation and isomerization charge capacity in thousand barrels per stream day (Mbpd).</attrdef>
+                <attrdefs>EIA</attrdefs>
+            </attr>
+            <attr>
+                <attrlabl>HDS_Mbpd</attrlabl>
+                <attrdef>Desulfurization (including catalytic hydrotreating) charge capacity in thousand barrels per stream day (Mbpd).</attrdef>
+                <attrdefs>EIA</attrdefs>
+            </attr>
+            <attr>
+                <attrlabl>Cokin_Mbpd</attrlabl>
+                <attrdef>Thermal cracking, coking charge capacity in thousand barrels per stream day (Mbpd).</attrdef>
+                <attrdefs>EIA</attrdefs>
+            </attr>
+            <attr>
+                <attrlabl>Asph_Mbpd</attrlabl>
+                <attrdef>Asphalt production capacity in thousand barrels per stream day (Mbpd).</attrdef>
+                <attrdefs>EIA</attrdefs>
+            </attr>
+            <attr>
+                <attrlabl>Source</attrlabl>
+                <attrdef>EIA survey used to collect data.</attrdef>
+                <attrdefs>EIA</attrdefs>
+            </attr>
+            <attr>
+                <attrlabl>Latitude</attrlabl>
+                <attrdef>Latitude of refinery location in decimal degrees calculated in Arc Map using GCS: WGS 84 (EPSG:4326).</attrdef>
+                <attrdefs>EIA</attrdefs>
+            </attr>
+            <attr>
+                <attrlabl>Period</attrlabl>
+            </attr>
+            <attr>
+                <attrlabl>Longitude</attrlabl>
+                <attrdef>Longitude of refinery location in decimal degrees calculated in Arc Map using GCS: WGS 84 (EPSG:4326).</attrdef>
+                <attrdefs>EIA</attrdefs>
+            </attr>
+            <attr>
+                <attrlabl>Link_Imports</attrlabl>
+            </attr>
+            <attr>
+                <attrlabl>Shape</attrlabl>
+                <attrdef>Feature geometry.</attrdef>
+                <attrdefs>Esri</attrdefs>
+                <attrdomv>
+                                        
+                    <udom>Coordinates defining the features.</udom>
+                                    
+                </attrdomv>
+            </attr>
+        </detailed>
+    </eainfo>
+    <distinfo>
+        <distrib>
+            <cntinfo>
+                <cntperp>
+                    <cntper>mapping@eia.gov</cntper>
+                </cntperp>
+            </cntinfo>
+        </distrib>
+        <distliab>See access and use constraints information.</distliab>
+    </distinfo>
+    <metainfo>
+        <metd>20230222</metd>
+        <metstdn>FGDC Content Standard for Digital Geospatial Metadata</metstdn>
+        <metstdv>FGDC-STD-001-1998</metstdv>
+        <mettc>local time</mettc>
+        <metuc>None (public use)</metuc>
+    </metainfo>
+</metadata>
