@@ -213,7 +213,7 @@ basemap <- leaflet() %>%
 
 
 basemap
-saveWidget(basemap, file="basemap.html")
+# saveWidget(basemap, file="basemap.html")
 ```
 
 
@@ -347,102 +347,102 @@ getplot <- function(mon) {
 }
 
 # for loop doesn't work with png() and bg='transparent' for some reason...
-mon <- dis_mon[1]
-mon_plot <- getplot(mon)
-mon <- str_replace_all(str_replace_all(mon, '[()]', ''), ' ', '_')
-png(paste0("polarplots/disaster/", mon, ".png"), width=20, height=15, units="cm", res=800, bg="transparent")
-mon_plot
-dev.off()
-
-mon <- dis_mon[2]
-mon_plot <- getplot(mon)
-mon <- str_replace_all(str_replace_all(mon, '[()]', ''), ' ', '_')
-png(paste0("polarplots/disaster/", mon, ".png"), width=20, height=15, units="cm", res=800, bg="transparent")
-mon_plot
-dev.off()
-
-mon <- dis_mon[3]
-mon_plot <- getplot(mon)
-mon <- str_replace_all(str_replace_all(mon, '[()]', ''), ' ', '_')
-png(paste0("polarplots/disaster/", mon, ".png"), width=20, height=15, units="cm", res=800, bg="transparent")
-mon_plot
-dev.off()
-
-mon <- dis_mon[4]
-mon_plot <- getplot(mon)
-mon <- str_replace_all(str_replace_all(mon, '[()]', ''), ' ', '_')
-png(paste0("polarplots/disaster/", mon, ".png"), width=20, height=15, units="cm", res=800, bg="transparent")
-mon_plot
-dev.off()
-
-mon <- dis_mon[5]
-mon_plot <- getplot(mon)
-mon <- str_replace_all(str_replace_all(mon, '[()]', ''), ' ', '_')
-png(paste0("polarplots/disaster/", mon, ".png"), width=20, height=15, units="cm", res=800, bg="transparent")
-mon_plot
-dev.off()
-
-
-mon <- dis_mon[6]
-mon_plot <- getplot(mon)
-mon <- str_replace_all(str_replace_all(mon, '[()]', ''), ' ', '_')
-png(paste0("polarplots/disaster/", mon, ".png"), width=20, height=15, units="cm", res=800, bg="transparent")
-mon_plot
-dev.off()
-
-mon <- dis_mon[7]
-mon_plot <- getplot(mon)
-mon <- str_replace_all(str_replace_all(mon, '[()]', ''), ' ', '_')
-png(paste0("polarplots/disaster/", mon, ".png"), width=20, height=15, units="cm", res=800, bg="transparent")
-mon_plot
-dev.off()
-
-mon <- dis_mon[8]
-mon_plot <- getplot(mon)
-mon <- str_replace_all(str_replace_all(mon, '[()]', ''), ' ', '_')
-png(paste0("polarplots/disaster/", mon, ".png"), width=20, height=15, units="cm", res=800, bg="transparent")
-mon_plot
-dev.off()
-
-mon <- dis_mon[9]
-mon_plot <- getplot(mon)
-mon <- str_replace_all(str_replace_all(mon, '[()]', ''), ' ', '_')
-png(paste0("polarplots/disaster/", mon, ".png"), width=20, height=15, units="cm", res=800, bg="transparent")
-mon_plot
-dev.off()
-
-mon <- dis_mon[10]
-mon_plot <- getplot(mon)
-mon <- str_replace_all(str_replace_all(mon, '[()]', ''), ' ', '_')
-png(paste0("polarplots/disaster/", mon, ".png"), width=20, height=15, units="cm", res=800, bg="transparent")
-mon_plot
-dev.off()
-
-mon <- dis_mon[11]
-mon_plot <- getplot(mon)
-mon <- str_replace_all(str_replace_all(mon, '[()]', ''), ' ', '_')
-png(paste0("polarplots/disaster/", mon, ".png"), width=20, height=15, units="cm", res=800, bg="transparent")
-mon_plot
-dev.off()
-
-mon <- dis_mon[12]
-mon_plot <- getplot(mon)
-mon <- str_replace_all(str_replace_all(mon, '[()]', ''), ' ', '_')
-png(paste0("polarplots/disaster/", mon, ".png"), width=20, height=15, units="cm", res=800, bg="transparent")
-mon_plot
-dev.off()
-
-mon <- dis_mon[13]
-mon_plot <- getplot(mon)
-mon <- str_replace_all(str_replace_all(mon, '[()]', ''), ' ', '_')
-png(paste0("polarplots/disaster/", mon, ".png"), width=20, height=15, units="cm", res=800, bg="transparent")
-mon_plot
-dev.off()
-
-
-parOrig <- par()
-par(parOrig)
-plot (1:3)
+# mon <- dis_mon[1]
+# mon_plot <- getplot(mon)
+# mon <- str_replace_all(str_replace_all(mon, '[()]', ''), ' ', '_')
+# png(paste0("polarplots/disaster/", mon, ".png"), width=20, height=15, units="cm", res=800, bg="transparent")
+# mon_plot
+# dev.off()
+# 
+# mon <- dis_mon[2]
+# mon_plot <- getplot(mon)
+# mon <- str_replace_all(str_replace_all(mon, '[()]', ''), ' ', '_')
+# png(paste0("polarplots/disaster/", mon, ".png"), width=20, height=15, units="cm", res=800, bg="transparent")
+# mon_plot
+# dev.off()
+# 
+# mon <- dis_mon[3]
+# mon_plot <- getplot(mon)
+# mon <- str_replace_all(str_replace_all(mon, '[()]', ''), ' ', '_')
+# png(paste0("polarplots/disaster/", mon, ".png"), width=20, height=15, units="cm", res=800, bg="transparent")
+# mon_plot
+# dev.off()
+# 
+# mon <- dis_mon[4]
+# mon_plot <- getplot(mon)
+# mon <- str_replace_all(str_replace_all(mon, '[()]', ''), ' ', '_')
+# png(paste0("polarplots/disaster/", mon, ".png"), width=20, height=15, units="cm", res=800, bg="transparent")
+# mon_plot
+# dev.off()
+# 
+# mon <- dis_mon[5]
+# mon_plot <- getplot(mon)
+# mon <- str_replace_all(str_replace_all(mon, '[()]', ''), ' ', '_')
+# png(paste0("polarplots/disaster/", mon, ".png"), width=20, height=15, units="cm", res=800, bg="transparent")
+# mon_plot
+# dev.off()
+# 
+# 
+# mon <- dis_mon[6]
+# mon_plot <- getplot(mon)
+# mon <- str_replace_all(str_replace_all(mon, '[()]', ''), ' ', '_')
+# png(paste0("polarplots/disaster/", mon, ".png"), width=20, height=15, units="cm", res=800, bg="transparent")
+# mon_plot
+# dev.off()
+# 
+# mon <- dis_mon[7]
+# mon_plot <- getplot(mon)
+# mon <- str_replace_all(str_replace_all(mon, '[()]', ''), ' ', '_')
+# png(paste0("polarplots/disaster/", mon, ".png"), width=20, height=15, units="cm", res=800, bg="transparent")
+# mon_plot
+# dev.off()
+# 
+# mon <- dis_mon[8]
+# mon_plot <- getplot(mon)
+# mon <- str_replace_all(str_replace_all(mon, '[()]', ''), ' ', '_')
+# png(paste0("polarplots/disaster/", mon, ".png"), width=20, height=15, units="cm", res=800, bg="transparent")
+# mon_plot
+# dev.off()
+# 
+# mon <- dis_mon[9]
+# mon_plot <- getplot(mon)
+# mon <- str_replace_all(str_replace_all(mon, '[()]', ''), ' ', '_')
+# png(paste0("polarplots/disaster/", mon, ".png"), width=20, height=15, units="cm", res=800, bg="transparent")
+# mon_plot
+# dev.off()
+# 
+# mon <- dis_mon[10]
+# mon_plot <- getplot(mon)
+# mon <- str_replace_all(str_replace_all(mon, '[()]', ''), ' ', '_')
+# png(paste0("polarplots/disaster/", mon, ".png"), width=20, height=15, units="cm", res=800, bg="transparent")
+# mon_plot
+# dev.off()
+# 
+# mon <- dis_mon[11]
+# mon_plot <- getplot(mon)
+# mon <- str_replace_all(str_replace_all(mon, '[()]', ''), ' ', '_')
+# png(paste0("polarplots/disaster/", mon, ".png"), width=20, height=15, units="cm", res=800, bg="transparent")
+# mon_plot
+# dev.off()
+# 
+# mon <- dis_mon[12]
+# mon_plot <- getplot(mon)
+# mon <- str_replace_all(str_replace_all(mon, '[()]', ''), ' ', '_')
+# png(paste0("polarplots/disaster/", mon, ".png"), width=20, height=15, units="cm", res=800, bg="transparent")
+# mon_plot
+# dev.off()
+# 
+# mon <- dis_mon[13]
+# mon_plot <- getplot(mon)
+# mon <- str_replace_all(str_replace_all(mon, '[()]', ''), ' ', '_')
+# png(paste0("polarplots/disaster/", mon, ".png"), width=20, height=15, units="cm", res=800, bg="transparent")
+# mon_plot
+# dev.off()
+# 
+# 
+# parOrig <- par()
+# par(parOrig)
+# plot (1:3)
 ```
 
 ## Since 2020
@@ -536,12 +536,9 @@ polar_norm_213 <- polarPlot(norm_data %>% filter(Monitor == '213th & Chico'),
   k = 10,
   key = FALSE)
 
-png("polarplots/normal/213th_&_Chico.png", width=20, height=15, units="cm", res=800, bg="transparent")
-polar_norm_213
-dev.off()
-
-plot(polar_norm_213, bg = 'transparent')
-dev.copy(png,'myplot.png',  bg = 'transparent')
+# png("polarplots/normal/213th_&_Chico.png", width=20, height=15, units="cm", res=800, bg="transparent")
+# polar_norm_213
+# dev.off()
 
 # for the rest, use k=30
 getplot <- function(mon) {
@@ -557,95 +554,95 @@ getplot <- function(mon) {
 }
 
 # for loop doesn't work with png() and bg='transparent' for some reason...
-mon <- norm_mon[2]
-mon_plot <- getplot(mon)
-mon <- str_replace_all(str_replace_all(mon, '[()]', ''), ' ', '_')
-png(paste0("polarplots/normal/", mon, ".png"), width=20, height=15, units="cm", res=800, bg="transparent")
-mon_plot
-dev.off()
-
-mon <- norm_mon[3]
-mon_plot <- getplot(mon)
-mon <- str_replace_all(str_replace_all(mon, '[()]', ''), ' ', '_')
-png(paste0("polarplots/normal/", mon, ".png"), width=20, height=15, units="cm", res=800, bg="transparent")
-mon_plot
-dev.off()
-
-mon <- norm_mon[4]
-mon_plot <- getplot(mon)
-mon <- str_replace_all(str_replace_all(mon, '[()]', ''), ' ', '_')
-png(paste0("polarplots/normal/", mon, ".png"), width=20, height=15, units="cm", res=800, bg="transparent")
-mon_plot
-dev.off()
-
-mon <- norm_mon[5]
-mon_plot <- getplot(mon)
-mon <- str_replace_all(str_replace_all(mon, '[()]', ''), ' ', '_')
-png(paste0("polarplots/normal/", mon, ".png"), width=20, height=15, units="cm", res=800, bg="transparent")
-mon_plot
-dev.off()
-
-
-mon <- norm_mon[6]
-mon_plot <- getplot(mon)
-mon <- str_replace_all(str_replace_all(mon, '[()]', ''), ' ', '_')
-png(paste0("polarplots/normal/", mon, ".png"), width=20, height=15, units="cm", res=800, bg="transparent")
-mon_plot
-dev.off()
-
-mon <- norm_mon[7]
-mon_plot <- getplot(mon)
-mon <- str_replace_all(str_replace_all(mon, '[()]', ''), ' ', '_')
-png(paste0("polarplots/normal/", mon, ".png"), width=20, height=15, units="cm", res=800, bg="transparent")
-mon_plot
-dev.off()
-
-mon <- norm_mon[8]
-mon_plot <- getplot(mon)
-mon <- str_replace_all(str_replace_all(mon, '[()]', ''), ' ', '_')
-png(paste0("polarplots/normal/", mon, ".png"), width=20, height=15, units="cm", res=800, bg="transparent")
-mon_plot
-dev.off()
-
-mon <- norm_mon[9]
-mon_plot <- getplot(mon)
-mon <- str_replace_all(str_replace_all(mon, '[()]', ''), ' ', '_')
-png(paste0("polarplots/normal/", mon, ".png"), width=20, height=15, units="cm", res=800, bg="transparent")
-mon_plot
-dev.off()
-
-mon <- norm_mon[10]
-mon_plot <- getplot(mon)
-mon <- str_replace_all(str_replace_all(mon, '[()]', ''), ' ', '_')
-png(paste0("polarplots/normal/", mon, ".png"), width=20, height=15, units="cm", res=800, bg="transparent")
-mon_plot
-dev.off()
-
-mon <- norm_mon[11]
-mon_plot <- getplot(mon)
-mon <- str_replace_all(str_replace_all(mon, '[()]', ''), ' ', '_')
-png(paste0("polarplots/normal/", mon, ".png"), width=20, height=15, units="cm", res=800, bg="transparent")
-mon_plot
-dev.off()
-
-mon <- norm_mon[12]
-mon_plot <- getplot(mon)
-mon <- str_replace_all(str_replace_all(mon, '[()]', ''), ' ', '_')
-png(paste0("polarplots/normal/", mon, ".png"), width=20, height=15, units="cm", res=800, bg="transparent")
-mon_plot
-dev.off()
-
-mon <- norm_mon[13]
-mon_plot <- getplot(mon)
-mon <- str_replace_all(str_replace_all(mon, '[()]', ''), ' ', '_')
-png(paste0("polarplots/normal/", mon, ".png"), width=20, height=15, units="cm", res=800, bg="transparent")
-mon_plot
-dev.off()
-
-
-parOrig <- par()
-par(parOrig)
-plot (1:3)
+# mon <- norm_mon[2]
+# mon_plot <- getplot(mon)
+# mon <- str_replace_all(str_replace_all(mon, '[()]', ''), ' ', '_')
+# png(paste0("polarplots/normal/", mon, ".png"), width=20, height=15, units="cm", res=800, bg="transparent")
+# mon_plot
+# dev.off()
+# 
+# mon <- norm_mon[3]
+# mon_plot <- getplot(mon)
+# mon <- str_replace_all(str_replace_all(mon, '[()]', ''), ' ', '_')
+# png(paste0("polarplots/normal/", mon, ".png"), width=20, height=15, units="cm", res=800, bg="transparent")
+# mon_plot
+# dev.off()
+# 
+# mon <- norm_mon[4]
+# mon_plot <- getplot(mon)
+# mon <- str_replace_all(str_replace_all(mon, '[()]', ''), ' ', '_')
+# png(paste0("polarplots/normal/", mon, ".png"), width=20, height=15, units="cm", res=800, bg="transparent")
+# mon_plot
+# dev.off()
+# 
+# mon <- norm_mon[5]
+# mon_plot <- getplot(mon)
+# mon <- str_replace_all(str_replace_all(mon, '[()]', ''), ' ', '_')
+# png(paste0("polarplots/normal/", mon, ".png"), width=20, height=15, units="cm", res=800, bg="transparent")
+# mon_plot
+# dev.off()
+# 
+# 
+# mon <- norm_mon[6]
+# mon_plot <- getplot(mon)
+# mon <- str_replace_all(str_replace_all(mon, '[()]', ''), ' ', '_')
+# png(paste0("polarplots/normal/", mon, ".png"), width=20, height=15, units="cm", res=800, bg="transparent")
+# mon_plot
+# dev.off()
+# 
+# mon <- norm_mon[7]
+# mon_plot <- getplot(mon)
+# mon <- str_replace_all(str_replace_all(mon, '[()]', ''), ' ', '_')
+# png(paste0("polarplots/normal/", mon, ".png"), width=20, height=15, units="cm", res=800, bg="transparent")
+# mon_plot
+# dev.off()
+# 
+# mon <- norm_mon[8]
+# mon_plot <- getplot(mon)
+# mon <- str_replace_all(str_replace_all(mon, '[()]', ''), ' ', '_')
+# png(paste0("polarplots/normal/", mon, ".png"), width=20, height=15, units="cm", res=800, bg="transparent")
+# mon_plot
+# dev.off()
+# 
+# mon <- norm_mon[9]
+# mon_plot <- getplot(mon)
+# mon <- str_replace_all(str_replace_all(mon, '[()]', ''), ' ', '_')
+# png(paste0("polarplots/normal/", mon, ".png"), width=20, height=15, units="cm", res=800, bg="transparent")
+# mon_plot
+# dev.off()
+# 
+# mon <- norm_mon[10]
+# mon_plot <- getplot(mon)
+# mon <- str_replace_all(str_replace_all(mon, '[()]', ''), ' ', '_')
+# png(paste0("polarplots/normal/", mon, ".png"), width=20, height=15, units="cm", res=800, bg="transparent")
+# mon_plot
+# dev.off()
+# 
+# mon <- norm_mon[11]
+# mon_plot <- getplot(mon)
+# mon <- str_replace_all(str_replace_all(mon, '[()]', ''), ' ', '_')
+# png(paste0("polarplots/normal/", mon, ".png"), width=20, height=15, units="cm", res=800, bg="transparent")
+# mon_plot
+# dev.off()
+# 
+# mon <- norm_mon[12]
+# mon_plot <- getplot(mon)
+# mon <- str_replace_all(str_replace_all(mon, '[()]', ''), ' ', '_')
+# png(paste0("polarplots/normal/", mon, ".png"), width=20, height=15, units="cm", res=800, bg="transparent")
+# mon_plot
+# dev.off()
+# 
+# mon <- norm_mon[13]
+# mon_plot <- getplot(mon)
+# mon <- str_replace_all(str_replace_all(mon, '[()]', ''), ' ', '_')
+# png(paste0("polarplots/normal/", mon, ".png"), width=20, height=15, units="cm", res=800, bg="transparent")
+# mon_plot
+# dev.off()
+# 
+# 
+# parOrig <- par()
+# par(parOrig)
+# plot (1:3)
 ```
 
 # Visualize Odor Complaint data
