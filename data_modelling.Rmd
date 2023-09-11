@@ -26,6 +26,7 @@ library(rgl)
 library(sf)
 library(evgam)
 library(ggpubr)
+library(ggpmisc)
 select <- dplyr::select
 ```
 
@@ -1295,10 +1296,12 @@ test_rmse <- RMSE(fit.xgb_da$pred$pred, fit.xgb_da$pred$obs)
 xgb_sincefeb2022_obs_vs_pred_plot <- ggplot(tibble(obs = fit.xgb_da$pred$obs, pred = fit.xgb_da$pred$pred),
                              aes(x = pred, y = obs)) +
                         geom_point() +
-                        geom_abline(intercept = 0, slope = 1, color = 'red') +
-                        geom_smooth(method = 'lm', formula = y ~ x, geom = 'smooth') +
+                        # geom_abline(intercept = 0, slope = 1, color = 'red') +
+                        # geom_smooth(method = 'lm', formula = y ~ x, geom = 'smooth') +
                         labs(y = 'Observed', x = 'Predicted', 
                              title = 'Observed vs Predicted for Since 2022 XGBoost') +
+                        stat_poly_line() +
+                        stat_poly_eq(use_label(c("eq", "R2", "n"))) +
                         theme_bw()
 ```
 
@@ -1630,10 +1633,12 @@ test_rmse <- RMSE(fit.xgb_da_dis$pred$pred, fit.xgb_da_dis$pred$obs)
 xgb_disaster_obs_vs_pred_plot <- ggplot(tibble(obs = fit.xgb_da_dis$pred$obs, pred = fit.xgb_da_dis$pred$pred),
                              aes(x = pred, y = obs)) +
                         geom_point() +
-                        geom_abline(intercept = 0, slope = 1, color = 'red') +
-                        geom_smooth(method = 'lm', formula = y ~ x, geom = 'smooth') +
+                        # geom_abline(intercept = 0, slope = 1, color = 'red') +
+                        # geom_smooth(method = 'lm', formula = y ~ x, geom = 'smooth') +
                         labs(y = 'Observed', x = 'Predicted', 
                              title = 'Observed vs Predicted for Disaster Only XGBoost') +
+                        stat_poly_line() +
+                        stat_poly_eq(use_label(c("eq", "R2", "n"))) +
                         theme_bw()
 
 xgb_disaster_obs_vs_pred_plot_zoom <- ggplot(tibble(obs = fit.xgb_da_dis$pred$obs, pred = fit.xgb_da_dis$pred$pred),
@@ -1875,22 +1880,15 @@ xgb_excl_dis_obs_vs_pred_plot <- ggplot(tibble(obs = fit.xgb_da_excl_dis$pred$ob
                                                pred = fit.xgb_da_excl_dis$pred$pred),
                              aes(x = pred, y = obs)) +
                         geom_point() +
-                        geom_abline(intercept = 0, slope = 1, color = 'red') +
-                        geom_smooth(method = 'lm', formula = y ~ x, geom = 'smooth') +
+                        # geom_abline(intercept = 0, slope = 1, color = 'red') +
+                        # geom_smooth(method = 'lm', formula = y ~ x, geom = 'smooth') +
                         labs(y = 'Observed', x = 'Predicted', 
                              title = 'Observed vs Predicted for exclude disaster XGBoost') +
+                        stat_poly_line() +
+                        stat_poly_eq(use_label(c("eq", "R2", "n"))) +
                         theme_bw()
 
-xgb_excl_dis_obs_vs_pred_plot_zoom <- ggplot(tibble(obs = fit.xgb_da_excl_dis$pred$obs, 
-                                                    pred = fit.xgb_da_excl_dis$pred$pred),
-                             aes(x = pred, y = obs)) +
-                        geom_point() +
-                        geom_abline(intercept = 0, slope = 1, color = 'red') +
-                        geom_smooth(method = 'lm', formula = y ~ x, geom = 'smooth') +
-                        labs(y = 'Observed', x = 'Predicted', 
-                             title = 'Zoomed In') +
-                        coord_cartesian(xlim = c(0, 30), ylim = c(0, 30)) +
-                        theme_bw()
+xgb_excl_dis_obs_vs_pred_plot
 ```
 
 ```{r}
@@ -2013,10 +2011,12 @@ xgb_full_dis_ind_obs_vs_pred_plot <- ggplot(tibble(obs = fit.xgb_da_full_dis_ind
                                                    pred = fit.xgb_da_full_dis_ind$pred$pred),
                              aes(x = pred, y = obs)) +
                         geom_point() +
-                        geom_abline(intercept = 0, slope = 1, color = 'red') +
-                        geom_smooth(method = 'lm', formula = y ~ x, geom = 'smooth') +
+                        # geom_abline(intercept = 0, slope = 1, color = 'red') +
+                        # geom_smooth(method = 'lm', formula = y ~ x, geom = 'smooth') +
                         labs(y = 'Observed', x = 'Predicted', 
                              title = 'Observed vs Predicted for everything with disaster indicator XGBoost') +
+                        stat_poly_line() +
+                        stat_poly_eq(use_label(c("eq", "R2", "n"))) +
                         theme_bw()
 
 xgb_full_dis_ind_obs_vs_pred_plot_zoom <- ggplot(tibble(obs = fit.xgb_da_full_dis_ind$pred$obs, 
@@ -2346,14 +2346,15 @@ xgb_result
 ggarrange(xgb_sincefeb2022_obs_vs_pred_plot, 
           ggarrange(xgb_disaster_obs_vs_pred_plot, xgb_disaster_obs_vs_pred_plot_zoom,  
                     ncol = 2, labels = c("2", "3")),
-          ggarrange(xgb_excl_dis_obs_vs_pred_plot, xgb_excl_dis_vs_pred_plot_zoom,  
-                    ncol = 2, labels = c("2", "3")),
-          ggarrange(xgb_full_dis_ind_obs_vs_pred_plot, xgb_ull_dis_ind_obs_vs_pred_plot_zoom,  
-                    ncol = 2, labels = c("2", "3")),
           ggarrange(xgb_everything_obs_vs_pred_plot, xgb_everything_obs_vs_pred_plot_zoom, 
                     ncol = 2, labels = c("4", "5")), 
                     labels = c("1"),
                     nrow = 3)
+ggarrange(xgb_excl_dis_obs_vs_pred_plot,
+          ggarrange(xgb_full_dis_ind_obs_vs_pred_plot, xgb_full_dis_ind_obs_vs_pred_plot_zoom,  
+                    ncol = 2, labels = c("3", "4")), 
+                    labels = c("1"),
+                    nrow = 2)
 ```
 
 ```{r}
