@@ -159,7 +159,7 @@ h2s_da_model_f <- gam(H2S_daily_avg~s(as.numeric(month),bs='cc') + year + as.cha
                          wd_avg + ws_avg + daily_downwind_ref + capacity +
                           I(1/dist_wrp^2) +
                          s(I(mon_utm_x/10^3), I(mon_utm_y/10^3), bs='tp', k = 10) + 
-                        te(I(mon_utm_x/10^3), I(mon_utm_y/10^3),as.numeric(day),
+                        te(I(mon_utm_x/10^3), I(mon_utm_y/10^3), as.numeric(day),
                            k=c(10,10),d=c(2,1),bs=c('tp','cc')) +
                          monthly_oil_1km + monthly_gas_1km + active_1km + 
                         daily_downwind_wrp + elevation + EVI + num_odor_complaints +
@@ -168,8 +168,8 @@ h2s_da_model_f <- gam(H2S_daily_avg~s(as.numeric(month),bs='cc') + year + as.cha
 summary(h2s_da_model_f)
 plot(h2s_da_model_f)
 
-f <- getViz(h2s_da_model_f)
-plot(sm(f, 2)) + l_fitRaster() + l_fitContour() + l_points()
+# f <- getViz(h2s_da_model_f)
+# plot(sm(f, 2)) + l_fitRaster() + l_fitContour() + l_points()
 
 # plotRGL(sm(d, 3), fix = c(`as.numeric(day)` = 0), residuals = F)
 # 
@@ -360,8 +360,8 @@ result <- rbind(result, tibble(Model = 'Since Feb 2022',
 f2_obs_vs_pred_plot <- ggplot(tibble(obs = test %>% pull(H2S_daily_avg), pred = predictions),
                              aes(x = pred, y = obs)) +
                         geom_point() +
-                        geom_abline(intercept = 0, slope = 1, color = 'red') +
-                        geom_smooth(method = 'lm', formula = y ~ x, geom = 'smooth') +
+                        stat_poly_line() +
+                        stat_poly_eq(use_label(c("eq", "R2", "n"))) +
                         labs(y = 'Observed', x = 'Predicted', 
                              title = 'Observed vs Predicted for Since 2022 GAM') +
                         theme_bw()
@@ -406,8 +406,8 @@ result <- rbind(result, tibble(Model = 'Disaster Only',
 f3_obs_vs_pred_plot <- ggplot(tibble(obs = test %>% pull(H2S_daily_avg), pred = predictions),
                              aes(x = pred, y = obs)) +
                         geom_point() +
-                        geom_abline(intercept = 0, slope = 1, color = 'red') +
-                        geom_smooth(method = 'lm', formula = y ~ x, geom = 'smooth') +
+                        stat_poly_line() +
+                        stat_poly_eq(use_label(c("eq", "R2", "n"))) +
                         labs(y = 'Observed', x = 'Predicted', 
                              title = 'Observed vs Predicted for Disaster Only GAM') +
                         theme_bw()
@@ -520,8 +520,8 @@ result <- rbind(result, tibble(Model = 'Everything w.o Disaster Indicator',
 f6_obs_vs_pred_plot <- ggplot(tibble(obs = test %>% pull(H2S_daily_avg), pred = predictions),
                              aes(x = pred, y = obs)) +
                         geom_point() +
-                        geom_abline(intercept = 0, slope = 1, color = 'red') +
-                        geom_smooth(method = 'lm', formula = y ~ x, geom = 'smooth') +
+                        stat_poly_line() +
+                        stat_poly_eq(use_label(c("eq", "R2", "n"))) +
                         labs(y = 'Observed', x = 'Predicted', 
                              title = 'Everything w.o Disaster Indicator Gam') +
                         theme_bw()
@@ -529,8 +529,8 @@ f6_obs_vs_pred_plot <- ggplot(tibble(obs = test %>% pull(H2S_daily_avg), pred = 
 f6_obs_vs_pred_plot_zoom <- ggplot(tibble(obs = test %>% pull(H2S_daily_avg), pred = predictions),
                              aes(x = pred, y = obs)) +
                         geom_point() +
-                        geom_abline(intercept = 0, slope = 1, color = 'red') +
-                        geom_smooth(method = 'lm', formula = y ~ x) +
+                        stat_poly_line() +
+                        stat_poly_eq(use_label(c("eq", "R2", "n"))) +
                         labs(y = 'Observed', x = 'Predicted', 
                              title = 'Zoomed In') +
                         coord_cartesian(xlim = c(NA, 4), ylim = c(NA, 4)) +
@@ -737,7 +737,7 @@ for (i in 1:length(monitors)) {
                             k = c(10,10), d = c(2,1), bs = c('tp','cc')) +
                          monthly_oil_1km + monthly_gas_1km + active_1km + 
                          daily_downwind_wrp + elevation + EVI + num_odor_complaints +
-                         disaster + capacity + dist_dc + avg_temp + avg_hum + precip, 
+                         disaster + capacity + dist_dc + avg_temp + avg_hum + precip + disaster, 
                         data = train)
   
   predictions <- predict(h2s_da_model_f5b, newdata = test)
@@ -817,7 +817,8 @@ random_seeds <- floor(runif(5, min=0, max=1)*100)
 ```{r}
 result_10cv <- tibble(Model = character(),
                  '10CV AVG Train R-Sq' = numeric(),
-                 '10CV AVG Test R-Sq' = numeric())
+                 '10CV AVG Test R-Sq' = numeric(),
+                 'Test RMSE' = numeric())
 
 validation_result_10cv <- tibble(Model = character(),
                             'Coef' = numeric(),
@@ -863,13 +864,14 @@ for (fold in seq(1, 10)) {
 
 result_10cv <- rbind(result_10cv, tibble(Model = 'Since Feb 2022',
                                '10CV AVG Train R-Sq' = mean(adj_r2_sincefeb2022),
-                               '10CV AVG Test R-Sq' = mean(adj_r2_test_sincefeb2022)))
+                               '10CV AVG Test R-Sq' = mean(adj_r2_test_sincefeb2022),
+                               'Test RMSE' = RMSE(pred_10cv_sincefeb2022, obs_10cv_sincefeb2022)))
 
 f2_10cv_obs_vs_pred_plot <- ggplot(tibble(obs = obs_10cv_sincefeb2022, pred = pred_10cv_sincefeb2022),
                              aes(x = pred, y = obs)) +
                         geom_point() +
-                        geom_abline(intercept = 0, slope = 1, color = 'red') +
-                        geom_smooth(method = 'lm', formula = y ~ x, geom = 'smooth') +
+                        stat_poly_line() +
+                        stat_poly_eq(use_label(c("eq", "R2", "n"))) +
                         labs(y = 'Observed', x = 'Predicted', 
                              title = 'Observed vs Predicted for Since 2022 GAM 10CV') +
                         theme_bw()
@@ -921,13 +923,14 @@ for (fold in seq(1, 10)) {
 
 result_10cv <- rbind(result_10cv, tibble(Model = 'Disaster Only',
                                '10CV AVG Train R-Sq' = mean(adj_r2_disaster),
-                               '10CV AVG Test R-Sq' = mean(adj_r2_test_disaster)))
+                               '10CV AVG Test R-Sq' = mean(adj_r2_test_disaster),
+                               'Test RMSE' = RMSE(pred_10cv_disaster, obs_10cv_disaster)))
 
 f3_10cv_obs_vs_pred_plot <- ggplot(tibble(obs = obs_10cv_disaster, pred = pred_10cv_disaster),
                              aes(x = pred, y = obs)) +
                         geom_point() +
-                        geom_abline(intercept = 0, slope = 1, color = 'red') +
-                        geom_smooth(method = 'lm', formula = y ~ x, geom = 'smooth') +
+                        stat_poly_line() +
+                        stat_poly_eq(use_label(c("eq", "R2", "n"))) +
                         labs(y = 'Observed', x = 'Predicted', 
                              title = 'Observed vs Predicted for Disaster Only GAM 10CV') +
                         theme_bw()
@@ -979,13 +982,24 @@ for (fold in seq(1, 10)) {
 
 result_10cv <- rbind(result_10cv, tibble(Model = 'Exclude Disaster',
                                '10CV AVG Train R-Sq' = mean(adj_r2_excl_disaster),
-                               '10CV AVG Test R-Sq' = mean(adj_r2_test_excl_disaster)))
+                               '10CV AVG Test R-Sq' = mean(adj_r2_test_excl_disaster),
+                               'Test RMSE' = RMSE(pred_10cv_excl_disaster, obs_10cv_excl_disaster)))
+
+f4_10cv_obs_vs_pred_plot <- ggplot(tibble(obs = obs_10cv_excl_disaster, pred = pred_10cv_excl_disaster),
+                             aes(x = pred, y = obs)) +
+                        geom_point() +
+                        stat_poly_line() +
+                        stat_poly_eq(use_label(c("eq", "R2", "n"))) +
+                        labs(y = 'Observed', x = 'Predicted', 
+                             title = 'Exclude Disaster GAM CV') +
+                        theme_bw()
 
 # Model 4: Everything with Disaster Indicator
 obs_10cv_disaster_ind <- c()
 pred_10cv_disaster_ind <- c()
 adj_r2_disaster_ind <- c()
 adj_r2_test_disaster_ind <- c()
+disaster <- c()
 
 disaster_ind <- daily_full %>% 
   select(all_of(predictors)) %>% 
@@ -993,11 +1007,12 @@ disaster_ind <- daily_full %>%
   filter(complete.cases(.)) 
 
 set.seed(random_seeds[4])
-folds_1 <- createFolds(seq(1, nrow(disaster_ind %>% filter(disaster==1))), k = 10)
-folds_0 <- createFolds(seq(1, nrow(disaster_ind %>% filter(disaster==0))), k = 10)
+folds_1 <- createFolds(which(disaster_ind$disaster == 1), k = 10)
+folds_0 <- createFolds(which(disaster_ind$disaster == 0), k = 10)
 
 for (fold in seq(1, 10)) {
-  test <- rbind(disaster_ind[folds_1[[fold]], ], disaster_ind[folds_0[[fold]], ])
+  test <- rbind(disaster_ind[which(disaster_ind$disaster == 1)[folds_1[[fold]]], ], 
+                disaster_ind[which(disaster_ind$disaster == 0)[folds_0[[fold]]], ])
   
   train <- anti_join(disaster_ind, test, by = join_by(dist_dc, day))
   
@@ -1008,7 +1023,7 @@ for (fold in seq(1, 10)) {
                             k = c(10,10), d = c(2,1), bs = c('tp','cc')) +
                          monthly_oil_1km + monthly_gas_1km + active_1km + 
                          daily_downwind_wrp + elevation + EVI + num_odor_complaints +
-                         capacity + dist_dc + avg_temp + avg_hum + precip, 
+                         capacity + dist_dc + avg_temp + avg_hum + precip + disaster, 
                         data = train)
   
   predictions <- predict(h2s_da_model_10cv, newdata = test)
@@ -1019,11 +1034,36 @@ for (fold in seq(1, 10)) {
   pred_10cv_disaster_ind <- append(pred_10cv_disaster_ind, predictions)
   adj_r2_disaster_ind <- append(adj_r2_disaster_ind, summary(h2s_da_model_10cv)$r.sq)
   adj_r2_test_disaster_ind <- append(adj_r2_disaster_ind, adj_r2_test)
+  disaster <- append(disaster, test$disaster)
 }
 
 result_10cv <- rbind(result_10cv, tibble(Model = 'Everything w. Disaster Indicator',
                                '10CV AVG Train R-Sq' = mean(adj_r2_disaster_ind),
-                               '10CV AVG Test R-Sq' = mean(adj_r2_test_disaster_ind)))
+                               '10CV AVG Test R-Sq' = mean(adj_r2_test_disaster_ind),
+                               'Test RMSE' = RMSE(pred_10cv_disaster_ind, obs_10cv_disaster_ind)))
+
+f5_10cv_obs_vs_pred_plot <- ggplot(tibble(obs = obs_10cv_disaster_ind, 
+                                          pred = pred_10cv_disaster_ind,
+                                          disaster = disaster),
+                             aes(x = pred, y = obs)) +
+                        geom_point(aes(col = factor(disaster)), show.legend = FALSE) +
+                        stat_poly_line() +
+                        stat_poly_eq(use_label(c("eq", "R2", "n"))) +
+                        labs(y = 'Observed', x = 'Predicted', 
+                             title = 'Everything w. Disaster Indicator GAM CV') +
+                        theme_bw()
+
+f5_10cv_obs_vs_pred_plot_zoom <- ggplot(tibble(obs = obs_10cv_disaster_ind, 
+                                               pred = pred_10cv_disaster_ind,
+                                               disaster = disaster),
+                                        aes(x = pred, y = obs)) +
+                        geom_point(aes(col = factor(disaster)), show.legend = FALSE) +
+                        stat_poly_line() +
+                        stat_poly_eq(use_label(c("eq", "R2", "n"))) +
+                        labs(y = 'Observed', x = 'Predicted', 
+                             title = 'Everything w. Disaster Indicator GAM CV') +
+                        coord_cartesian(xlim = c(NA, 15), ylim = c(NA, 50)) +
+                        theme_bw()
 
 
 # Model 5: Everything
@@ -1031,9 +1071,11 @@ obs_10cv_everything <- c()
 pred_10cv_everything <- c()
 adj_r2_everything <- c()
 adj_r2_test_everything <- c()
+disaster <- c()
 
 everything <- daily_full %>% 
   select(all_of(predictors)) %>% 
+  mutate(disaster = if_else(year == '2021' & month %in% c('10', '11', '12'), 1, 0)) %>% 
   filter(complete.cases(.))
 
 set.seed(random_seeds[5])
@@ -1061,26 +1103,32 @@ for (fold in seq(1, 10)) {
   pred_10cv_everything <- append(pred_10cv_everything, predictions)
   adj_r2_everything <- append(adj_r2_everything, summary(h2s_da_model_10cv)$r.sq)
   adj_r2_test_everything <- append(adj_r2_everything, adj_r2_test)
+  disaster <- append(disaster, test$disaster)
 }
 
 result_10cv <- rbind(result_10cv, tibble(Model = 'Everything w.o Disaster Indicator',
                                '10CV AVG Train R-Sq' = mean(adj_r2_everything),
-                               '10CV AVG Test R-Sq' = mean(adj_r2_test_everything)))
+                               '10CV AVG Test R-Sq' = mean(adj_r2_test_everything),
+                               'Test RMSE' = RMSE(pred_10cv_everything, obs_10cv_everything)))
 
-f6_10cv_obs_vs_pred_plot <- ggplot(tibble(obs = obs_10cv_everything, pred = pred_10cv_everything),
+f6_10cv_obs_vs_pred_plot <- ggplot(tibble(obs = obs_10cv_everything, 
+                                          pred = pred_10cv_everything,
+                                          disaster = disaster),
                              aes(x = pred, y = obs)) +
-                        geom_point() +
-                        geom_abline(intercept = 0, slope = 1, color = 'red') +
-                        geom_smooth(method = 'lm', formula = y ~ x, geom = 'smooth') +
+                        geom_point(aes(col = factor(disaster)), show.legend = FALSE) +
+                        stat_poly_line() +
+                        stat_poly_eq(use_label(c("eq", "R2", "n"))) +
                         labs(y = 'Observed', x = 'Predicted', 
                              title = 'Everything w.o Disaster Indicator GAM CV') +
                         theme_bw()
 
-f6_10cv_obs_vs_pred_plot_zoom <- ggplot(tibble(obs = obs_10cv_everything, pred = pred_10cv_everything),
+f6_10cv_obs_vs_pred_plot_zoom <- ggplot(tibble(obs = obs_10cv_everything,
+                                               pred = pred_10cv_everything,
+                                               disaster = disaster),
                              aes(x = pred, y = obs)) +
-                        geom_point() +
-                        geom_abline(intercept = 0, slope = 1, color = 'red') +
-                        geom_smooth(method = 'lm', formula = y ~ x) +
+                        geom_point(aes(col = factor(disaster)), show.legend = FALSE) +
+                        stat_poly_line() +
+                        stat_poly_eq(use_label(c("eq", "R2", "n"))) +
                         labs(y = 'Observed', x = 'Predicted', 
                              title = 'Zoomed In') +
                         coord_cartesian(xlim = c(NA, 15), ylim = c(NA, 50)) +
@@ -1093,7 +1141,6 @@ validation_result_10cv <- rbind(validation_result_10cv,
                                   'R-Sq' = summary(lm(obs_10cv_everything ~
                                                         pred_10cv_everything))$r.squared))
 ```
- 
 
 # GAM result
 ```{r}
@@ -1145,8 +1192,10 @@ knitr::kable(validation_result_10cv, digits = 3)
 ### GridSearch + 10-fold CV
 ```{r echo = T, results = 'hide'}
 validation_result <- tibble(Model = character(),
-                                 'Coef' = character(),
-                                 'R-Sq' = numeric())
+                            'Coef' = character(),
+                            'R-Sq' = numeric(),
+                            'Disaster RMSE' = numeric(),
+                            'Normal RMSE' = numeric())
 
 xgb_result <- tibble(Model = character(),
                  '10CV Train R-Sq' = numeric(),
@@ -1296,8 +1345,6 @@ test_rmse <- RMSE(fit.xgb_da$pred$pred, fit.xgb_da$pred$obs)
 xgb_sincefeb2022_obs_vs_pred_plot <- ggplot(tibble(obs = fit.xgb_da$pred$obs, pred = fit.xgb_da$pred$pred),
                              aes(x = pred, y = obs)) +
                         geom_point() +
-                        # geom_abline(intercept = 0, slope = 1, color = 'red') +
-                        # geom_smooth(method = 'lm', formula = y ~ x, geom = 'smooth') +
                         labs(y = 'Observed', x = 'Predicted', 
                              title = 'Observed vs Predicted for Since 2022 XGBoost') +
                         stat_poly_line() +
@@ -1311,7 +1358,9 @@ validation_result <- rbind(validation_result,
                                   'Coef' = summary(lm(fit.xgb_da$pred$obs ~
                                                         fit.xgb_da$pred$pred))$coefficients[2, 1], 
                                   'R-Sq' = summary(lm(fit.xgb_da$pred$obs ~
-                                                        fit.xgb_da$pred$pred))$r.squared))
+                                                        fit.xgb_da$pred$pred))$r.squared,
+                                  'Disaster RMSE' = NA,
+                                  'Normal RMSE' = NA))
 ```
 
 ### SHAP
@@ -1406,8 +1455,8 @@ xgb_result <- rbind(xgb_result,
 xgb_sincefeb2022_obs_vs_pred_plot_8020 <- ggplot(tibble(obs = test %>% pull(H2S_daily_avg), pred = predictions),
                              aes(x = pred, y = obs)) +
                         geom_point() +
-                        geom_abline(intercept = 0, slope = 1, color = 'red') +
-                        geom_smooth(method = 'lm', formula = y ~ x, geom = 'smooth') +
+                        stat_poly_line() +
+                        stat_poly_eq(use_label(c("eq", "R2", "n"))) +
                         labs(y = 'Observed', x = 'Predicted', 
                              title = 'Observed vs Predicted for Since 2022 XGBoost') +
                         theme_bw()
@@ -1658,7 +1707,9 @@ validation_result <- rbind(validation_result,
                                   'Coef' = summary(lm(fit.xgb_da_dis$pred$obs ~
                                                         fit.xgb_da_dis$pred$pred))$coefficients[2, 1], 
                                   'R-Sq' = summary(lm(fit.xgb_da_dis$pred$obs ~
-                                                        fit.xgb_da_dis$pred$pred))$r.squared))
+                                                        fit.xgb_da_dis$pred$pred))$r.squared,
+                                  'Disaster RMSE' = NA,
+                                  'Normal RMSE' = NA))
 ```
 
 ### SHAP for XGBoost above (Caret)
@@ -1750,8 +1801,8 @@ xgb_result <- rbind(xgb_result,
 xgb_dis_obs_vs_pred_plot_8020 <- ggplot(tibble(obs = test %>% pull(H2S_daily_avg), pred = predictions),
                              aes(x = pred, y = obs)) +
                         geom_point() +
-                        geom_abline(intercept = 0, slope = 1, color = 'red') +
-                        geom_smooth(method = 'lm', formula = y ~ x) +
+                        stat_poly_line() +
+                        stat_poly_eq(use_label(c("eq", "R2", "n"))) +
                         labs(y = 'Observed', x = 'Predicted', 
                              title = 'Disaster Only XGBoost') +
                         theme_bw()
@@ -1759,8 +1810,8 @@ xgb_dis_obs_vs_pred_plot_8020 <- ggplot(tibble(obs = test %>% pull(H2S_daily_avg
 xgb_dis_obs_vs_pred_plot_zoom_8020 <- ggplot(tibble(obs = test %>% pull(H2S_daily_avg), pred = predictions),
                              aes(x = pred, y = obs)) +
                         geom_point() +
-                        geom_abline(intercept = 0, slope = 1, color = 'red') +
-                        geom_smooth(method = 'lm', formula = y ~ x) +
+                        stat_poly_line() +
+                        stat_poly_eq(use_label(c("eq", "R2", "n"))) +
                         labs(y = 'Observed', x = 'Predicted', 
                              title = 'Zoomed In') +
                         coord_cartesian(xlim = c(0, 10), ylim = c(0, 10)) +
@@ -1880,8 +1931,6 @@ xgb_excl_dis_obs_vs_pred_plot <- ggplot(tibble(obs = fit.xgb_da_excl_dis$pred$ob
                                                pred = fit.xgb_da_excl_dis$pred$pred),
                              aes(x = pred, y = obs)) +
                         geom_point() +
-                        # geom_abline(intercept = 0, slope = 1, color = 'red') +
-                        # geom_smooth(method = 'lm', formula = y ~ x, geom = 'smooth') +
                         labs(y = 'Observed', x = 'Predicted', 
                              title = 'Observed vs Predicted for exclude disaster XGBoost') +
                         stat_poly_line() +
@@ -1897,7 +1946,9 @@ validation_result <- rbind(validation_result,
                                   'Coef' = summary(lm(fit.xgb_da_excl_dis$pred$obs ~
                                                         fit.xgb_da_excl_dis$pred$pred))$coefficients[2, 1], 
                                   'R-Sq' = summary(lm(fit.xgb_da_excl_dis$pred$obs ~
-                                                        fit.xgb_da_excl_dis$pred$pred))$r.squared))
+                                                        fit.xgb_da_excl_dis$pred$pred))$r.squared,
+                                  'Disaster RMSE' = NA,
+                                  'Normal RMSE' = NA))
 ```
 
 ```{r}
@@ -2001,30 +2052,32 @@ imp %>%
 #   pred_xgb_full_dis_ind <- append(pred_xgb_full_dis_ind, test_pred)
 #   r2_test_xgb_full_dis_ind <- append(r2_test_xgb_full_dis_ind, test_r2)
 # }
-
+test_result_data <- tibble(obs = fit.xgb_da_full_dis_ind$pred$obs, 
+                           pred = fit.xgb_da_full_dis_ind$pred$pred,
+                           disaster = train$disaster[fit.xgb_da_full_dis_ind$pred$rowIndex])
 test_r2 <- R2(fit.xgb_da_full_dis_ind$pred$pred, fit.xgb_da_full_dis_ind$pred$obs)
 test_rmse <- RMSE(fit.xgb_da_full_dis_ind$pred$pred, fit.xgb_da_full_dis_ind$pred$obs)
 ```
 
 ```{r}
-xgb_full_dis_ind_obs_vs_pred_plot <- ggplot(tibble(obs = fit.xgb_da_full_dis_ind$pred$obs, 
-                                                   pred = fit.xgb_da_full_dis_ind$pred$pred),
+xgb_full_dis_ind_obs_vs_pred_plot <- ggplot(tibble(obs = test_result_data$obs, 
+                                                   pred = test_result_data$pred,
+                                            disaster = test_result_data$disaster),
                              aes(x = pred, y = obs)) +
-                        geom_point() +
-                        # geom_abline(intercept = 0, slope = 1, color = 'red') +
-                        # geom_smooth(method = 'lm', formula = y ~ x, geom = 'smooth') +
+                        geom_point(aes(col = factor(disaster)), show.legend = FALSE) +
                         labs(y = 'Observed', x = 'Predicted', 
                              title = 'Observed vs Predicted for everything with disaster indicator XGBoost') +
                         stat_poly_line() +
                         stat_poly_eq(use_label(c("eq", "R2", "n"))) +
                         theme_bw()
 
-xgb_full_dis_ind_obs_vs_pred_plot_zoom <- ggplot(tibble(obs = fit.xgb_da_full_dis_ind$pred$obs, 
-                                                        pred = fit.xgb_da_full_dis_ind$pred$pred),
+xgb_full_dis_ind_obs_vs_pred_plot_zoom <- ggplot(tibble(obs = test_result_data$obs, 
+                                                   pred = test_result_data$pred,
+                                            disaster = test_result_data$disaster),
                              aes(x = pred, y = obs)) +
-                        geom_point() +
-                        geom_abline(intercept = 0, slope = 1, color = 'red') +
-                        geom_smooth(method = 'lm', formula = y ~ x, geom = 'smooth') +
+                        geom_point(aes(col = factor(disaster)), show.legend = FALSE) +
+                        stat_poly_line() +
+                        stat_poly_eq(use_label(c("eq", "R2", "n"))) +
                         labs(y = 'Observed', x = 'Predicted', 
                              title = 'Zoomed In') +
                         coord_cartesian(xlim = c(0, 30), ylim = c(0, 30)) +
@@ -2037,7 +2090,11 @@ validation_result <- rbind(validation_result,
                                   'Coef' = summary(lm(fit.xgb_da_full_dis_ind$pred$obs ~
                                                         fit.xgb_da_full_dis_ind$pred$pred))$coefficients[2, 1], 
                                   'R-Sq' = summary(lm(fit.xgb_da_full_dis_ind$pred$obs ~
-                                                        fit.xgb_da_full_dis_ind$pred$pred))$r.squared))
+                                                        fit.xgb_da_full_dis_ind$pred$pred))$r.squared,
+                                  'Disaster RMSE' = RMSE(test_result_data$pred[which(test_result_data$disaster == 1)],
+                                                         test_result_data$obs[which(test_result_data$disaster == 1)]),
+                                  'Normal RMSE' = RMSE(test_result_data$pred[which(test_result_data$disaster == 0)],
+                                                         test_result_data$obs[which(test_result_data$disaster == 0)])))
 ```
 
 ```{r}
@@ -2141,28 +2198,31 @@ imp %>%
 #   pred_xgb_everything <- append(pred_xgb_everything, test_pred)
 #   r2_test_xgb_everything <- append(r2_test_xgb_everything, test_r2)
 # }
-
-test_r2 <- R2(fit.xgb_da_full$pred$pred, fit.xgb_da_full$pred$obs)
-test_rmse <- RMSE(fit.xgb_da_full$pred$pred, fit.xgb_da_full$pred$obs)
+test_result_data <- tibble(obs = fit.xgb_da_full$pred$obs, 
+                           pred = fit.xgb_da_full$pred$pred,
+                           disaster = if_else(train[fit.xgb_da_full$pred$rowIndex, ]$year_2021 == 1 &
+                                                (train[fit.xgb_da_full$pred$rowIndex, ]$month_10 == 1 |
+                                                 train[fit.xgb_da_full$pred$rowIndex, ]$month_11 == 1 |
+                                                 train[fit.xgb_da_full$pred$rowIndex, ]$month_12 == 1), 1, 0))
+test_r2 <- R2(test_result_data$pred, test_result_data$obs)
+test_rmse <- RMSE(test_result_data$pred, test_result_data$obs)
 ```
 
 ```{r}
-xgb_everything_obs_vs_pred_plot <- ggplot(tibble(obs = fit.xgb_da_full$pred$obs, 
-                                                 pred = fit.xgb_da_full$pred$pred),
+xgb_everything_obs_vs_pred_plot <- ggplot(test_result_data,
                              aes(x = pred, y = obs)) +
-                        geom_point() +
-                        geom_abline(intercept = 0, slope = 1, color = 'red') +
-                        geom_smooth(method = 'lm', formula = y ~ x, geom = 'smooth') +
+                        geom_point(aes(col = factor(disaster)), show.legend = FALSE) +
+                        stat_poly_line() +
+                        stat_poly_eq(use_label(c("eq", "R2", "n"))) +
                         labs(y = 'Observed', x = 'Predicted', 
                              title = 'Observed vs Predicted for everything XGBoost') +
                         theme_bw()
 
-xgb_everything_obs_vs_pred_plot_zoom <- ggplot(tibble(obs = fit.xgb_da_full$pred$obs, 
-                                                      pred = fit.xgb_da_full$pred$pred),
+xgb_everything_obs_vs_pred_plot_zoom <- ggplot(test_result_data,
                              aes(x = pred, y = obs)) +
-                        geom_point() +
-                        geom_abline(intercept = 0, slope = 1, color = 'red') +
-                        geom_smooth(method = 'lm', formula = y ~ x, geom = 'smooth') +
+                        geom_point(aes(col = factor(disaster)), show.legend = FALSE) +
+                        stat_poly_line() +
+                        stat_poly_eq(use_label(c("eq", "R2", "n"))) +
                         labs(y = 'Observed', x = 'Predicted', 
                              title = 'Zoomed In') +
                         coord_cartesian(xlim = c(0, 30), ylim = c(0, 30)) +
@@ -2172,10 +2232,14 @@ xgb_everything_obs_vs_pred_plot_zoom <- ggplot(tibble(obs = fit.xgb_da_full$pred
 ```{r}
 validation_result <- rbind(validation_result,  
                            tibble(Model = 'Everything w.o Disaster Indicator',
-                                  'Coef' = summary(lm(fit.xgb_da_full$pred$obs ~
-                                                        fit.xgb_da_full$pred$pred))$coefficients[2, 1], 
-                                  'R-Sq' = summary(lm(fit.xgb_da_full$pred$obs ~
-                                                        fit.xgb_da_full$pred$pred))$r.squared))
+                                  'Coef' = summary(lm(test_result_data$obs ~
+                                                        test_result_data$pred))$coefficients[2, 1], 
+                                  'R-Sq' = summary(lm(test_result_data$obs ~
+                                                        test_result_data$pred))$r.squared,
+                                  'Disaster RMSE' = RMSE(test_result_data$pred[which(test_result_data$disaster == 1)],
+                                                         test_result_data$obs[which(test_result_data$disaster == 1)]),
+                                  'Normal RMSE' = RMSE(test_result_data$pred[which(test_result_data$disaster == 0)],
+                                                         test_result_data$obs[which(test_result_data$disaster == 0)])))
 ```
 
 ### SHAP for XGBoost above (Caret)
@@ -2271,8 +2335,8 @@ xgb_result <- rbind(xgb_result,
 xgb_full_obs_vs_pred_plot_8020 <- ggplot(tibble(obs = test %>% pull(H2S_daily_avg), pred = predictions),
                              aes(x = pred, y = obs)) +
                         geom_point() +
-                        geom_abline(intercept = 0, slope = 1, color = 'red') +
-                        geom_smooth(method = 'lm', formula = y ~ x) +
+                        stat_poly_line() +
+                        stat_poly_eq(use_label(c("eq", "R2", "n"))) +
                         labs(y = 'Observed', x = 'Predicted', 
                              title = 'Everything w.o Disaster Indicator XGBoost') +
                         theme_bw()
@@ -2280,8 +2344,8 @@ xgb_full_obs_vs_pred_plot_8020 <- ggplot(tibble(obs = test %>% pull(H2S_daily_av
 xgb_full_obs_vs_pred_plot_zoom_8020 <- ggplot(tibble(obs = test %>% pull(H2S_daily_avg), pred = predictions),
                              aes(x = pred, y = obs)) +
                         geom_point() +
-                        geom_abline(intercept = 0, slope = 1, color = 'red') +
-                        geom_smooth(method = 'lm', formula = y ~ x) +
+                        stat_poly_line() +
+                        stat_poly_eq(use_label(c("eq", "R2", "n"))) +
                         labs(y = 'Observed', x = 'Predicted', 
                              title = 'Zoomed In') +
                         coord_cartesian(xlim = c(0, 10), ylim = c(0, 10)) +
