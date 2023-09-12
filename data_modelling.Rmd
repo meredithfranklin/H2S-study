@@ -859,7 +859,7 @@ for (fold in seq(1, 10)) {
   obs_10cv_sincefeb2022 <- append(obs_10cv_sincefeb2022, test %>% pull(H2S_daily_avg))
   pred_10cv_sincefeb2022 <- append(pred_10cv_sincefeb2022, predictions)
   adj_r2_sincefeb2022 <- append(adj_r2_sincefeb2022, summary(h2s_da_model_10cv)$r.sq)
-  adj_r2_test_sincefeb2022 <- append(adj_r2_sincefeb2022, adj_r2_test)
+  adj_r2_test_sincefeb2022 <- append(adj_r2_test_sincefeb2022, adj_r2_test)
 }
 
 result_10cv <- rbind(result_10cv, tibble(Model = 'Since Feb 2022',
@@ -977,7 +977,7 @@ for (fold in seq(1, 10)) {
   obs_10cv_excl_disaster <- append(obs_10cv_excl_disaster, test %>% pull(H2S_daily_avg))
   pred_10cv_excl_disaster <- append(pred_10cv_excl_disaster, predictions)
   adj_r2_excl_disaster <- append(adj_r2_excl_disaster, summary(h2s_da_model_10cv)$r.sq)
-  adj_r2_test_excl_disaster <- append(adj_r2_excl_disaster, adj_r2_test)
+  adj_r2_test_excl_disaster <- append(adj_r2_test_excl_disaster, adj_r2_test)
 }
 
 result_10cv <- rbind(result_10cv, tibble(Model = 'Exclude Disaster',
@@ -1033,7 +1033,7 @@ for (fold in seq(1, 10)) {
   obs_10cv_disaster_ind <- append(obs_10cv_disaster_ind, test %>% pull(H2S_daily_avg))
   pred_10cv_disaster_ind <- append(pred_10cv_disaster_ind, predictions)
   adj_r2_disaster_ind <- append(adj_r2_disaster_ind, summary(h2s_da_model_10cv)$r.sq)
-  adj_r2_test_disaster_ind <- append(adj_r2_disaster_ind, adj_r2_test)
+  adj_r2_test_disaster_ind <- append(adj_r2_test_disaster_ind, adj_r2_test)
   disaster <- append(disaster, test$disaster)
 }
 
@@ -1079,10 +1079,13 @@ everything <- daily_full %>%
   filter(complete.cases(.))
 
 set.seed(random_seeds[5])
-folds <- createFolds(seq(1, nrow(everything), k = 10))
+folds_1 <- createFolds(which(everything$disaster == 1), k = 10)
+folds_0 <- createFolds(which(everything$disaster == 0), k = 10)
 
 for (fold in seq(1, 10)) {
-  test <- everything[folds[[fold]], ]
+  test <- rbind(everything[which(everything$disaster == 1)[folds_1[[fold]]], ], 
+                everything[which(everything$disaster == 0)[folds_0[[fold]]], ])
+  
   train <- anti_join(everything, test, by = join_by(dist_dc, day))
   
   h2s_da_model_10cv <- gam(H2S_daily_avg ~ s(as.numeric(month),bs='cc') + year + as.character(weekday) +
@@ -1102,7 +1105,7 @@ for (fold in seq(1, 10)) {
   obs_10cv_everything <- append(obs_10cv_everything, test %>% pull(H2S_daily_avg))
   pred_10cv_everything <- append(pred_10cv_everything, predictions)
   adj_r2_everything <- append(adj_r2_everything, summary(h2s_da_model_10cv)$r.sq)
-  adj_r2_test_everything <- append(adj_r2_everything, adj_r2_test)
+  adj_r2_test_everything <- append(adj_r2_test_everything, adj_r2_test)
   disaster <- append(disaster, test$disaster)
 }
 
