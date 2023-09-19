@@ -3944,7 +3944,7 @@ Torrance
 <pre class="r"><code># Since feb 2022
 h2s_da_model_f &lt;- gam(H2S_daily_avg~s(as.numeric(month),bs=&#39;cc&#39;) + year + as.character(weekday) +
                          wd_avg + ws_avg + daily_downwind_ref + capacity +
-                          I(1/dist_wrp^2) +
+                          I(1/dist_wrp^2) + I(1/MinDist^2) + 
                          s(I(mon_utm_x/10^3), I(mon_utm_y/10^3), bs=&#39;tp&#39;, k = 10) + 
                         te(I(mon_utm_x/10^3), I(mon_utm_y/10^3), as.numeric(day),
                            k=c(10,10),d=c(2,1),bs=c(&#39;tp&#39;,&#39;cc&#39;)) +
@@ -3960,12 +3960,12 @@ summary(h2s_da_model_f)</code></pre>
 ## Formula:
 ## H2S_daily_avg ~ s(as.numeric(month), bs = &quot;cc&quot;) + year + as.character(weekday) + 
 ##     wd_avg + ws_avg + daily_downwind_ref + capacity + I(1/dist_wrp^2) + 
-##     s(I(mon_utm_x/10^3), I(mon_utm_y/10^3), bs = &quot;tp&quot;, k = 10) + 
-##     te(I(mon_utm_x/10^3), I(mon_utm_y/10^3), as.numeric(day), 
-##         k = c(10, 10), d = c(2, 1), bs = c(&quot;tp&quot;, &quot;cc&quot;)) + monthly_oil_1km + 
-##     monthly_gas_1km + active_1km + daily_downwind_wrp + elevation + 
-##     EVI + num_odor_complaints + I(1/dist_dc^2) + avg_temp + avg_hum + 
-##     precip
+##     I(1/MinDist^2) + s(I(mon_utm_x/10^3), I(mon_utm_y/10^3), 
+##     bs = &quot;tp&quot;, k = 10) + te(I(mon_utm_x/10^3), I(mon_utm_y/10^3), 
+##     as.numeric(day), k = c(10, 10), d = c(2, 1), bs = c(&quot;tp&quot;, 
+##         &quot;cc&quot;)) + monthly_oil_1km + monthly_gas_1km + active_1km + 
+##     daily_downwind_wrp + elevation + EVI + num_odor_complaints + 
+##     I(1/dist_dc^2) + avg_temp + avg_hum + precip
 ## 
 ## Parametric coefficients:
 ##                            Estimate Std. Error t value Pr(&gt;|t|)    
@@ -3982,6 +3982,7 @@ summary(h2s_da_model_f)</code></pre>
 ## daily_downwind_ref        1.567e-01  3.302e-02   4.744 2.21e-06 ***
 ## capacity                  1.003e-02  1.427e-03   7.031 2.63e-12 ***
 ## I(1/dist_wrp^2)           2.122e-07  1.133e-07   1.873 0.061128 .  
+## I(1/MinDist^2)           -3.629e-05  4.990e-06  -7.273 4.64e-13 ***
 ## monthly_oil_1km           1.611e-04  4.233e-05   3.805 0.000145 ***
 ## monthly_gas_1km          -1.306e-04  2.429e-04  -0.538 0.590730    
 ## active_1km               -9.257e-03  1.728e-02  -0.536 0.592319    
@@ -4008,7 +4009,7 @@ summary(h2s_da_model_f)</code></pre>
 ## ---
 ## Signif. codes:  0 &#39;***&#39; 0.001 &#39;**&#39; 0.01 &#39;*&#39; 0.05 &#39;.&#39; 0.1 &#39; &#39; 1
 ## 
-## Rank: 114/117
+## Rank: 114/118
 ## R-sq.(adj) =  0.666   Deviance explained =   68%
 ## GCV = 0.12669  Scale est. = 0.12128   n = 2664</code></pre>
 <pre class="r"><code>plot(h2s_da_model_f)</code></pre>
@@ -4066,7 +4067,7 @@ x
 <pre class="r"><code># Disaster only
 h2s_da_model_g &lt;- gam(H2S_daily_avg ~ month + as.character(weekday) +
                          wd_avg + ws_avg + daily_downwind_ref + capacity +
-                          I(1/dist_wrp^2) +
+                          I(1/dist_wrp^2) + I(1/MinDist^2) + 
                          s(I(mon_utm_x/10^3), I(mon_utm_y/10^3), bs=&#39;tp&#39;, k = 10) + 
                         te(I(mon_utm_x/10^3), I(mon_utm_y/10^3),as.numeric(day),
                            k=c(10,10),d=c(2,1),bs=c(&#39;tp&#39;,&#39;cc&#39;)) +
@@ -4081,12 +4082,13 @@ summary(h2s_da_model_g)</code></pre>
 ## 
 ## Formula:
 ## H2S_daily_avg ~ month + as.character(weekday) + wd_avg + ws_avg + 
-##     daily_downwind_ref + capacity + I(1/dist_wrp^2) + s(I(mon_utm_x/10^3), 
-##     I(mon_utm_y/10^3), bs = &quot;tp&quot;, k = 10) + te(I(mon_utm_x/10^3), 
-##     I(mon_utm_y/10^3), as.numeric(day), k = c(10, 10), d = c(2, 
-##         1), bs = c(&quot;tp&quot;, &quot;cc&quot;)) + monthly_oil_1km + monthly_gas_1km + 
-##     active_1km + daily_downwind_wrp + elevation + EVI + num_odor_complaints + 
-##     I(1/dist_dc^2) + avg_temp + avg_hum + precip
+##     daily_downwind_ref + capacity + I(1/dist_wrp^2) + I(1/MinDist^2) + 
+##     s(I(mon_utm_x/10^3), I(mon_utm_y/10^3), bs = &quot;tp&quot;, k = 10) + 
+##     te(I(mon_utm_x/10^3), I(mon_utm_y/10^3), as.numeric(day), 
+##         k = c(10, 10), d = c(2, 1), bs = c(&quot;tp&quot;, &quot;cc&quot;)) + monthly_oil_1km + 
+##     monthly_gas_1km + active_1km + daily_downwind_wrp + elevation + 
+##     EVI + num_odor_complaints + I(1/dist_dc^2) + avg_temp + avg_hum + 
+##     precip
 ## 
 ## Parametric coefficients:
 ##                            Estimate Std. Error t value Pr(&gt;|t|)    
@@ -4104,6 +4106,7 @@ summary(h2s_da_model_g)</code></pre>
 ## daily_downwind_ref       -2.7311456  2.7658732  -0.987  0.32375    
 ## capacity                  0.7818623  0.0804573   9.718  &lt; 2e-16 ***
 ## I(1/dist_wrp^2)          -0.0001603  0.0000167  -9.600  &lt; 2e-16 ***
+## I(1/MinDist^2)           -0.0013532  0.0001722  -7.858 1.37e-14 ***
 ## monthly_oil_1km          -0.0058962  0.0097159  -0.607  0.54413    
 ## monthly_gas_1km           0.0147016  0.0338346   0.435  0.66404    
 ## active_1km               -7.2923513  3.0769295  -2.370  0.01804 *  
@@ -4128,7 +4131,7 @@ summary(h2s_da_model_g)</code></pre>
 ## ---
 ## Signif. codes:  0 &#39;***&#39; 0.001 &#39;**&#39; 0.01 &#39;*&#39; 0.05 &#39;.&#39; 0.1 &#39; &#39; 1
 ## 
-## Rank: 109/114
+## Rank: 109/115
 ## R-sq.(adj) =  0.501   Deviance explained =   55%
 ## GCV = 476.76  Scale est. = 429.63    n = 827</code></pre>
 <pre class="r"><code>plot(h2s_da_model_g)</code></pre>
@@ -4142,7 +4145,7 @@ plot(sm(g, 1)) + l_fitRaster() + l_fitContour() + l_points()</code></pre>
 <pre class="r"><code># Exclude disaster
 h2s_da_model_h &lt;- gam(H2S_daily_avg ~ s(as.numeric(month),bs=&#39;cc&#39;) + year + as.character(weekday) +
                          wd_avg + ws_avg + daily_downwind_ref + capacity +
-                          I(1/dist_wrp^2) +
+                          I(1/dist_wrp^2) + I(1/MinDist^2) + 
                          s(I(mon_utm_x/10^3), I(mon_utm_y/10^3), bs=&#39;tp&#39;, k = 10) + 
                         te(I(mon_utm_x/10^3), I(mon_utm_y/10^3),as.numeric(day),
                            k=c(10,10),d=c(2,1),bs=c(&#39;tp&#39;,&#39;cc&#39;)) +
@@ -4158,12 +4161,12 @@ summary(h2s_da_model_h)</code></pre>
 ## Formula:
 ## H2S_daily_avg ~ s(as.numeric(month), bs = &quot;cc&quot;) + year + as.character(weekday) + 
 ##     wd_avg + ws_avg + daily_downwind_ref + capacity + I(1/dist_wrp^2) + 
-##     s(I(mon_utm_x/10^3), I(mon_utm_y/10^3), bs = &quot;tp&quot;, k = 10) + 
-##     te(I(mon_utm_x/10^3), I(mon_utm_y/10^3), as.numeric(day), 
-##         k = c(10, 10), d = c(2, 1), bs = c(&quot;tp&quot;, &quot;cc&quot;)) + monthly_oil_1km + 
-##     monthly_gas_1km + active_1km + daily_downwind_wrp + elevation + 
-##     EVI + num_odor_complaints + I(1/dist_dc^2) + avg_temp + avg_hum + 
-##     precip
+##     I(1/MinDist^2) + s(I(mon_utm_x/10^3), I(mon_utm_y/10^3), 
+##     bs = &quot;tp&quot;, k = 10) + te(I(mon_utm_x/10^3), I(mon_utm_y/10^3), 
+##     as.numeric(day), k = c(10, 10), d = c(2, 1), bs = c(&quot;tp&quot;, 
+##         &quot;cc&quot;)) + monthly_oil_1km + monthly_gas_1km + active_1km + 
+##     daily_downwind_wrp + elevation + EVI + num_odor_complaints + 
+##     I(1/dist_dc^2) + avg_temp + avg_hum + precip
 ## 
 ## Parametric coefficients:
 ##                            Estimate Std. Error t value Pr(&gt;|t|)    
@@ -4182,6 +4185,7 @@ summary(h2s_da_model_h)</code></pre>
 ## daily_downwind_ref        2.274e-02  2.396e-02   0.949 0.342705    
 ## capacity                  1.873e-02  2.376e-03   7.884 3.73e-15 ***
 ## I(1/dist_wrp^2)          -4.082e-06  1.369e-06  -2.983 0.002870 ** 
+## I(1/MinDist^2)           -8.477e-05  1.712e-05  -4.950 7.61e-07 ***
 ## monthly_oil_1km          -4.735e-05  1.804e-05  -2.625 0.008694 ** 
 ## monthly_gas_1km          -2.152e-04  7.046e-05  -3.054 0.002271 ** 
 ## active_1km               -4.449e-02  7.093e-03  -6.273 3.80e-10 ***
@@ -4208,7 +4212,7 @@ summary(h2s_da_model_h)</code></pre>
 ## ---
 ## Signif. codes:  0 &#39;***&#39; 0.001 &#39;**&#39; 0.01 &#39;*&#39; 0.05 &#39;.&#39; 0.1 &#39; &#39; 1
 ## 
-## Rank: 121/123
+## Rank: 121/124
 ## R-sq.(adj) =  0.462   Deviance explained = 47.2%
 ## GCV = 0.24227  Scale est. = 0.23773   n = 6162</code></pre>
 <pre class="r"><code>plot(h2s_da_model_h)</code></pre>
@@ -4222,7 +4226,7 @@ plot(sm(h, 2)) + l_fitRaster() + l_fitContour() + l_points()</code></pre>
 <pre class="r"><code># Disaster indicator
 h2s_da_model_i &lt;- gam(H2S_daily_avg~s(as.numeric(month),bs=&#39;cc&#39;) + year + as.character(weekday) +
                          wd_avg + ws_avg + daily_downwind_ref + capacity +
-                          I(1/dist_wrp^2) +
+                          I(1/dist_wrp^2) + I(1/MinDist^2) + 
                          s(I(mon_utm_x/10^3), I(mon_utm_y/10^3), bs=&#39;tp&#39;, k = 10) + 
                         te(I(mon_utm_x/10^3), I(mon_utm_y/10^3),as.numeric(day),
                            k=c(10,10),d=c(2,1),bs=c(&#39;tp&#39;,&#39;cc&#39;)) +
@@ -4239,12 +4243,12 @@ summary(h2s_da_model_i)</code></pre>
 ## Formula:
 ## H2S_daily_avg ~ s(as.numeric(month), bs = &quot;cc&quot;) + year + as.character(weekday) + 
 ##     wd_avg + ws_avg + daily_downwind_ref + capacity + I(1/dist_wrp^2) + 
-##     s(I(mon_utm_x/10^3), I(mon_utm_y/10^3), bs = &quot;tp&quot;, k = 10) + 
-##     te(I(mon_utm_x/10^3), I(mon_utm_y/10^3), as.numeric(day), 
-##         k = c(10, 10), d = c(2, 1), bs = c(&quot;tp&quot;, &quot;cc&quot;)) + monthly_oil_1km + 
-##     monthly_gas_1km + active_1km + daily_downwind_wrp + elevation + 
-##     EVI + num_odor_complaints + I(1/dist_dc^2) + avg_temp + avg_hum + 
-##     precip + disaster
+##     I(1/MinDist^2) + s(I(mon_utm_x/10^3), I(mon_utm_y/10^3), 
+##     bs = &quot;tp&quot;, k = 10) + te(I(mon_utm_x/10^3), I(mon_utm_y/10^3), 
+##     as.numeric(day), k = c(10, 10), d = c(2, 1), bs = c(&quot;tp&quot;, 
+##         &quot;cc&quot;)) + monthly_oil_1km + monthly_gas_1km + active_1km + 
+##     daily_downwind_wrp + elevation + EVI + num_odor_complaints + 
+##     I(1/dist_dc^2) + avg_temp + avg_hum + precip + disaster
 ## 
 ## Parametric coefficients:
 ##                            Estimate Std. Error t value Pr(&gt;|t|)    
@@ -4263,6 +4267,7 @@ summary(h2s_da_model_i)</code></pre>
 ## daily_downwind_ref       -1.815e-02  3.815e-01  -0.048  0.96205    
 ## capacity                  6.881e-01  2.416e-02  28.477  &lt; 2e-16 ***
 ## I(1/dist_wrp^2)          -2.730e-04  1.995e-05 -13.687  &lt; 2e-16 ***
+## I(1/MinDist^2)           -4.390e-03  1.786e-04 -24.579  &lt; 2e-16 ***
 ## monthly_oil_1km           3.638e-04  2.667e-04   1.364  0.17256    
 ## monthly_gas_1km           7.303e-04  9.757e-04   0.748  0.45420    
 ## active_1km                9.149e-02  9.378e-02   0.976  0.32928    
@@ -4282,7 +4287,7 @@ summary(h2s_da_model_i)</code></pre>
 ##                                                            edf Ref.df      F
 ## s(as.numeric(month))                                     1.783  8.000  0.327
 ## s(I(mon_utm_x/10^3),I(mon_utm_y/10^3))                   8.957  8.997 94.223
-## te(I(mon_utm_x/10^3),I(mon_utm_y/10^3),as.numeric(day)) 79.836 80.000  6.382
+## te(I(mon_utm_x/10^3),I(mon_utm_y/10^3),as.numeric(day)) 79.836 80.000  6.380
 ##                                                         p-value    
 ## s(as.numeric(month))                                      0.186    
 ## s(I(mon_utm_x/10^3),I(mon_utm_y/10^3))                   &lt;2e-16 ***
@@ -4290,7 +4295,7 @@ summary(h2s_da_model_i)</code></pre>
 ## ---
 ## Signif. codes:  0 &#39;***&#39; 0.001 &#39;**&#39; 0.01 &#39;*&#39; 0.05 &#39;.&#39; 0.1 &#39; &#39; 1
 ## 
-## Rank: 122/124
+## Rank: 122/125
 ## R-sq.(adj) =  0.331   Deviance explained = 34.2%
 ## GCV =  70.74  Scale est. = 69.57     n = 6989</code></pre>
 <pre class="r"><code>plot(h2s_da_model_i)</code></pre>
@@ -4309,7 +4314,7 @@ plot(sm(i, 2)) + l_fitRaster() + l_fitContour() + l_points()</code></pre>
 <pre class="r"><code># Everything
 h2s_da_model_j &lt;- gam(H2S_daily_avg~s(as.numeric(month),bs=&#39;cc&#39;) + year + as.character(weekday) +
                          wd_avg + ws_avg + daily_downwind_ref + capacity +
-                          I(1/dist_wrp^2) +
+                          I(1/dist_wrp^2) + I(1/MinDist^2) + 
                          s(I(mon_utm_x/10^3), I(mon_utm_y/10^3), bs=&#39;tp&#39;, k = 10) + 
                         te(I(mon_utm_x/10^3), I(mon_utm_y/10^3),as.numeric(day),
                            k=c(10,10),d=c(2,1),bs=c(&#39;tp&#39;,&#39;cc&#39;)) +
@@ -4325,12 +4330,12 @@ summary(h2s_da_model_j)</code></pre>
 ## Formula:
 ## H2S_daily_avg ~ s(as.numeric(month), bs = &quot;cc&quot;) + year + as.character(weekday) + 
 ##     wd_avg + ws_avg + daily_downwind_ref + capacity + I(1/dist_wrp^2) + 
-##     s(I(mon_utm_x/10^3), I(mon_utm_y/10^3), bs = &quot;tp&quot;, k = 10) + 
-##     te(I(mon_utm_x/10^3), I(mon_utm_y/10^3), as.numeric(day), 
-##         k = c(10, 10), d = c(2, 1), bs = c(&quot;tp&quot;, &quot;cc&quot;)) + monthly_oil_1km + 
-##     monthly_gas_1km + active_1km + daily_downwind_wrp + elevation + 
-##     EVI + num_odor_complaints + I(1/dist_dc^2) + avg_temp + avg_hum + 
-##     precip
+##     I(1/MinDist^2) + s(I(mon_utm_x/10^3), I(mon_utm_y/10^3), 
+##     bs = &quot;tp&quot;, k = 10) + te(I(mon_utm_x/10^3), I(mon_utm_y/10^3), 
+##     as.numeric(day), k = c(10, 10), d = c(2, 1), bs = c(&quot;tp&quot;, 
+##         &quot;cc&quot;)) + monthly_oil_1km + monthly_gas_1km + active_1km + 
+##     daily_downwind_wrp + elevation + EVI + num_odor_complaints + 
+##     I(1/dist_dc^2) + avg_temp + avg_hum + precip
 ## 
 ## Parametric coefficients:
 ##                            Estimate Std. Error t value Pr(&gt;|t|)    
@@ -4349,6 +4354,7 @@ summary(h2s_da_model_j)</code></pre>
 ## daily_downwind_ref       -7.636e-02  3.820e-01  -0.200   0.8416    
 ## capacity                  6.803e-01  2.395e-02  28.403   &lt;2e-16 ***
 ## I(1/dist_wrp^2)          -2.625e-04  1.033e-05 -25.420   &lt;2e-16 ***
+## I(1/MinDist^2)           -4.342e-03  1.653e-04 -26.269   &lt;2e-16 ***
 ## monthly_oil_1km           4.951e-04  2.608e-04   1.899   0.0577 .  
 ## monthly_gas_1km           3.955e-04  9.490e-04   0.417   0.6769    
 ## active_1km                1.023e-01  9.493e-02   1.077   0.2814    
@@ -4375,7 +4381,7 @@ summary(h2s_da_model_j)</code></pre>
 ## ---
 ## Signif. codes:  0 &#39;***&#39; 0.001 &#39;**&#39; 0.01 &#39;*&#39; 0.05 &#39;.&#39; 0.1 &#39; &#39; 1
 ## 
-## Rank: 121/123
+## Rank: 121/124
 ## R-sq.(adj) =  0.328   Deviance explained = 33.8%
 ## GCV = 70.933  Scale est. = 69.879    n = 6989</code></pre>
 <pre class="r"><code>plot(h2s_da_model_j)</code></pre>
@@ -4442,7 +4448,8 @@ validation_result_8020 &lt;- tibble(Model = character(),
                             &#39;Coef&#39; = numeric(),
                             &#39;R-Sq&#39; = numeric())
 
-predictors &lt;- c(&#39;H2S_daily_avg&#39;, &#39;month&#39;, &#39;year&#39;, &#39;weekday&#39;, &#39;wd_avg&#39;, &#39;ws_avg&#39;, &#39;daily_downwind_ref&#39;, &#39;dist_wrp&#39;, 
+predictors &lt;- c(&#39;H2S_daily_avg&#39;, &#39;month&#39;, &#39;year&#39;, &#39;weekday&#39;, &#39;wd_avg&#39;, &#39;ws_avg&#39;, 
+                &#39;daily_downwind_ref&#39;, &#39;dist_wrp&#39;, &#39;MinDist&#39;,
                 &#39;mon_utm_x&#39;, &#39;mon_utm_y&#39;, &#39;day&#39;, &#39;monthly_oil_1km&#39;, &#39;monthly_gas_1km&#39;, 
                 &#39;active_1km&#39;, &#39;daily_downwind_wrp&#39;, &#39;elevation&#39;, &#39;EVI&#39;, &#39;num_odor_complaints&#39;,
                 &#39;dist_dc&#39;, &#39;capacity&#39;, &#39;avg_temp&#39;, &#39;avg_hum&#39;, &#39;precip&#39;) 
@@ -4461,11 +4468,11 @@ test &lt;- anti_join(daily_full %&gt;%
                   select(all_of(predictors)) %&gt;% 
                   filter(complete.cases(.)), train)</code></pre>
 <pre><code>## Joining with `by = join_by(H2S_daily_avg, month, year, weekday, wd_avg, ws_avg,
-## daily_downwind_ref, dist_wrp, mon_utm_x, mon_utm_y, day, monthly_oil_1km,
-## monthly_gas_1km, active_1km, daily_downwind_wrp, elevation, EVI,
-## num_odor_complaints, dist_dc, capacity, avg_temp, avg_hum, precip)`</code></pre>
+## daily_downwind_ref, dist_wrp, MinDist, mon_utm_x, mon_utm_y, day,
+## monthly_oil_1km, monthly_gas_1km, active_1km, daily_downwind_wrp, elevation,
+## EVI, num_odor_complaints, dist_dc, capacity, avg_temp, avg_hum, precip)`</code></pre>
 <pre class="r"><code>h2s_da_model_f2 &lt;- gam(H2S_daily_avg~s(as.numeric(month),bs=&#39;cc&#39;) + year + as.character(weekday) +
-                         wd_avg + ws_avg + daily_downwind_ref + I(1/dist_wrp^2) +
+                         wd_avg + ws_avg + daily_downwind_ref + I(1/dist_wrp^2) + I(1/MinDist^2) +
                          s(I(mon_utm_x/10^3), I(mon_utm_y/10^3), bs=&#39;tp&#39;, k = 10) + 
                          te(I(mon_utm_x/10^3), I(mon_utm_y/10^3), as.numeric(day),
                             k = c(10,10), d = c(2,1), bs = c(&#39;tp&#39;,&#39;cc&#39;)) +
@@ -4510,11 +4517,11 @@ test &lt;- anti_join(daily_full %&gt;%
                   select(all_of(predictors)) %&gt;% 
                   filter(complete.cases(.)), train)</code></pre>
 <pre><code>## Joining with `by = join_by(H2S_daily_avg, month, year, weekday, wd_avg, ws_avg,
-## daily_downwind_ref, dist_wrp, mon_utm_x, mon_utm_y, day, monthly_oil_1km,
-## monthly_gas_1km, active_1km, daily_downwind_wrp, elevation, EVI,
-## num_odor_complaints, dist_dc, capacity, avg_temp, avg_hum, precip)`</code></pre>
+## daily_downwind_ref, dist_wrp, MinDist, mon_utm_x, mon_utm_y, day,
+## monthly_oil_1km, monthly_gas_1km, active_1km, daily_downwind_wrp, elevation,
+## EVI, num_odor_complaints, dist_dc, capacity, avg_temp, avg_hum, precip)`</code></pre>
 <pre class="r"><code>h2s_da_model_f3 &lt;- gam(H2S_daily_avg ~ month + as.character(weekday) +
-                       wd_avg + ws_avg + daily_downwind_ref + I(1/dist_wrp^2) +
+                       wd_avg + ws_avg + daily_downwind_ref + I(1/dist_wrp^2) + I(1/MinDist^2) +
                        s(I(mon_utm_x/10^3), I(mon_utm_y/10^3), bs=&#39;tp&#39;, k = 10) + 
                        te(I(mon_utm_x/10^3), I(mon_utm_y/10^3), as.numeric(day),
                           k = c(10,10), d = c(2,1), bs = c(&#39;tp&#39;,&#39;cc&#39;)) +
@@ -4559,11 +4566,11 @@ test &lt;- anti_join(daily_full %&gt;%
                   select(all_of(predictors)) %&gt;% 
                   filter(complete.cases(.)), train)</code></pre>
 <pre><code>## Joining with `by = join_by(H2S_daily_avg, month, year, weekday, wd_avg, ws_avg,
-## daily_downwind_ref, dist_wrp, mon_utm_x, mon_utm_y, day, monthly_oil_1km,
-## monthly_gas_1km, active_1km, daily_downwind_wrp, elevation, EVI,
-## num_odor_complaints, dist_dc, capacity, avg_temp, avg_hum, precip)`</code></pre>
+## daily_downwind_ref, dist_wrp, MinDist, mon_utm_x, mon_utm_y, day,
+## monthly_oil_1km, monthly_gas_1km, active_1km, daily_downwind_wrp, elevation,
+## EVI, num_odor_complaints, dist_dc, capacity, avg_temp, avg_hum, precip)`</code></pre>
 <pre class="r"><code>h2s_da_model_f4 &lt;- gam(H2S_daily_avg ~ s(as.numeric(month),bs=&#39;cc&#39;) + year + as.character(weekday) +
-                         wd_avg + ws_avg + daily_downwind_ref + I(1/dist_wrp^2) +
+                         wd_avg + ws_avg + daily_downwind_ref + I(1/dist_wrp^2) + I(1/MinDist^2) +
                          s(I(mon_utm_x/10^3), I(mon_utm_y/10^3), bs=&#39;tp&#39;, k = 10) + 
                          te(I(mon_utm_x/10^3), I(mon_utm_y/10^3), as.numeric(day),
                             k = c(10,10), d = c(2,1), bs = c(&#39;tp&#39;,&#39;cc&#39;)) +
@@ -4596,11 +4603,12 @@ test &lt;- anti_join(daily_full %&gt;%
                     mutate(disaster = if_else(year == &#39;2021&#39; &amp; month %in% c(&#39;10&#39;, &#39;11&#39;, &#39;12&#39;), 1, 0)) %&gt;% 
                   filter(complete.cases(.)), train)</code></pre>
 <pre><code>## Joining with `by = join_by(H2S_daily_avg, month, year, weekday, wd_avg, ws_avg,
-## daily_downwind_ref, dist_wrp, mon_utm_x, mon_utm_y, day, monthly_oil_1km,
-## monthly_gas_1km, active_1km, daily_downwind_wrp, elevation, EVI,
-## num_odor_complaints, dist_dc, capacity, avg_temp, avg_hum, precip, disaster)`</code></pre>
+## daily_downwind_ref, dist_wrp, MinDist, mon_utm_x, mon_utm_y, day,
+## monthly_oil_1km, monthly_gas_1km, active_1km, daily_downwind_wrp, elevation,
+## EVI, num_odor_complaints, dist_dc, capacity, avg_temp, avg_hum, precip,
+## disaster)`</code></pre>
 <pre class="r"><code>h2s_da_model_f5 &lt;- gam(H2S_daily_avg ~ s(as.numeric(month),bs=&#39;cc&#39;) + year + as.character(weekday) +
-                         wd_avg + ws_avg + daily_downwind_ref + I(1/dist_wrp^2) +
+                         wd_avg + ws_avg + daily_downwind_ref + I(1/dist_wrp^2) + I(1/MinDist^2) +
                          s(I(mon_utm_x/10^3), I(mon_utm_y/10^3), bs=&#39;tp&#39;, k = 10) + 
                          te(I(mon_utm_x/10^3), I(mon_utm_y/10^3), as.numeric(day),
                             k = c(10,10), d = c(2,1), bs = c(&#39;tp&#39;,&#39;cc&#39;)) +
@@ -4633,11 +4641,11 @@ test &lt;- anti_join(daily_full %&gt;%
                   select(all_of(predictors)) %&gt;% 
                   filter(complete.cases(.)), train)</code></pre>
 <pre><code>## Joining with `by = join_by(H2S_daily_avg, month, year, weekday, wd_avg, ws_avg,
-## daily_downwind_ref, dist_wrp, mon_utm_x, mon_utm_y, day, monthly_oil_1km,
-## monthly_gas_1km, active_1km, daily_downwind_wrp, elevation, EVI,
-## num_odor_complaints, dist_dc, capacity, avg_temp, avg_hum, precip)`</code></pre>
+## daily_downwind_ref, dist_wrp, MinDist, mon_utm_x, mon_utm_y, day,
+## monthly_oil_1km, monthly_gas_1km, active_1km, daily_downwind_wrp, elevation,
+## EVI, num_odor_complaints, dist_dc, capacity, avg_temp, avg_hum, precip)`</code></pre>
 <pre class="r"><code>h2s_da_model_f6 &lt;- gam(H2S_daily_avg ~ s(as.numeric(month),bs=&#39;cc&#39;) + year + as.character(weekday) +
-                         wd_avg + ws_avg + daily_downwind_ref + I(1/dist_wrp^2) +
+                         wd_avg + ws_avg + daily_downwind_ref + I(1/dist_wrp^2) + I(1/MinDist^2) +
                          s(I(mon_utm_x/10^3), I(mon_utm_y/10^3), bs=&#39;tp&#39;, k = 10) + 
                          te(I(mon_utm_x/10^3), I(mon_utm_y/10^3), as.numeric(day),
                             k = c(10,10), d = c(2,1), bs = c(&#39;tp&#39;,&#39;cc&#39;)) +
@@ -4710,19 +4718,19 @@ validation_result_8020 &lt;- rbind(validation_result_8020,
 <td align="left">Since Feb 2022</td>
 <td align="right">0.67</td>
 <td align="right">0.6538821</td>
-<td align="right">0.6823609</td>
+<td align="right">0.6822030</td>
 </tr>
 <tr class="even">
 <td align="left">Disaster Only</td>
 <td align="right">0.50</td>
 <td align="right">0.5175137</td>
-<td align="right">0.2921882</td>
+<td align="right">0.2908894</td>
 </tr>
 <tr class="odd">
 <td align="left">Exclude Disaster</td>
 <td align="right">0.46</td>
 <td align="right">0.5189897</td>
-<td align="right">0.2950658</td>
+<td align="right">0.2949191</td>
 </tr>
 <tr class="even">
 <td align="left">Everything w Disaster Indicator</td>
@@ -4734,7 +4742,7 @@ validation_result_8020 &lt;- rbind(validation_result_8020,
 <td align="left">Everything w.o Disaster Indicator</td>
 <td align="right">0.33</td>
 <td align="right">0.3372143</td>
-<td align="right">0.3014313</td>
+<td align="right">0.3012706</td>
 </tr>
 </tbody>
 </table>
@@ -4768,7 +4776,7 @@ for (i in 1:length(monitors)) {
     filter(Monitor == monitors[i])
   
   h2s_da_model_f2b &lt;- gam(H2S_daily_avg~s(as.numeric(month),bs=&#39;cc&#39;) + year + as.character(weekday) +
-                         wd_avg + ws_avg + daily_downwind_ref + I(1/dist_wrp^2) +
+                         wd_avg + ws_avg + daily_downwind_ref + I(1/dist_wrp^2) + I(1/MinDist^2) +
                          s(I(mon_utm_x/10^3), I(mon_utm_y/10^3), bs=&#39;tp&#39;, k = 10) + 
                          te(I(mon_utm_x/10^3), I(mon_utm_y/10^3), as.numeric(day),
                             k = c(10,10), d = c(2,1), bs = c(&#39;tp&#39;,&#39;cc&#39;)) +
@@ -4815,7 +4823,7 @@ for (i in 1:length(monitors)) {
     filter(Monitor == monitors[i])
   
   h2s_da_model_f3b &lt;- gam(H2S_daily_avg~ month + as.character(weekday) +
-                         wd_avg + ws_avg + daily_downwind_ref + I(1/dist_wrp^2) +
+                         wd_avg + ws_avg + daily_downwind_ref + I(1/dist_wrp^2) + I(1/MinDist^2) +
                          s(I(mon_utm_x/10^3), I(mon_utm_y/10^3), bs=&#39;tp&#39;, k = 10) + 
                          te(I(mon_utm_x/10^3), I(mon_utm_y/10^3), as.numeric(day),
                             k = c(10,10), d = c(2,1), bs = c(&#39;tp&#39;,&#39;cc&#39;)) +
@@ -4862,7 +4870,7 @@ for (i in 1:length(monitors)) {
     filter(Monitor == monitors[i])
   
   h2s_da_model_f4b &lt;- gam(H2S_daily_avg~ s(as.numeric(month),bs=&#39;cc&#39;) + year + as.character(weekday) +
-                         wd_avg + ws_avg + daily_downwind_ref + I(1/dist_wrp^2) +
+                         wd_avg + ws_avg + daily_downwind_ref + I(1/dist_wrp^2) + I(1/MinDist^2) +
                          s(I(mon_utm_x/10^3), I(mon_utm_y/10^3), bs=&#39;tp&#39;, k = 10) + 
                          te(I(mon_utm_x/10^3), I(mon_utm_y/10^3), as.numeric(day),
                             k = c(10,10), d = c(2,1), bs = c(&#39;tp&#39;,&#39;cc&#39;)) +
@@ -4909,7 +4917,7 @@ for (i in 1:length(monitors)) {
     filter(Monitor == monitors[i])
   
   h2s_da_model_f5b &lt;- gam(H2S_daily_avg~ s(as.numeric(month),bs=&#39;cc&#39;) + year + as.character(weekday) +
-                         wd_avg + ws_avg + daily_downwind_ref + I(1/dist_wrp^2) +
+                         wd_avg + ws_avg + daily_downwind_ref + I(1/dist_wrp^2) + I(1/MinDist^2) +
                          s(I(mon_utm_x/10^3), I(mon_utm_y/10^3), bs=&#39;tp&#39;, k = 10) + 
                          te(I(mon_utm_x/10^3), I(mon_utm_y/10^3), as.numeric(day),
                             k = c(10,10), d = c(2,1), bs = c(&#39;tp&#39;,&#39;cc&#39;)) +
@@ -4955,7 +4963,7 @@ for (i in 1:length(monitors)) {
     filter(Monitor == monitors[i])
   
   h2s_da_model_f6b &lt;- gam(H2S_daily_avg~ s(as.numeric(month),bs=&#39;cc&#39;) + year + as.character(weekday) +
-                         wd_avg + ws_avg + daily_downwind_ref + I(1/dist_wrp^2) +
+                         wd_avg + ws_avg + daily_downwind_ref + I(1/dist_wrp^2) + I(1/MinDist^2) +
                          s(I(mon_utm_x/10^3), I(mon_utm_y/10^3), bs=&#39;tp&#39;, k = 10) + 
                          te(I(mon_utm_x/10^3), I(mon_utm_y/10^3), as.numeric(day),
                             k = c(10,10), d = c(2,1), bs = c(&#39;tp&#39;,&#39;cc&#39;)) +
@@ -4982,31 +4990,31 @@ result_cv &lt;- rbind(result_cv, tibble(tibble(Model = &#39;Everything w.o Disas
 cv1_result</code></pre>
 <div data-pagedtable="false">
 <script data-pagedtable-source type="application/json">
-{"columns":[{"label":["monitors[i]"],"name":[1],"type":["chr"],"align":["left"]},{"label":["summary(h2s_da_model_f2b)$r.sq"],"name":[2],"type":["dbl"],"align":["right"]},{"label":["summary(h2s_da_model_f2b)$n"],"name":[3],"type":["int"],"align":["right"]},{"label":["adj_r2_test"],"name":[4],"type":["dbl"],"align":["right"]},{"label":["nrow(test)"],"name":[5],"type":["int"],"align":["right"]}],"data":[{"1":"First Methodist","2":"0.6689849","3":"2383","4":"0.40316112","5":"281"},{"1":"G Street","2":"0.6507874","3":"2382","4":"0.56399998","5":"282"},{"1":"Guenser Park","2":"0.6647562","3":"2424","4":"0.01330816","5":"240"},{"1":"Harbor Park","2":"0.6629788","3":"2388","4":"-0.04793381","5":"276"},{"1":"Hudson","2":"0.6924853","3":"2383","4":"0.02554840","5":"281"},{"1":"Inner Port","2":"0.6982449","3":"2388","4":"-0.01639211","5":"276"},{"1":"Judson","2":"0.6585553","3":"2401","4":"-0.04938284","5":"263"},{"1":"Manhattan","2":"0.6486366","3":"2386","4":"0.64563445","5":"278"},{"1":"St. Luke","2":"0.6712905","3":"2386","4":"0.12437064","5":"278"},{"1":"Elm Ave","2":"0.6606786","3":"2594","4":"0.04678880","5":"70"},{"1":"North HS","2":"0.6632742","3":"2594","4":"0.55304924","5":"70"},{"1":"West HS","2":"0.6645701","3":"2595","4":"0.57361707","5":"69"}],"options":{"columns":{"min":{},"max":[10]},"rows":{"min":[10],"max":[10]},"pages":{}}}
+{"columns":[{"label":["monitors[i]"],"name":[1],"type":["chr"],"align":["left"]},{"label":["summary(h2s_da_model_f2b)$r.sq"],"name":[2],"type":["dbl"],"align":["right"]},{"label":["summary(h2s_da_model_f2b)$n"],"name":[3],"type":["int"],"align":["right"]},{"label":["adj_r2_test"],"name":[4],"type":["dbl"],"align":["right"]},{"label":["nrow(test)"],"name":[5],"type":["int"],"align":["right"]}],"data":[{"1":"First Methodist","2":"0.6689849","3":"2383","4":"0.40289796","5":"281"},{"1":"G Street","2":"0.6507874","3":"2382","4":"0.56380765","5":"282"},{"1":"Guenser Park","2":"0.6647562","3":"2424","4":"0.01288083","5":"240"},{"1":"Harbor Park","2":"0.6629788","3":"2388","4":"-0.04839484","5":"276"},{"1":"Hudson","2":"0.6924853","3":"2383","4":"0.02511874","5":"281"},{"1":"Inner Port","2":"0.6982449","3":"2388","4":"-0.01683926","5":"276"},{"1":"Judson","2":"0.6585553","3":"2401","4":"-0.04984188","5":"263"},{"1":"Manhattan","2":"0.6486366","3":"2386","4":"0.64547841","5":"278"},{"1":"St. Luke","2":"0.6712905","3":"2386","4":"0.12398507","5":"278"},{"1":"Elm Ave","2":"0.6606786","3":"2594","4":"0.04640366","5":"70"},{"1":"North HS","2":"0.6632742","3":"2594","4":"0.55286865","5":"70"},{"1":"West HS","2":"0.6645701","3":"2595","4":"0.57344486","5":"69"}],"options":{"columns":{"min":{},"max":[10]},"rows":{"min":[10],"max":[10]},"pages":{}}}
   </script>
 </div>
 <pre class="r"><code>cv2_result</code></pre>
 <div data-pagedtable="false">
 <script data-pagedtable-source type="application/json">
-{"columns":[{"label":["monitors[i]"],"name":[1],"type":["chr"],"align":["left"]},{"label":["summary(h2s_da_model_f3b)$r.sq"],"name":[2],"type":["dbl"],"align":["right"]},{"label":["summary(h2s_da_model_f3b)$n"],"name":[3],"type":["int"],"align":["right"]},{"label":["adj_r2_test"],"name":[4],"type":["dbl"],"align":["right"]},{"label":["nrow(test)"],"name":[5],"type":["int"],"align":["right"]}],"data":[{"1":"213th & Chico","2":"0.7595583","3":"780","4":"0.64350296","5":"47"},{"1":"First Methodist","2":"0.4946513","3":"771","4":"0.09912133","5":"56"},{"1":"G Street","2":"0.4889332","3":"771","4":"0.01999466","5":"56"},{"1":"Guenser Park","2":"0.7159110","3":"771","4":"0.11933194","5":"56"},{"1":"Harbor Park","2":"0.4908230","3":"771","4":"0.00358699","5":"56"},{"1":"Hudson","2":"0.7124942","3":"771","4":"0.00979952","5":"56"},{"1":"Inner Port","2":"0.7032448","3":"771","4":"-0.09758607","5":"56"},{"1":"Judson","2":"0.7897821","3":"771","4":"0.48640177","5":"56"},{"1":"Manhattan","2":"0.7146420","3":"771","4":"-0.12265750","5":"56"},{"1":"St. Luke","2":"0.7227357","3":"771","4":"0.29181474","5":"56"},{"1":"Elm Ave","2":"0.7125352","3":"735","4":"-0.12885189","5":"92"},{"1":"North HS","2":"0.7065825","3":"735","4":"-0.04650631","5":"92"},{"1":"West HS","2":"0.7109226","3":"735","4":"-0.05239333","5":"92"}],"options":{"columns":{"min":{},"max":[10]},"rows":{"min":[10],"max":[10]},"pages":{}}}
+{"columns":[{"label":["monitors[i]"],"name":[1],"type":["chr"],"align":["left"]},{"label":["summary(h2s_da_model_f3b)$r.sq"],"name":[2],"type":["dbl"],"align":["right"]},{"label":["summary(h2s_da_model_f3b)$n"],"name":[3],"type":["int"],"align":["right"]},{"label":["adj_r2_test"],"name":[4],"type":["dbl"],"align":["right"]},{"label":["nrow(test)"],"name":[5],"type":["int"],"align":["right"]}],"data":[{"1":"213th & Chico","2":"0.7595583","3":"780","4":"0.642966068","5":"47"},{"1":"First Methodist","2":"0.4946513","3":"771","4":"0.097745939","5":"56"},{"1":"G Street","2":"0.4889332","3":"771","4":"0.018498468","5":"56"},{"1":"Guenser Park","2":"0.7159110","3":"771","4":"0.117987406","5":"56"},{"1":"Harbor Park","2":"0.4908230","3":"771","4":"0.002065749","5":"56"},{"1":"Hudson","2":"0.7124942","3":"771","4":"0.008287764","5":"56"},{"1":"Inner Port","2":"0.7032448","3":"771","4":"-0.099261774","5":"56"},{"1":"Judson","2":"0.7897821","3":"771","4":"0.485617654","5":"56"},{"1":"Manhattan","2":"0.7146420","3":"771","4":"-0.124371482","5":"56"},{"1":"St. Luke","2":"0.7227357","3":"771","4":"0.290733543","5":"56"},{"1":"Elm Ave","2":"0.7125352","3":"735","4":"-0.130675560","5":"92"},{"1":"North HS","2":"0.7065825","3":"735","4":"-0.048196948","5":"92"},{"1":"West HS","2":"0.7109226","3":"735","4":"-0.054093482","5":"92"}],"options":{"columns":{"min":{},"max":[10]},"rows":{"min":[10],"max":[10]},"pages":{}}}
   </script>
 </div>
 <pre class="r"><code>cv3_result</code></pre>
 <div data-pagedtable="false">
 <script data-pagedtable-source type="application/json">
-{"columns":[{"label":["monitors[i]"],"name":[1],"type":["chr"],"align":["left"]},{"label":["summary(h2s_da_model_f4b)$r.sq"],"name":[2],"type":["dbl"],"align":["right"]},{"label":["summary(h2s_da_model_f4b)$n"],"name":[3],"type":["int"],"align":["right"]},{"label":["adj_r2_test"],"name":[4],"type":["dbl"],"align":["right"]},{"label":["nrow(test)"],"name":[5],"type":["int"],"align":["right"]}],"data":[{"1":"213th & Chico","2":"0.4475696","3":"6146","4":"0.262197464","5":"16"},{"1":"First Methodist","2":"0.4674288","3":"5701","4":"0.243714060","5":"461"},{"1":"G Street","2":"0.5874931","3":"5708","4":"0.008760853","5":"454"},{"1":"Guenser Park","2":"0.4667727","3":"5752","4":"0.274267933","5":"410"},{"1":"Harbor Park","2":"0.4673410","3":"5706","4":"0.071540915","5":"456"},{"1":"Hudson","2":"0.4738944","3":"5704","4":"0.024569259","5":"458"},{"1":"Inner Port","2":"0.4796375","3":"5706","4":"0.064465482","5":"456"},{"1":"Judson","2":"0.4689069","3":"5725","4":"0.057849664","5":"437"},{"1":"Manhattan","2":"0.4660827","3":"5780","4":"0.059092698","5":"382"},{"1":"St. Luke","2":"0.4701603","3":"5720","4":"0.038423071","5":"442"},{"1":"Elm Ave","2":"0.4609533","3":"5440","4":"0.042316269","5":"722"},{"1":"North HS","2":"0.4527346","3":"5431","4":"-0.022826449","5":"731"},{"1":"West HS","2":"0.4878963","3":"5425","4":"-0.020551572","5":"737"}],"options":{"columns":{"min":{},"max":[10]},"rows":{"min":[10],"max":[10]},"pages":{}}}
+{"columns":[{"label":["monitors[i]"],"name":[1],"type":["chr"],"align":["left"]},{"label":["summary(h2s_da_model_f4b)$r.sq"],"name":[2],"type":["dbl"],"align":["right"]},{"label":["summary(h2s_da_model_f4b)$n"],"name":[3],"type":["int"],"align":["right"]},{"label":["adj_r2_test"],"name":[4],"type":["dbl"],"align":["right"]},{"label":["nrow(test)"],"name":[5],"type":["int"],"align":["right"]}],"data":[{"1":"213th & Chico","2":"0.4475696","3":"6146","4":"0.262074926","5":"16"},{"1":"First Methodist","2":"0.4674288","3":"5701","4":"0.243578428","5":"461"},{"1":"G Street","2":"0.5874931","3":"5708","4":"0.008583307","5":"454"},{"1":"Guenser Park","2":"0.4667727","3":"5752","4":"0.274138959","5":"410"},{"1":"Harbor Park","2":"0.4673410","3":"5706","4":"0.071374555","5":"456"},{"1":"Hudson","2":"0.4738944","3":"5704","4":"0.024394420","5":"458"},{"1":"Inner Port","2":"0.4796375","3":"5706","4":"0.064297854","5":"456"},{"1":"Judson","2":"0.4689069","3":"5725","4":"0.057681423","5":"437"},{"1":"Manhattan","2":"0.4660827","3":"5780","4":"0.058926313","5":"382"},{"1":"St. Luke","2":"0.4701603","3":"5720","4":"0.038251207","5":"442"},{"1":"Elm Ave","2":"0.4609533","3":"5440","4":"0.042136083","5":"722"},{"1":"North HS","2":"0.4527346","3":"5431","4":"-0.023019217","5":"731"},{"1":"West HS","2":"0.4878963","3":"5425","4":"-0.020744129","5":"737"}],"options":{"columns":{"min":{},"max":[10]},"rows":{"min":[10],"max":[10]},"pages":{}}}
   </script>
 </div>
 <pre class="r"><code>cv4_result</code></pre>
 <div data-pagedtable="false">
 <script data-pagedtable-source type="application/json">
-{"columns":[{"label":["monitors[i]"],"name":[1],"type":["chr"],"align":["left"]},{"label":["summary(h2s_da_model_f5b)$r.sq"],"name":[2],"type":["dbl"],"align":["right"]},{"label":["summary(h2s_da_model_f5b)$n"],"name":[3],"type":["int"],"align":["right"]},{"label":["adj_r2_test"],"name":[4],"type":["dbl"],"align":["right"]},{"label":["nrow(test)"],"name":[5],"type":["int"],"align":["right"]}],"data":[{"1":"213th & Chico","2":"0.5800602","3":"6926","4":"0.7432273646","5":"63"},{"1":"First Methodist","2":"0.3307623","3":"6472","4":"0.2226681176","5":"517"},{"1":"G Street","2":"0.3296631","3":"6479","4":"0.0511972481","5":"510"},{"1":"Guenser Park","2":"0.5344029","3":"6523","4":"0.0145287185","5":"466"},{"1":"Harbor Park","2":"0.3275372","3":"6477","4":"0.1113306550","5":"512"},{"1":"Hudson","2":"0.5240514","3":"6475","4":"0.0007956125","5":"514"},{"1":"Inner Port","2":"0.5000282","3":"6477","4":"0.1629092486","5":"512"},{"1":"Judson","2":"0.6960911","3":"6496","4":"0.1102698743","5":"493"},{"1":"Manhattan","2":"0.5281920","3":"6551","4":"0.1097973784","5":"438"},{"1":"St. Luke","2":"0.5578845","3":"6491","4":"0.0256378248","5":"498"},{"1":"Elm Ave","2":"0.5286464","3":"6175","4":"-0.0150291922","5":"814"},{"1":"North HS","2":"0.5128677","3":"6166","4":"-0.0203753614","5":"823"},{"1":"West HS","2":"0.5237547","3":"6160","4":"-0.0175979990","5":"829"}],"options":{"columns":{"min":{},"max":[10]},"rows":{"min":[10],"max":[10]},"pages":{}}}
+{"columns":[{"label":["monitors[i]"],"name":[1],"type":["chr"],"align":["left"]},{"label":["summary(h2s_da_model_f5b)$r.sq"],"name":[2],"type":["dbl"],"align":["right"]},{"label":["summary(h2s_da_model_f5b)$n"],"name":[3],"type":["int"],"align":["right"]},{"label":["adj_r2_test"],"name":[4],"type":["dbl"],"align":["right"]},{"label":["nrow(test)"],"name":[5],"type":["int"],"align":["right"]}],"data":[{"1":"213th & Chico","2":"0.5800602","3":"6926","4":"0.7431896039","5":"63"},{"1":"First Methodist","2":"0.3307623","3":"6472","4":"0.2225456259","5":"517"},{"1":"G Street","2":"0.3296631","3":"6479","4":"0.0510479009","5":"510"},{"1":"Guenser Park","2":"0.5344029","3":"6523","4":"0.0143746664","5":"466"},{"1":"Harbor Park","2":"0.3275372","3":"6477","4":"0.1111907291","5":"512"},{"1":"Hudson","2":"0.5240514","3":"6475","4":"0.0006382327","5":"514"},{"1":"Inner Port","2":"0.5000282","3":"6477","4":"0.1627774440","5":"512"},{"1":"Judson","2":"0.6960911","3":"6496","4":"0.1101301992","5":"493"},{"1":"Manhattan","2":"0.5281920","3":"6551","4":"0.1096588254","5":"438"},{"1":"St. Luke","2":"0.5578845","3":"6491","4":"0.0254847436","5":"498"},{"1":"Elm Ave","2":"0.5286464","3":"6175","4":"-0.0151969933","5":"814"},{"1":"North HS","2":"0.5128677","3":"6166","4":"-0.0205442978","5":"823"},{"1":"West HS","2":"0.5237547","3":"6160","4":"-0.0177666431","5":"829"}],"options":{"columns":{"min":{},"max":[10]},"rows":{"min":[10],"max":[10]},"pages":{}}}
   </script>
 </div>
 <pre class="r"><code>cv5_result</code></pre>
 <div data-pagedtable="false">
 <script data-pagedtable-source type="application/json">
-{"columns":[{"label":["monitors[i]"],"name":[1],"type":["chr"],"align":["left"]},{"label":["summary(h2s_da_model_f6b)$r.sq"],"name":[2],"type":["dbl"],"align":["right"]},{"label":["summary(h2s_da_model_f6b)$n"],"name":[3],"type":["int"],"align":["right"]},{"label":["adj_r2_test"],"name":[4],"type":["dbl"],"align":["right"]},{"label":["nrow(test)"],"name":[5],"type":["int"],"align":["right"]}],"data":[{"1":"213th & Chico","2":"0.5610734","3":"6926","4":"0.730323852","5":"63"},{"1":"First Methodist","2":"0.3299110","3":"6472","4":"0.187413639","5":"517"},{"1":"G Street","2":"0.3287019","3":"6479","4":"0.044447080","5":"510"},{"1":"Guenser Park","2":"0.5342142","3":"6523","4":"0.014540694","5":"466"},{"1":"Harbor Park","2":"0.3266539","3":"6477","4":"0.095553247","5":"512"},{"1":"Hudson","2":"0.5239002","3":"6475","4":"-0.002401891","5":"514"},{"1":"Inner Port","2":"0.4997646","3":"6477","4":"0.152389103","5":"512"},{"1":"Judson","2":"0.6960391","3":"6496","4":"0.110002121","5":"493"},{"1":"Manhattan","2":"0.5279474","3":"6551","4":"0.087122446","5":"438"},{"1":"St. Luke","2":"0.5577398","3":"6491","4":"0.026667791","5":"498"},{"1":"Elm Ave","2":"0.5284151","3":"6175","4":"-0.014902950","5":"814"},{"1":"North HS","2":"0.5125488","3":"6166","4":"-0.020209573","5":"823"},{"1":"West HS","2":"0.5234277","3":"6160","4":"-0.017624556","5":"829"}],"options":{"columns":{"min":{},"max":[10]},"rows":{"min":[10],"max":[10]},"pages":{}}}
+{"columns":[{"label":["monitors[i]"],"name":[1],"type":["chr"],"align":["left"]},{"label":["summary(h2s_da_model_f6b)$r.sq"],"name":[2],"type":["dbl"],"align":["right"]},{"label":["summary(h2s_da_model_f6b)$n"],"name":[3],"type":["int"],"align":["right"]},{"label":["adj_r2_test"],"name":[4],"type":["dbl"],"align":["right"]},{"label":["nrow(test)"],"name":[5],"type":["int"],"align":["right"]}],"data":[{"1":"213th & Chico","2":"0.5610734","3":"6926","4":"0.730284199","5":"63"},{"1":"First Methodist","2":"0.3299110","3":"6472","4":"0.187285612","5":"517"},{"1":"G Street","2":"0.3287019","3":"6479","4":"0.044296694","5":"510"},{"1":"Guenser Park","2":"0.5342142","3":"6523","4":"0.014386667","5":"466"},{"1":"Harbor Park","2":"0.3266539","3":"6477","4":"0.095410859","5":"512"},{"1":"Hudson","2":"0.5239002","3":"6475","4":"-0.002559749","5":"514"},{"1":"Inner Port","2":"0.4997646","3":"6477","4":"0.152255663","5":"512"},{"1":"Judson","2":"0.6960391","3":"6496","4":"0.109862425","5":"493"},{"1":"Manhattan","2":"0.5279474","3":"6551","4":"0.086980386","5":"438"},{"1":"St. Luke","2":"0.5577398","3":"6491","4":"0.026514896","5":"498"},{"1":"Elm Ave","2":"0.5284151","3":"6175","4":"-0.015070703","5":"814"},{"1":"North HS","2":"0.5125488","3":"6166","4":"-0.020378454","5":"823"},{"1":"West HS","2":"0.5234277","3":"6160","4":"-0.017793177","5":"829"}],"options":{"columns":{"min":{},"max":[10]},"rows":{"min":[10],"max":[10]},"pages":{}}}
   </script>
 </div>
 </div>
@@ -5042,7 +5050,7 @@ for (fold in seq(1, 10)) {
   train &lt;- anti_join(sincefeb2022, test, by = join_by(dist_dc, day))
   
   h2s_da_model_10cv &lt;- gam(H2S_daily_avg~s(as.numeric(month),bs=&#39;cc&#39;) + year + as.character(weekday) +
-                           wd_avg + ws_avg + daily_downwind_ref + I(1/dist_wrp^2) +
+                           wd_avg + ws_avg + daily_downwind_ref + I(1/dist_wrp^2) + I(1/MinDist^2) +
                            s(I(mon_utm_x/10^3), I(mon_utm_y/10^3), bs=&#39;tp&#39;, k = 10) + 
                            te(I(mon_utm_x/10^3), I(mon_utm_y/10^3), as.numeric(day),
                               k = c(10,10), d = c(2,1), bs = c(&#39;tp&#39;,&#39;cc&#39;)) +
@@ -5101,7 +5109,7 @@ for (fold in seq(1, 10)) {
   train &lt;- anti_join(disaster, test, by = join_by(dist_dc, day))
   
   h2s_da_model_10cv &lt;- gam(H2S_daily_avg ~ month + as.character(weekday) +
-                         wd_avg + ws_avg + daily_downwind_ref + I(1/dist_wrp^2) +
+                         wd_avg + ws_avg + daily_downwind_ref + I(1/dist_wrp^2) + I(1/MinDist^2) +
                          s(I(mon_utm_x/10^3), I(mon_utm_y/10^3), bs=&#39;tp&#39;, k = 10) + 
                          te(I(mon_utm_x/10^3), I(mon_utm_y/10^3), as.numeric(day),
                             k = c(10,10), d = c(2,1), bs = c(&#39;tp&#39;,&#39;cc&#39;)) +
@@ -5160,7 +5168,7 @@ for (fold in seq(1, 10)) {
   train &lt;- anti_join(excl_disaster, test, by = join_by(dist_dc, day))
   
   h2s_da_model_10cv &lt;- gam(H2S_daily_avg ~ s(as.numeric(month),bs=&#39;cc&#39;) + year + as.character(weekday) +
-                         wd_avg + ws_avg + daily_downwind_ref + I(1/dist_wrp^2) +
+                         wd_avg + ws_avg + daily_downwind_ref + I(1/dist_wrp^2) + I(1/MinDist^2) +
                          s(I(mon_utm_x/10^3), I(mon_utm_y/10^3), bs=&#39;tp&#39;, k = 10) + 
                          te(I(mon_utm_x/10^3), I(mon_utm_y/10^3), as.numeric(day),
                             k = c(10,10), d = c(2,1), bs = c(&#39;tp&#39;,&#39;cc&#39;)) +
@@ -5216,7 +5224,7 @@ for (fold in seq(1, 10)) {
   train &lt;- anti_join(disaster_ind, test, by = join_by(dist_dc, day))
   
   h2s_da_model_10cv &lt;- gam(H2S_daily_avg ~ s(as.numeric(month),bs=&#39;cc&#39;) + year + as.character(weekday) +
-                         wd_avg + ws_avg + daily_downwind_ref + I(1/dist_wrp^2) +
+                         wd_avg + ws_avg + daily_downwind_ref + I(1/dist_wrp^2) + I(1/MinDist^2) +
                          s(I(mon_utm_x/10^3), I(mon_utm_y/10^3), bs=&#39;tp&#39;, k = 10) + 
                          te(I(mon_utm_x/10^3), I(mon_utm_y/10^3), as.numeric(day),
                             k = c(10,10), d = c(2,1), bs = c(&#39;tp&#39;,&#39;cc&#39;)) +
@@ -5288,7 +5296,7 @@ for (fold in seq(1, 10)) {
   train &lt;- anti_join(everything, test, by = join_by(dist_dc, day))
   
   h2s_da_model_10cv &lt;- gam(H2S_daily_avg ~ s(as.numeric(month),bs=&#39;cc&#39;) + year + as.character(weekday) +
-                         wd_avg + ws_avg + daily_downwind_ref + I(1/dist_wrp^2) +
+                         wd_avg + ws_avg + daily_downwind_ref + I(1/dist_wrp^2) + I(1/MinDist^2) +
                          s(I(mon_utm_x/10^3), I(mon_utm_y/10^3), bs=&#39;tp&#39;, k = 10) + 
                          te(I(mon_utm_x/10^3), I(mon_utm_y/10^3), as.numeric(day),
                             k = c(10,10), d = c(2,1), bs = c(&#39;tp&#39;,&#39;cc&#39;)) +
@@ -5400,9 +5408,9 @@ validation_result_10cv &lt;- rbind(validation_result_10cv,
 <td align="left">Disaster Only</td>
 <td align="right">0.50</td>
 <td align="right">0.518</td>
-<td align="right">0.292</td>
+<td align="right">0.291</td>
 <td align="right">0.671</td>
-<td align="right">0.094</td>
+<td align="right">0.093</td>
 <td align="right">0.497</td>
 <td align="right">0.439</td>
 <td align="right">21.643</td>
@@ -5527,6 +5535,7 @@ validation_result_10cv &lt;- rbind(validation_result_10cv,
 xgb_result &lt;- tibble(Model = character(),
                  &#39;10CV Train R-Sq&#39; = numeric(),
                  &#39;10CV Test R-Sq&#39; = numeric(),
+                 &#39;10CV Test RMSE&#39; = numeric(),
                  &#39;80/20 Train R-Sq&#39; = numeric(),
                  &#39;80/20 Test R-Sq&#39; = numeric())
 
@@ -5688,8 +5697,12 @@ imp %&gt;%
 
 # the above code predicts the test set using the final model, which is not representitive method
 # instead, we use savePredictions = &#39;final&#39; to store the predictions on the test set at each fold
-test_r2 &lt;- R2(fit.xgb_da$pred$pred, fit.xgb_da$pred$obs)
-test_rmse &lt;- RMSE(fit.xgb_da$pred$pred, fit.xgb_da$pred$obs)</code></pre>
+
+# Here, we compute the R2 and RMSE for each fold and take the average
+fold_stat &lt;- fit.xgb_da$pred %&gt;% group_by(Resample) %&gt;% 
+  summarise(R2 = R2(pred, obs), RMSE = RMSE(pred, obs))
+test_r2 &lt;- mean(fold_stat$R2)
+test_rmse &lt;- mean(fold_stat$RMSE)</code></pre>
 <pre class="r"><code>xgb_sincefeb2022_obs_vs_pred_plot &lt;- ggplot(tibble(obs = fit.xgb_da$pred$obs, pred = fit.xgb_da$pred$pred),
                              aes(x = pred, y = obs)) +
                         geom_point() +
@@ -6077,8 +6090,10 @@ imp %&gt;%
 #   r2_test_xgb_disaster &lt;- append(r2_test_xgb_disaster, test_r2)
 # }
 
-test_r2 &lt;- R2(fit.xgb_da_dis$pred$pred, fit.xgb_da_dis$pred$obs)
-test_rmse &lt;- RMSE(fit.xgb_da_dis$pred$pred, fit.xgb_da_dis$pred$obs)</code></pre>
+test_r2 &lt;- fold_stat &lt;- fit.xgb_da_dis$pred %&gt;% group_by(Resample) %&gt;% 
+  summarise(R2 = R2(pred, obs), RMSE = RMSE(pred, obs))
+test_r2 &lt;- mean(fold_stat$R2)
+test_rmse &lt;- mean(fold_stat$RMSE)</code></pre>
 <pre class="r"><code>xgb_disaster_obs_vs_pred_plot &lt;- ggplot(tibble(obs = fit.xgb_da_dis$pred$obs, pred = fit.xgb_da_dis$pred$pred),
                              aes(x = pred, y = obs)) +
                         geom_point() +
@@ -6358,9 +6373,10 @@ imp %&gt;%
 #   pred_xgb_excl_dis &lt;- append(pred_xgb_excl_dis, test_pred)
 #   r2_test_xgb_excl_dis &lt;- append(r2_test_xgb_excl_dis, test_r2)
 # }
-
-test_r2 &lt;- R2(fit.xgb_da_excl_dis$pred$pred, fit.xgb_da_excl_dis$pred$obs)
-test_rmse &lt;- RMSE(fit.xgb_da_excl_dis$pred$pred, fit.xgb_da_excl_dis$pred$obs)</code></pre>
+fold_stat &lt;- fit.xgb_da_excl_dis$pred %&gt;% group_by(Resample) %&gt;% 
+  summarise(R2 = R2(pred, obs), RMSE = RMSE(pred, obs))
+test_r2 &lt;- mean(fold_stat$R2)
+test_rmse &lt;- mean(fold_stat$RMSE)</code></pre>
 <pre class="r"><code>xgb_excl_dis_obs_vs_pred_plot &lt;- ggplot(tibble(obs = fit.xgb_da_excl_dis$pred$obs, 
                                                pred = fit.xgb_da_excl_dis$pred$pred),
                              aes(x = pred, y = obs)) +
@@ -6505,8 +6521,11 @@ imp %&gt;%
 test_result_data &lt;- tibble(obs = fit.xgb_da_full_dis_ind$pred$obs, 
                            pred = fit.xgb_da_full_dis_ind$pred$pred,
                            disaster = train$disaster[fit.xgb_da_full_dis_ind$pred$rowIndex])
-test_r2 &lt;- R2(fit.xgb_da_full_dis_ind$pred$pred, fit.xgb_da_full_dis_ind$pred$obs)
-test_rmse &lt;- RMSE(fit.xgb_da_full_dis_ind$pred$pred, fit.xgb_da_full_dis_ind$pred$obs)</code></pre>
+
+fold_stat &lt;- fit.xgb_da_full_dis_ind$pred %&gt;% group_by(Resample) %&gt;% 
+  summarise(R2 = R2(pred, obs), RMSE = RMSE(pred, obs))
+test_r2 &lt;- mean(fold_stat$R2)
+test_rmse &lt;- mean(fold_stat$RMSE)</code></pre>
 <pre class="r"><code>xgb_full_dis_ind_obs_vs_pred_plot &lt;- ggplot(tibble(obs = test_result_data$obs, 
                                                    pred = test_result_data$pred,
                                             disaster = test_result_data$disaster),
@@ -6667,8 +6686,11 @@ test_result_data &lt;- tibble(obs = fit.xgb_da_full$pred$obs,
                                                 (train[fit.xgb_da_full$pred$rowIndex, ]$month_10 == 1 |
                                                  train[fit.xgb_da_full$pred$rowIndex, ]$month_11 == 1 |
                                                  train[fit.xgb_da_full$pred$rowIndex, ]$month_12 == 1), 1, 0))
-test_r2 &lt;- R2(test_result_data$pred, test_result_data$obs)
-test_rmse &lt;- RMSE(test_result_data$pred, test_result_data$obs)</code></pre>
+
+fold_stat &lt;- fit.xgb_da_full$pred %&gt;% group_by(Resample) %&gt;% 
+  summarise(R2 = R2(pred, obs), RMSE = RMSE(pred, obs))
+test_r2 &lt;- mean(fold_stat$R2)
+test_rmse &lt;- mean(fold_stat$RMSE)</code></pre>
 <pre class="r"><code>xgb_everything_obs_vs_pred_plot &lt;- ggplot(test_result_data,
                              aes(x = pred, y = obs)) +
                         geom_point(aes(col = factor(disaster)), show.legend = FALSE) +
@@ -6877,7 +6899,7 @@ xgb.plot.shap(data = matrix,
 <pre class="r"><code>xgb_result</code></pre>
 <div data-pagedtable="false">
 <script data-pagedtable-source type="application/json">
-{"columns":[{"label":["Model"],"name":[1],"type":["chr"],"align":["left"]},{"label":["10CV Train R-Sq"],"name":[2],"type":["dbl"],"align":["right"]},{"label":["10CV Test R-Sq"],"name":[3],"type":["dbl"],"align":["right"]},{"label":["10CV Test RMSE"],"name":[4],"type":["dbl"],"align":["right"]},{"label":["80/20 Train R-Sq"],"name":[5],"type":["dbl"],"align":["right"]},{"label":["80/20 Test R-Sq"],"name":[6],"type":["dbl"],"align":["right"]}],"data":[{"1":"Since Feb 2022","2":"0.7768372","3":"0.7483165","4":"0.3002483","5":"0.7435308","6":"0.7487016"},{"1":"Disaster Only","2":"0.6306889","3":"0.6839327","4":"16.1839766","5":"0.7373374","6":"0.7798997"},{"1":"Exclude Disaster","2":"0.6364325","3":"0.5784366","4":"0.4302430","5":"NA","6":"NA"},{"1":"Everything w. Disaster Indicator","2":"0.7539696","3":"0.7118359","4":"5.4946454","5":"NA","6":"NA"},{"1":"Everything w.o Disaster Indicator","2":"0.7931831","3":"0.6840629","4":"5.8676262","5":"0.6770045","6":"0.3190326"}],"options":{"columns":{"min":{},"max":[10]},"rows":{"min":[10],"max":[10]},"pages":{}}}
+{"columns":[{"label":["Model"],"name":[1],"type":["chr"],"align":["left"]},{"label":["10CV Train R-Sq"],"name":[2],"type":["dbl"],"align":["right"]},{"label":["10CV Test R-Sq"],"name":[3],"type":["dbl"],"align":["right"]},{"label":["10CV Test RMSE"],"name":[4],"type":["dbl"],"align":["right"]},{"label":["80/20 Train R-Sq"],"name":[5],"type":["dbl"],"align":["right"]},{"label":["80/20 Test R-Sq"],"name":[6],"type":["dbl"],"align":["right"]}],"data":[{"1":"Since Feb 2022","2":"0.7768372","3":"0.7768372","4":"0.2825468","5":"0.7435308","6":"0.7487016"},{"1":"Disaster Only","2":"0.6306889","3":"0.6306889","4":"13.0977419","5":"0.7373374","6":"0.7798997"},{"1":"Exclude Disaster","2":"0.6364325","3":"0.6364325","4":"0.3999054","5":"NA","6":"NA"},{"1":"Everything w. Disaster Indicator","2":"0.7539696","3":"0.7539696","4":"4.8878257","5":"NA","6":"NA"},{"1":"Everything w.o Disaster Indicator","2":"0.7931831","3":"0.7931831","4":"4.4968875","5":"0.6770045","6":"0.3190326"}],"options":{"columns":{"min":{},"max":[10]},"rows":{"min":[10],"max":[10]},"pages":{}}}
   </script>
 </div>
 <div id="observed-vs.-predicted-plots-10-fold-cv" class="section level2">
@@ -7062,10 +7084,10 @@ Since Feb 2022
 0.777
 </td>
 <td style="text-align:right;">
-0.748
+0.777
 </td>
 <td style="text-align:right;">
-0.300
+0.283
 </td>
 </tr>
 <tr>
@@ -7088,10 +7110,10 @@ Disaster Only
 0.631
 </td>
 <td style="text-align:right;">
-0.684
+0.631
 </td>
 <td style="text-align:right;">
-16.184
+13.098
 </td>
 </tr>
 <tr>
@@ -7114,10 +7136,10 @@ Exclude Disaster
 0.636
 </td>
 <td style="text-align:right;">
-0.578
+0.636
 </td>
 <td style="text-align:right;">
-0.430
+0.400
 </td>
 </tr>
 <tr>
@@ -7140,10 +7162,10 @@ Everything w. Disaster Indicator
 0.754
 </td>
 <td style="text-align:right;">
-0.712
+0.754
 </td>
 <td style="text-align:right;">
-5.495
+4.888
 </td>
 </tr>
 <tr>
@@ -7166,10 +7188,10 @@ Everything w.o Disaster Indicator
 0.793
 </td>
 <td style="text-align:right;">
-0.684
+0.793
 </td>
 <td style="text-align:right;">
-5.868
+4.497
 </td>
 </tr>
 </tbody>

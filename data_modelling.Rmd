@@ -157,7 +157,7 @@ knitr::kable(table1, format = 'html', digits = 2)
 # Since feb 2022
 h2s_da_model_f <- gam(H2S_daily_avg~s(as.numeric(month),bs='cc') + year + as.character(weekday) +
                          wd_avg + ws_avg + daily_downwind_ref + capacity +
-                          I(1/dist_wrp^2) +
+                          I(1/dist_wrp^2) + I(1/MinDist^2) + 
                          s(I(mon_utm_x/10^3), I(mon_utm_y/10^3), bs='tp', k = 10) + 
                         te(I(mon_utm_x/10^3), I(mon_utm_y/10^3), as.numeric(day),
                            k=c(10,10),d=c(2,1),bs=c('tp','cc')) +
@@ -208,7 +208,7 @@ knitr::kable(sincefeb2022_model_stat, format = 'html', digits = 2)
 # Disaster only
 h2s_da_model_g <- gam(H2S_daily_avg ~ month + as.character(weekday) +
                          wd_avg + ws_avg + daily_downwind_ref + capacity +
-                          I(1/dist_wrp^2) +
+                          I(1/dist_wrp^2) + I(1/MinDist^2) + 
                          s(I(mon_utm_x/10^3), I(mon_utm_y/10^3), bs='tp', k = 10) + 
                         te(I(mon_utm_x/10^3), I(mon_utm_y/10^3),as.numeric(day),
                            k=c(10,10),d=c(2,1),bs=c('tp','cc')) +
@@ -228,7 +228,7 @@ plot(sm(g, 1)) + l_fitRaster() + l_fitContour() + l_points()
 # Exclude disaster
 h2s_da_model_h <- gam(H2S_daily_avg ~ s(as.numeric(month),bs='cc') + year + as.character(weekday) +
                          wd_avg + ws_avg + daily_downwind_ref + capacity +
-                          I(1/dist_wrp^2) +
+                          I(1/dist_wrp^2) + I(1/MinDist^2) + 
                          s(I(mon_utm_x/10^3), I(mon_utm_y/10^3), bs='tp', k = 10) + 
                         te(I(mon_utm_x/10^3), I(mon_utm_y/10^3),as.numeric(day),
                            k=c(10,10),d=c(2,1),bs=c('tp','cc')) +
@@ -248,7 +248,7 @@ plot(sm(h, 2)) + l_fitRaster() + l_fitContour() + l_points()
 # Disaster indicator
 h2s_da_model_i <- gam(H2S_daily_avg~s(as.numeric(month),bs='cc') + year + as.character(weekday) +
                          wd_avg + ws_avg + daily_downwind_ref + capacity +
-                          I(1/dist_wrp^2) +
+                          I(1/dist_wrp^2) + I(1/MinDist^2) + 
                          s(I(mon_utm_x/10^3), I(mon_utm_y/10^3), bs='tp', k = 10) + 
                         te(I(mon_utm_x/10^3), I(mon_utm_y/10^3),as.numeric(day),
                            k=c(10,10),d=c(2,1),bs=c('tp','cc')) +
@@ -275,7 +275,7 @@ plotRGL(sm(i, 2), fix = c(`as.numeric(day)` = 0), residuals = F)
 # Everything
 h2s_da_model_j <- gam(H2S_daily_avg~s(as.numeric(month),bs='cc') + year + as.character(weekday) +
                          wd_avg + ws_avg + daily_downwind_ref + capacity +
-                          I(1/dist_wrp^2) +
+                          I(1/dist_wrp^2) + I(1/MinDist^2) + 
                          s(I(mon_utm_x/10^3), I(mon_utm_y/10^3), bs='tp', k = 10) + 
                         te(I(mon_utm_x/10^3), I(mon_utm_y/10^3),as.numeric(day),
                            k=c(10,10),d=c(2,1),bs=c('tp','cc')) +
@@ -320,7 +320,8 @@ validation_result_8020 <- tibble(Model = character(),
                             'Coef' = numeric(),
                             'R-Sq' = numeric())
 
-predictors <- c('H2S_daily_avg', 'month', 'year', 'weekday', 'wd_avg', 'ws_avg', 'daily_downwind_ref', 'dist_wrp', 
+predictors <- c('H2S_daily_avg', 'month', 'year', 'weekday', 'wd_avg', 'ws_avg', 
+                'daily_downwind_ref', 'dist_wrp', 'MinDist',
                 'mon_utm_x', 'mon_utm_y', 'day', 'monthly_oil_1km', 'monthly_gas_1km', 
                 'active_1km', 'daily_downwind_wrp', 'elevation', 'EVI', 'num_odor_complaints',
                 'dist_dc', 'capacity', 'avg_temp', 'avg_hum', 'precip') 
@@ -340,7 +341,7 @@ test <- anti_join(daily_full %>%
                   filter(complete.cases(.)), train)
 
 h2s_da_model_f2 <- gam(H2S_daily_avg~s(as.numeric(month),bs='cc') + year + as.character(weekday) +
-                         wd_avg + ws_avg + daily_downwind_ref + I(1/dist_wrp^2) +
+                         wd_avg + ws_avg + daily_downwind_ref + I(1/dist_wrp^2) + I(1/MinDist^2) +
                          s(I(mon_utm_x/10^3), I(mon_utm_y/10^3), bs='tp', k = 10) + 
                          te(I(mon_utm_x/10^3), I(mon_utm_y/10^3), as.numeric(day),
                             k = c(10,10), d = c(2,1), bs = c('tp','cc')) +
@@ -386,7 +387,7 @@ test <- anti_join(daily_full %>%
                   filter(complete.cases(.)), train)
 
 h2s_da_model_f3 <- gam(H2S_daily_avg ~ month + as.character(weekday) +
-                       wd_avg + ws_avg + daily_downwind_ref + I(1/dist_wrp^2) +
+                       wd_avg + ws_avg + daily_downwind_ref + I(1/dist_wrp^2) + I(1/MinDist^2) +
                        s(I(mon_utm_x/10^3), I(mon_utm_y/10^3), bs='tp', k = 10) + 
                        te(I(mon_utm_x/10^3), I(mon_utm_y/10^3), as.numeric(day),
                           k = c(10,10), d = c(2,1), bs = c('tp','cc')) +
@@ -432,7 +433,7 @@ test <- anti_join(daily_full %>%
                   filter(complete.cases(.)), train)
 
 h2s_da_model_f4 <- gam(H2S_daily_avg ~ s(as.numeric(month),bs='cc') + year + as.character(weekday) +
-                         wd_avg + ws_avg + daily_downwind_ref + I(1/dist_wrp^2) +
+                         wd_avg + ws_avg + daily_downwind_ref + I(1/dist_wrp^2) + I(1/MinDist^2) +
                          s(I(mon_utm_x/10^3), I(mon_utm_y/10^3), bs='tp', k = 10) + 
                          te(I(mon_utm_x/10^3), I(mon_utm_y/10^3), as.numeric(day),
                             k = c(10,10), d = c(2,1), bs = c('tp','cc')) +
@@ -466,7 +467,7 @@ test <- anti_join(daily_full %>%
                   filter(complete.cases(.)), train)
 
 h2s_da_model_f5 <- gam(H2S_daily_avg ~ s(as.numeric(month),bs='cc') + year + as.character(weekday) +
-                         wd_avg + ws_avg + daily_downwind_ref + I(1/dist_wrp^2) +
+                         wd_avg + ws_avg + daily_downwind_ref + I(1/dist_wrp^2) + I(1/MinDist^2) +
                          s(I(mon_utm_x/10^3), I(mon_utm_y/10^3), bs='tp', k = 10) + 
                          te(I(mon_utm_x/10^3), I(mon_utm_y/10^3), as.numeric(day),
                             k = c(10,10), d = c(2,1), bs = c('tp','cc')) +
@@ -500,7 +501,7 @@ test <- anti_join(daily_full %>%
                   filter(complete.cases(.)), train)
 
 h2s_da_model_f6 <- gam(H2S_daily_avg ~ s(as.numeric(month),bs='cc') + year + as.character(weekday) +
-                         wd_avg + ws_avg + daily_downwind_ref + I(1/dist_wrp^2) +
+                         wd_avg + ws_avg + daily_downwind_ref + I(1/dist_wrp^2) + I(1/MinDist^2) +
                          s(I(mon_utm_x/10^3), I(mon_utm_y/10^3), bs='tp', k = 10) + 
                          te(I(mon_utm_x/10^3), I(mon_utm_y/10^3), as.numeric(day),
                             k = c(10,10), d = c(2,1), bs = c('tp','cc')) +
@@ -590,7 +591,7 @@ for (i in 1:length(monitors)) {
     filter(Monitor == monitors[i])
   
   h2s_da_model_f2b <- gam(H2S_daily_avg~s(as.numeric(month),bs='cc') + year + as.character(weekday) +
-                         wd_avg + ws_avg + daily_downwind_ref + I(1/dist_wrp^2) +
+                         wd_avg + ws_avg + daily_downwind_ref + I(1/dist_wrp^2) + I(1/MinDist^2) +
                          s(I(mon_utm_x/10^3), I(mon_utm_y/10^3), bs='tp', k = 10) + 
                          te(I(mon_utm_x/10^3), I(mon_utm_y/10^3), as.numeric(day),
                             k = c(10,10), d = c(2,1), bs = c('tp','cc')) +
@@ -637,7 +638,7 @@ for (i in 1:length(monitors)) {
     filter(Monitor == monitors[i])
   
   h2s_da_model_f3b <- gam(H2S_daily_avg~ month + as.character(weekday) +
-                         wd_avg + ws_avg + daily_downwind_ref + I(1/dist_wrp^2) +
+                         wd_avg + ws_avg + daily_downwind_ref + I(1/dist_wrp^2) + I(1/MinDist^2) +
                          s(I(mon_utm_x/10^3), I(mon_utm_y/10^3), bs='tp', k = 10) + 
                          te(I(mon_utm_x/10^3), I(mon_utm_y/10^3), as.numeric(day),
                             k = c(10,10), d = c(2,1), bs = c('tp','cc')) +
@@ -684,7 +685,7 @@ for (i in 1:length(monitors)) {
     filter(Monitor == monitors[i])
   
   h2s_da_model_f4b <- gam(H2S_daily_avg~ s(as.numeric(month),bs='cc') + year + as.character(weekday) +
-                         wd_avg + ws_avg + daily_downwind_ref + I(1/dist_wrp^2) +
+                         wd_avg + ws_avg + daily_downwind_ref + I(1/dist_wrp^2) + I(1/MinDist^2) +
                          s(I(mon_utm_x/10^3), I(mon_utm_y/10^3), bs='tp', k = 10) + 
                          te(I(mon_utm_x/10^3), I(mon_utm_y/10^3), as.numeric(day),
                             k = c(10,10), d = c(2,1), bs = c('tp','cc')) +
@@ -731,7 +732,7 @@ for (i in 1:length(monitors)) {
     filter(Monitor == monitors[i])
   
   h2s_da_model_f5b <- gam(H2S_daily_avg~ s(as.numeric(month),bs='cc') + year + as.character(weekday) +
-                         wd_avg + ws_avg + daily_downwind_ref + I(1/dist_wrp^2) +
+                         wd_avg + ws_avg + daily_downwind_ref + I(1/dist_wrp^2) + I(1/MinDist^2) +
                          s(I(mon_utm_x/10^3), I(mon_utm_y/10^3), bs='tp', k = 10) + 
                          te(I(mon_utm_x/10^3), I(mon_utm_y/10^3), as.numeric(day),
                             k = c(10,10), d = c(2,1), bs = c('tp','cc')) +
@@ -777,7 +778,7 @@ for (i in 1:length(monitors)) {
     filter(Monitor == monitors[i])
   
   h2s_da_model_f6b <- gam(H2S_daily_avg~ s(as.numeric(month),bs='cc') + year + as.character(weekday) +
-                         wd_avg + ws_avg + daily_downwind_ref + I(1/dist_wrp^2) +
+                         wd_avg + ws_avg + daily_downwind_ref + I(1/dist_wrp^2) + I(1/MinDist^2) +
                          s(I(mon_utm_x/10^3), I(mon_utm_y/10^3), bs='tp', k = 10) + 
                          te(I(mon_utm_x/10^3), I(mon_utm_y/10^3), as.numeric(day),
                             k = c(10,10), d = c(2,1), bs = c('tp','cc')) +
@@ -843,7 +844,7 @@ for (fold in seq(1, 10)) {
   train <- anti_join(sincefeb2022, test, by = join_by(dist_dc, day))
   
   h2s_da_model_10cv <- gam(H2S_daily_avg~s(as.numeric(month),bs='cc') + year + as.character(weekday) +
-                           wd_avg + ws_avg + daily_downwind_ref + I(1/dist_wrp^2) +
+                           wd_avg + ws_avg + daily_downwind_ref + I(1/dist_wrp^2) + I(1/MinDist^2) +
                            s(I(mon_utm_x/10^3), I(mon_utm_y/10^3), bs='tp', k = 10) + 
                            te(I(mon_utm_x/10^3), I(mon_utm_y/10^3), as.numeric(day),
                               k = c(10,10), d = c(2,1), bs = c('tp','cc')) +
@@ -902,7 +903,7 @@ for (fold in seq(1, 10)) {
   train <- anti_join(disaster, test, by = join_by(dist_dc, day))
   
   h2s_da_model_10cv <- gam(H2S_daily_avg ~ month + as.character(weekday) +
-                         wd_avg + ws_avg + daily_downwind_ref + I(1/dist_wrp^2) +
+                         wd_avg + ws_avg + daily_downwind_ref + I(1/dist_wrp^2) + I(1/MinDist^2) +
                          s(I(mon_utm_x/10^3), I(mon_utm_y/10^3), bs='tp', k = 10) + 
                          te(I(mon_utm_x/10^3), I(mon_utm_y/10^3), as.numeric(day),
                             k = c(10,10), d = c(2,1), bs = c('tp','cc')) +
@@ -961,7 +962,7 @@ for (fold in seq(1, 10)) {
   train <- anti_join(excl_disaster, test, by = join_by(dist_dc, day))
   
   h2s_da_model_10cv <- gam(H2S_daily_avg ~ s(as.numeric(month),bs='cc') + year + as.character(weekday) +
-                         wd_avg + ws_avg + daily_downwind_ref + I(1/dist_wrp^2) +
+                         wd_avg + ws_avg + daily_downwind_ref + I(1/dist_wrp^2) + I(1/MinDist^2) +
                          s(I(mon_utm_x/10^3), I(mon_utm_y/10^3), bs='tp', k = 10) + 
                          te(I(mon_utm_x/10^3), I(mon_utm_y/10^3), as.numeric(day),
                             k = c(10,10), d = c(2,1), bs = c('tp','cc')) +
@@ -1017,7 +1018,7 @@ for (fold in seq(1, 10)) {
   train <- anti_join(disaster_ind, test, by = join_by(dist_dc, day))
   
   h2s_da_model_10cv <- gam(H2S_daily_avg ~ s(as.numeric(month),bs='cc') + year + as.character(weekday) +
-                         wd_avg + ws_avg + daily_downwind_ref + I(1/dist_wrp^2) +
+                         wd_avg + ws_avg + daily_downwind_ref + I(1/dist_wrp^2) + I(1/MinDist^2) +
                          s(I(mon_utm_x/10^3), I(mon_utm_y/10^3), bs='tp', k = 10) + 
                          te(I(mon_utm_x/10^3), I(mon_utm_y/10^3), as.numeric(day),
                             k = c(10,10), d = c(2,1), bs = c('tp','cc')) +
@@ -1089,7 +1090,7 @@ for (fold in seq(1, 10)) {
   train <- anti_join(everything, test, by = join_by(dist_dc, day))
   
   h2s_da_model_10cv <- gam(H2S_daily_avg ~ s(as.numeric(month),bs='cc') + year + as.character(weekday) +
-                         wd_avg + ws_avg + daily_downwind_ref + I(1/dist_wrp^2) +
+                         wd_avg + ws_avg + daily_downwind_ref + I(1/dist_wrp^2) + I(1/MinDist^2) +
                          s(I(mon_utm_x/10^3), I(mon_utm_y/10^3), bs='tp', k = 10) + 
                          te(I(mon_utm_x/10^3), I(mon_utm_y/10^3), as.numeric(day),
                             k = c(10,10), d = c(2,1), bs = c('tp','cc')) +
@@ -1203,6 +1204,7 @@ validation_result <- tibble(Model = character(),
 xgb_result <- tibble(Model = character(),
                  '10CV Train R-Sq' = numeric(),
                  '10CV Test R-Sq' = numeric(),
+                 '10CV Test RMSE' = numeric(),
                  '80/20 Train R-Sq' = numeric(),
                  '80/20 Test R-Sq' = numeric())
 
@@ -1340,8 +1342,12 @@ imp %>%
 
 # the above code predicts the test set using the final model, which is not representitive method
 # instead, we use savePredictions = 'final' to store the predictions on the test set at each fold
-test_r2 <- R2(fit.xgb_da$pred$pred, fit.xgb_da$pred$obs)
-test_rmse <- RMSE(fit.xgb_da$pred$pred, fit.xgb_da$pred$obs)
+
+# Here, we compute the R2 and RMSE for each fold and take the average
+fold_stat <- fit.xgb_da$pred %>% group_by(Resample) %>% 
+  summarise(R2 = R2(pred, obs), RMSE = RMSE(pred, obs))
+test_r2 <- mean(fold_stat$R2)
+test_rmse <- mean(fold_stat$RMSE)
 ```
 
 ```{r}
@@ -1677,8 +1683,10 @@ imp %>%
 #   r2_test_xgb_disaster <- append(r2_test_xgb_disaster, test_r2)
 # }
 
-test_r2 <- R2(fit.xgb_da_dis$pred$pred, fit.xgb_da_dis$pred$obs)
-test_rmse <- RMSE(fit.xgb_da_dis$pred$pred, fit.xgb_da_dis$pred$obs)
+test_r2 <- fold_stat <- fit.xgb_da_dis$pred %>% group_by(Resample) %>% 
+  summarise(R2 = R2(pred, obs), RMSE = RMSE(pred, obs))
+test_r2 <- mean(fold_stat$R2)
+test_rmse <- mean(fold_stat$RMSE)
 ```
 
 ```{r}
@@ -1924,9 +1932,10 @@ imp %>%
 #   pred_xgb_excl_dis <- append(pred_xgb_excl_dis, test_pred)
 #   r2_test_xgb_excl_dis <- append(r2_test_xgb_excl_dis, test_r2)
 # }
-
-test_r2 <- R2(fit.xgb_da_excl_dis$pred$pred, fit.xgb_da_excl_dis$pred$obs)
-test_rmse <- RMSE(fit.xgb_da_excl_dis$pred$pred, fit.xgb_da_excl_dis$pred$obs)
+fold_stat <- fit.xgb_da_excl_dis$pred %>% group_by(Resample) %>% 
+  summarise(R2 = R2(pred, obs), RMSE = RMSE(pred, obs))
+test_r2 <- mean(fold_stat$R2)
+test_rmse <- mean(fold_stat$RMSE)
 ```
 
 ```{r}
@@ -2058,8 +2067,11 @@ imp %>%
 test_result_data <- tibble(obs = fit.xgb_da_full_dis_ind$pred$obs, 
                            pred = fit.xgb_da_full_dis_ind$pred$pred,
                            disaster = train$disaster[fit.xgb_da_full_dis_ind$pred$rowIndex])
-test_r2 <- R2(fit.xgb_da_full_dis_ind$pred$pred, fit.xgb_da_full_dis_ind$pred$obs)
-test_rmse <- RMSE(fit.xgb_da_full_dis_ind$pred$pred, fit.xgb_da_full_dis_ind$pred$obs)
+
+fold_stat <- fit.xgb_da_full_dis_ind$pred %>% group_by(Resample) %>% 
+  summarise(R2 = R2(pred, obs), RMSE = RMSE(pred, obs))
+test_r2 <- mean(fold_stat$R2)
+test_rmse <- mean(fold_stat$RMSE)
 ```
 
 ```{r}
@@ -2207,8 +2219,11 @@ test_result_data <- tibble(obs = fit.xgb_da_full$pred$obs,
                                                 (train[fit.xgb_da_full$pred$rowIndex, ]$month_10 == 1 |
                                                  train[fit.xgb_da_full$pred$rowIndex, ]$month_11 == 1 |
                                                  train[fit.xgb_da_full$pred$rowIndex, ]$month_12 == 1), 1, 0))
-test_r2 <- R2(test_result_data$pred, test_result_data$obs)
-test_rmse <- RMSE(test_result_data$pred, test_result_data$obs)
+
+fold_stat <- fit.xgb_da_full$pred %>% group_by(Resample) %>% 
+  summarise(R2 = R2(pred, obs), RMSE = RMSE(pred, obs))
+test_r2 <- mean(fold_stat$R2)
+test_rmse <- mean(fold_stat$RMSE)
 ```
 
 ```{r}
