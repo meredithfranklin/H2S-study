@@ -379,7 +379,7 @@ for (fold in seq(1, 10)) {
                           data = train)
 
   predictions <- predict(h2s_da_model_10cv, newdata = test)
-  r2_test <- R2(test$H2S_daily_avg, predictions)
+  r2_test <- R2(test$H2S_daily_avg, exp(predictions))
   adj_r2_test <- adj_r2(r2_test, summary(h2s_da_model_10cv)$n, summary(h2s_da_model_10cv)$np)
   
   obs_10cv_sincefeb2022 <- append(obs_10cv_sincefeb2022, test %>% pull(H2S_daily_avg))
@@ -433,7 +433,7 @@ for (fold in seq(1, 10)) {
                           data = train)
 
   predictions <- predict(h2s_da_model_10cv, newdata = test)
-  r2_test <- R2(test$H2S_daily_avg, predictions)
+  r2_test <- R2(test$H2S_daily_avg, exp(predictions))
   adj_r2_test <- adj_r2(r2_test, summary(h2s_da_model_10cv)$n, summary(h2s_da_model_10cv)$np)
   
   obs_10cv_disaster <- append(obs_10cv_disaster, test %>% pull(H2S_daily_avg))
@@ -488,7 +488,7 @@ for (fold in seq(1, 10)) {
                           data = train)
 
   predictions <- predict(h2s_da_model_10cv, newdata = test)
-  r2_test <- R2(test$H2S_daily_avg, predictions)
+  r2_test <- R2(test$H2S_daily_avg, exp(predictions))
   adj_r2_test <- adj_r2(r2_test, summary(h2s_da_model_10cv)$n, summary(h2s_da_model_10cv)$np)
   
   obs_10cv_excl_dis <- append(obs_10cv_excl_dis, test %>% pull(H2S_daily_avg))
@@ -543,7 +543,7 @@ for (fold in seq(1, 10)) {
                           data = train)
 
   predictions <- predict(h2s_da_model_10cv, newdata = test)
-  r2_test <- R2(test$H2S_daily_avg, predictions)
+  r2_test <- R2(test$H2S_daily_avg, exp(predictions))
   adj_r2_test <- adj_r2(r2_test, summary(h2s_da_model_10cv)$n, summary(h2s_da_model_10cv)$np)
   
   obs_10cv_disaster_ind <- append(obs_10cv_disaster_ind, test %>% pull(H2S_daily_avg))
@@ -598,7 +598,7 @@ for (fold in seq(1, 10)) {
                           data = train)
 
   predictions <- predict(h2s_da_model_10cv, newdata = test)
-  r2_test <- R2(test$H2S_daily_avg, predictions)
+  r2_test <- R2(test$H2S_daily_avg, exp(predictions))
   adj_r2_test <- adj_r2(r2_test, summary(h2s_da_model_10cv)$n, summary(h2s_da_model_10cv)$np)
   
   obs_10cv_everything <- append(obs_10cv_everything, test %>% pull(H2S_daily_avg))
