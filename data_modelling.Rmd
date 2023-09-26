@@ -197,8 +197,8 @@ get_gam_result <- function(model_obj, model_name){
 }
 sincefeb2022_model_stat <- get_gam_result(h2s_da_model_f, 'Daily Average H2S Since Feb 2022') 
 
-sincefeb2022_model_stat <- knitr::kable(sincefeb2022_model_stat, format = 'latex', digits = 2)
-writeLines(sincefeb2022_model_stat, 'figures/sincefeb2022_model.tex')
+sincefeb2022_model_stat_latex <- knitr::kable(sincefeb2022_model_stat, format = 'latex', digits = 2)
+writeLines(sincefeb2022_model_stat_latex, 'figures/sincefeb2022_model.tex')
 
 knitr::kable(sincefeb2022_model_stat, format = 'html', digits = 2)
 ```
@@ -832,9 +832,9 @@ adj_r2_sincefeb2022 <- c()
 adj_r2_test_sincefeb2022 <- c()
 
 sincefeb2022 <- daily_full %>% 
-filter(day >= '2022-02-01') %>% 
-select(all_of(predictors)) %>% 
-filter(complete.cases(.))
+  filter(day >= '2022-02-01') %>% 
+  select(all_of(predictors)) %>% 
+  filter(complete.cases(.))
 
 set.seed(random_seeds[1])
 folds <- createFolds(seq(1, nrow(sincefeb2022)), k = 10)

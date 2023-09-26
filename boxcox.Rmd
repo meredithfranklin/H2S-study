@@ -3,9 +3,9 @@ title: "Box Cox Data Modelling"
 author: "Jerry Wu"
 date: "9/19/2023"
 output:
-  pdf_document: default
   html_document:
     df_print: paged
+  pdf_document: default
 abstract: ''
 subtitle: ''
 editor_options: 
@@ -32,13 +32,16 @@ daily_full <- readRDS('data/daily_full.rds')
 
 # Data setup
 ```{r}
+predictors <- c('H2S_daily_avg', 'month', 'year', 'weekday', 'wd_avg', 'ws_avg', 
+                'daily_downwind_ref', 'dist_wrp', 'MinDist',
+                'mon_utm_x', 'mon_utm_y', 'day', 'monthly_oil_1km', 'monthly_gas_1km', 
+                'active_1km', 'daily_downwind_wrp', 'elevation', 'EVI', 'num_odor_complaints',
+                'dist_dc', 'capacity', 'avg_temp', 'avg_hum', 'precip') 
+
 # get train data set for daily average H2S
 daily_avg_train_sincefeb2022 <- daily_full[complete.cases(daily_full),] %>% 
   filter(day >= '2022-02-01') %>%
-  select(H2S_daily_avg, month, year, weekday, MinDist,
-         wd_avg, ws_avg, daily_downwind_ref, capacity, dist_wrp, mon_utm_x, 
-         mon_utm_y, day, monthly_oil_1km, monthly_gas_1km, active_1km, daily_downwind_wrp, 
-         elevation, EVI, num_odor_complaints, dist_dc, avg_temp,  avg_hum, precip)
+  select(all_of(predictors))
 ```
 
 # Explore H2S concentration
@@ -85,8 +88,8 @@ ggplot(tibble(obs = daily_avg_train_sincefeb2022$H2S_daily_avg, pred = fitted(h2
 ### Condition 2
 ```{r}
 # Check condition 2
-pair <- ggpairs(daily_avg_train_sincefeb2022, lower=list(continuous=ggally_points, combo=ggally_box_no_facet), upper=list(continuous = "blankDiag", discrete = "blankDiag", combo = "blankDiag"), diag=list(continuous = "blankDiag", discrete = "blankDiag", combo = "blankDiag"), axisLabels="show", cardinality_threshold = 55, progress = FALSE)
-pair
+# pair <- ggpairs(daily_avg_train_sincefeb2022, lower=list(continuous=ggally_points, combo=ggally_box_no_facet), upper=list(continuous = "blankDiag", discrete = "blankDiag", combo = "blankDiag"), diag=list(continuous = "blankDiag", discrete = "blankDiag", combo = "blankDiag"), axisLabels="show", cardinality_threshold = 55, progress = FALSE)
+# pair
 ```
 
 ### Residual Plots
@@ -115,120 +118,82 @@ stats::qqnorm(rs_full, sub = "Since Feb 2022 before transformation w.o zoomed in
 stats::qqline(rs_full)
 ```
 
-# Box Cox Transformations Since Feb 2022
+# Box Cox Transformations
+## Identifying lambda
+### Since Feb 2022
 ```{r}
 # try transformations
 # On both response and predictors
-transform_all <- readRDS('rfiles/transform_all.rds')
+# transform_all <- readRDS('rfiles/transform_all.rds')
 #transform_all <- powerTransform(as.matrix(daily_avg_train_sincefeb2022 %>%
 #                                            select(-c(month, day, year, weekday))), 
 #                                family = "bcnPower")
 #saveRDS(transform_all, 'rfiles/transform_all.rds')
-summary(transform_all)
+# summary(transform_all)
 
 # On only predictors
-transform_pred <- readRDS('rfiles/transform_pred.rds')
+# transform_pred <- readRDS('rfiles/transform_pred.rds')
 # transform_pred <- powerTransform(as.matrix(daily_avg_train_sincefeb2022 %>%
-#                                              select(-c(month, day, year, weekday, 
+#                                              select(-c(month, day, year, weekday,
 #                                                        H2S_daily_avg))),
-#                                  family = "bcnPower")
+#                                 family = "bcnPower")
 # saveRDS(transform_pred, 'rfiles/transform_pred.rds')
-summary(transform_pred)
+# summary(transform_pred)
 
-# On only response
-transform_resp <- readRDS('rfiles/transform_resp.rds')
-# transform_resp <- powerTransform(as.matrix(daily_avg_train_sincefeb2022 %>%
-#                                              select(H2S_daily_avg)),
-#                                  family = "bcnPower")
-# saveRDS(transform_resp, 'rfiles/transform_resp.rds')
-summary(transform_resp)
-# This is quite similar to transforming both
+# On only response, using bcPower since this cannot be negative
+transform_resp_sincefeb2022 <- 
+  powerTransform(as.matrix(daily_avg_train_sincefeb2022 %>%
+                             select(H2S_daily_avg)),
+                                 family = "bcPower")
+summary(transform_resp_sincefeb2022)
 
-# This suggests a 0.37 power transformation
+# This suggests a log transformation
 ```
 
-## Tranformed Pred/Resp
+### Disaster Only
 ```{r}
-# Apply the suggested power transformations for transforming both predictor and outcome
-# get train data set for daily average H2S
-daily_avg_train_sincefeb2022_both_trans <- daily_avg_train_sincefeb2022 %>%
-  mutate(H2S_daily_avg = H2S_daily_avg^0.33, 
-         wd_avg = wd_avg^2.311, 
-         ws_avg = ws_avg^-1.606,
-         capacity = capacity^0.675, 
-         dist_wrp = dist_wrp^0.192,
-         MinDist = MinDist^-0.500,
-         mon_utm_x = mon_utm_x^-1.521, 
-         mon_utm_y = mon_utm_y^-0.895,
-         monthly_oil_1km = log(monthly_oil_1km),
-         monthly_gas_1km = monthly_gas_1km^-0.688,
-         active_1km = active_1km^-3,
-         elevation = elevation^-0.398,
-         EVI = EVI^-1.675,
-         num_odor_complaints = (num_odor_complaints + 1)^-3,
-         avg_temp = avg_temp^-0.5,
-         avg_hum = avg_hum^2.458,
-         precip = (precip + 1)^-3,
-         )
+transform_resp_dis_only <- 
+  powerTransform(as.matrix(daily_full %>%
+                             filter(year == '2021', month %in% c('10', '11', '12')) %>%
+                             select(H2S_daily_avg)),
+                                 family = "bcPower")
+summary(transform_resp_dis_only)
+# This is actually slightly below 0
 ```
 
+### Excluding Disaster
 ```{r}
-ggplot(daily_avg_train_sincefeb2022_both_trans, aes(x = H2S_daily_avg)) +
+transform_resp_excl_dis <- 
+  powerTransform(as.matrix(daily_full %>%
+                             filter(!(year == '2021' & month %in% c('10', '11', '12'))) %>%
+                             select(H2S_daily_avg)),
+                                 family = "bcPower")
+summary(transform_resp_excl_dis)
+
+# This is very close to 0, suggesting a log transformation
+```
+
+### Everything Since 2020
+```{r}
+transform_resp_everything <- 
+  powerTransform(as.matrix(daily_full %>%
+                             select(H2S_daily_avg)),
+                                 family = "bcPower")
+summary(transform_resp_everything)
+
+# This is slightly closer to 0 than the disaster only period
+```
+
+
+## Tranforming the models
+### Since Feb 2022
+```{r}
+ggplot(daily_avg_train_sincefeb2022, aes(x = log(H2S_daily_avg))) +
   geom_histogram(fill = "salmon", col = "white")
 ```
 
 ```{r}
-# Since feb 2022
-h2s_da_model_f_trans <- gam(H2S_daily_avg~s(as.numeric(month),bs='cc') + year + as.character(weekday) +
-                         wd_avg + ws_avg + daily_downwind_ref + capacity +
-                          dist_wrp + MinDist +
-                         s(mon_utm_x, mon_utm_y, bs='tp', k = 10) + 
-                        te(mon_utm_x, mon_utm_y, as.numeric(day),
-                           k=c(10,10),d=c(2,1),bs=c('tp','cc')) +
-                         monthly_oil_1km + monthly_gas_1km + active_1km + 
-                        daily_downwind_wrp + elevation + EVI + num_odor_complaints +
-                        dist_dc + avg_temp + avg_hum + precip, 
-                      data = daily_avg_train_sincefeb2022_both_trans)
-summary(h2s_da_model_f_trans)
-plot(h2s_da_model_f_trans)
-```
-
-## Tranformed Resp^0.37
-```{r}
-# Apply the suggested power transformations for transforming both predictor and outcome
-# get train data set for daily average H2S
-daily_avg_train_sincefeb2022_trans_resp <- daily_avg_train_sincefeb2022 %>%
-  mutate(H2S_daily_avg = H2S_daily_avg^0.37)
-```
-
-```{r}
-ggplot(daily_avg_train_sincefeb2022_trans_resp, aes(x = H2S_daily_avg)) +
-  geom_histogram(fill = "salmon", col = "white")
-```
-
-```{r}
-h2s_da_model_f_trans_resp <- gam(H2S_daily_avg~s(as.numeric(month),bs='cc') + year + as.character(weekday) +
-                         wd_avg + ws_avg + daily_downwind_ref + capacity +
-                          I(1/dist_wrp^2) + I(1/MinDist^2) +
-                         s(I(mon_utm_x/10^3), I(mon_utm_y/10^3), bs='tp', k = 10) + 
-                        te(I(mon_utm_x/10^3), I(mon_utm_y/10^3), as.numeric(day),
-                           k=c(10,10),d=c(2,1),bs=c('tp','cc')) +
-                         monthly_oil_1km + monthly_gas_1km + active_1km + 
-                        daily_downwind_wrp + elevation + EVI + num_odor_complaints +
-                        I(1/dist_dc^2) + avg_temp + avg_hum + precip, 
-                      data = daily_avg_train_sincefeb2022_trans_resp)
-summary(h2s_da_model_f_trans_resp)
-plot(h2s_da_model_f_trans_resp)
-```
-
-## Tranformed log-Resp
-```{r}
-ggplot(daily_avg_train_sincefeb2022, aes(x = log(H2S_daily_avg+0.1))) +
-  geom_histogram(fill = "salmon", col = "white")
-```
-
-```{r}
-h2s_da_model_f_logresp <- gam(I(log(H2S_daily_avg + 0.1))~s(as.numeric(month),bs='cc') + year + as.character(weekday) +
+logh2s_da_sincefeb2022 <- gam(I(log(H2S_daily_avg))~s(as.numeric(month),bs='cc') + year + as.character(weekday) +
                          wd_avg + ws_avg + daily_downwind_ref + capacity +
                           I(1/dist_wrp^2) + I(1/MinDist^2) +
                          s(I(mon_utm_x/10^3), I(mon_utm_y/10^3), bs='tp', k = 10) + 
@@ -238,28 +203,29 @@ h2s_da_model_f_logresp <- gam(I(log(H2S_daily_avg + 0.1))~s(as.numeric(month),bs
                         daily_downwind_wrp + elevation + EVI + num_odor_complaints +
                         I(1/dist_dc^2) + avg_temp + avg_hum + precip, 
                       data = daily_avg_train_sincefeb2022)
-summary(h2s_da_model_f_logresp)
-plot(h2s_da_model_f_logresp)
+summary(logh2s_da_sincefeb2022)
+plot(logh2s_da_sincefeb2022)
 ```
 
-### Condition 1
+#### Condition 1
 ```{r}
 # Check Condition 1
-ggplot(tibble(obs = log(daily_avg_train_sincefeb2022$H2S_daily_avg + 0.1), pred = fitted(h2s_da_model_f_logresp)),
+ggplot(tibble(obs = log(daily_avg_train_sincefeb2022$H2S_daily_avg), pred = fitted(logh2s_da_sincefeb2022)),
                              aes(x = pred, y = obs)) +
                         geom_point() +
                         stat_poly_line() +
                         stat_poly_eq(use_label(c("eq", "R2", "n"))) +
                         labs(y = 'Observed', x = 'Predicted', 
-                             title = 'Observed vs Predicted with log(x+0.1) transformation') +
+                             title = 'Obs vs Pred with log(H2S) transformation',
+                             subtitle = 'Since Feb 2022') +
                         theme_bw()
 ```
 
-### Residual Plots
+#### Residual Plots
 ```{r}
 # Residual plots
-rs_full <- h2s_da_model_f_logresp$residuals
-plot(rs_full~fitted(h2s_da_model_f_logresp), xlab="Fitted", ylab="Residuals")
+rs_full <- logh2s_da_sincefeb2022$residuals
+plot(rs_full~fitted(logh2s_da_sincefeb2022), xlab="Fitted", ylab="Residuals")
 ```
 
 
@@ -267,6 +233,103 @@ plot(rs_full~fitted(h2s_da_model_f_logresp), xlab="Fitted", ylab="Residuals")
 # Normal Q-Q Plot
 stats::qqnorm(rs_full, sub = "Since Feb 2022 after log transformation")
 stats::qqline(rs_full)
+```
+### Disaster Only
+```{r}
+disaster <- daily_full %>% 
+  filter(year == '2021', month %in% c('10', '11', '12')) %>% 
+  select(all_of(predictors)) %>% 
+  filter(complete.cases(.))
+```
+
+```{r}
+ggplot(disaster, 
+       aes(x = log(H2S_daily_avg))) +
+  geom_histogram(fill = "salmon", col = "white")
+```
+
+```{r}
+logh2s_da_dis <- gam(I(log(H2S_daily_avg))~month + as.character(weekday) +
+                         wd_avg + ws_avg + daily_downwind_ref + I(1/dist_wrp^2) + I(1/MinDist^2) +
+                         s(I(mon_utm_x/10^3), I(mon_utm_y/10^3), bs='tp', k = 10) + 
+                         te(I(mon_utm_x/10^3), I(mon_utm_y/10^3), as.numeric(day),
+                            k = c(10,10), d = c(2,1), bs = c('tp','cc')) +
+                         monthly_oil_1km + monthly_gas_1km + active_1km + 
+                         daily_downwind_wrp + elevation + EVI + num_odor_complaints +
+                         capacity + dist_dc + avg_temp + avg_hum + precip, 
+                      data = disaster)
+summary(logh2s_da_dis)
+plot(logh2s_da_dis)
+```
+
+### Exclude Disaster
+```{r}
+excl_disaster <- daily_full %>% 
+  filter(!(year == '2021' & month %in% c('10', '11', '12'))) %>% 
+  select(all_of(predictors)) %>% 
+  filter(complete.cases(.))
+```
+
+```{r}
+ggplot(excl_disaster, 
+       aes(x = log(H2S_daily_avg))) +
+  geom_histogram(fill = "salmon", col = "white")
+```
+
+```{r}
+logh2s_da_excl_dis <- gam(I(log(H2S_daily_avg))~s(as.numeric(month),bs='cc') + year + as.character(weekday) +
+                         wd_avg + ws_avg + daily_downwind_ref + I(1/dist_wrp^2) + I(1/MinDist^2) +
+                         s(I(mon_utm_x/10^3), I(mon_utm_y/10^3), bs='tp', k = 10) + 
+                         te(I(mon_utm_x/10^3), I(mon_utm_y/10^3), as.numeric(day),
+                            k = c(10,10), d = c(2,1), bs = c('tp','cc')) +
+                         monthly_oil_1km + monthly_gas_1km + active_1km + 
+                         daily_downwind_wrp + elevation + EVI + num_odor_complaints +
+                         capacity + dist_dc + avg_temp + avg_hum + precip, 
+                      data = excl_disaster)
+summary(logh2s_da_excl_dis)
+plot(logh2s_da_excl_dis)
+```
+
+### Everything w. Disaster Indicator
+```{r}
+everything <- daily_full %>% 
+  select(all_of(predictors)) %>% 
+  mutate(disaster = if_else(year == '2021' & month %in% c('10', '11', '12'), 1, 0)) %>% 
+  filter(complete.cases(.)) 
+```
+
+```{r}
+ggplot(everything, aes(x = log(H2S_daily_avg))) +
+  geom_histogram(fill = "salmon", col = "white")
+```
+
+```{r}
+logh2s_da_full_dis_ind <- gam(I(log(H2S_daily_avg))~s(as.numeric(month),bs='cc') + year + as.character(weekday) +
+                         wd_avg + ws_avg + daily_downwind_ref + I(1/dist_wrp^2) + I(1/MinDist^2) +
+                         s(I(mon_utm_x/10^3), I(mon_utm_y/10^3), bs='tp', k = 10) + 
+                         te(I(mon_utm_x/10^3), I(mon_utm_y/10^3), as.numeric(day),
+                            k = c(10,10), d = c(2,1), bs = c('tp','cc')) +
+                         monthly_oil_1km + monthly_gas_1km + active_1km + 
+                         daily_downwind_wrp + elevation + EVI + num_odor_complaints +
+                         capacity + dist_dc + avg_temp + avg_hum + precip + disaster, 
+                      data = everything)
+summary(logh2s_da_full_dis_ind)
+plot(logh2s_da_full_dis_ind)
+```
+
+### Everything w.o Disaster Indicator
+```{r}
+logh2s_da_full <- gam(I(log(H2S_daily_avg))~s(as.numeric(month),bs='cc') + year + as.character(weekday) +
+                         wd_avg + ws_avg + daily_downwind_ref + I(1/dist_wrp^2) + I(1/MinDist^2) +
+                         s(I(mon_utm_x/10^3), I(mon_utm_y/10^3), bs='tp', k = 10) + 
+                         te(I(mon_utm_x/10^3), I(mon_utm_y/10^3), as.numeric(day),
+                            k = c(10,10), d = c(2,1), bs = c('tp','cc')) +
+                         monthly_oil_1km + monthly_gas_1km + active_1km + 
+                         daily_downwind_wrp + elevation + EVI + num_odor_complaints +
+                         capacity + dist_dc + avg_temp + avg_hum + precip, 
+                      data = everything)
+summary(logh2s_da_full)
+plot(logh2s_da_full)
 ```
 
 # 10-fold CV
@@ -278,7 +341,7 @@ adj_r2 <- function(r2, n, p){
 
 ```{r}
 set.seed(1)
-random_seeds <- floor(runif(3, min=0, max=1)*100)
+random_seeds <- floor(runif(5, min=0, max=1)*100)
 ```
 
 ```{r}
@@ -291,11 +354,11 @@ validation_result_10cv <- tibble(Model = character(),
                             'Coef' = numeric(),
                             'R-Sq' = numeric())
 
-# model 1: Log H2S
-obs_10cv_log_trans <- c()
-pred_10cv_log_trans <- c()
-adj_r2_log_trans <- c()
-adj_r2_test_log_trans <- c()
+# model 1: Since Feb 2022
+obs_10cv_sincefeb2022 <- c()
+pred_10cv_sincefeb2022 <- c()
+adj_r2_sincefeb2022 <- c()
+adj_r2_test_sincefeb2022 <- c()
 
 set.seed(random_seeds[1])
 folds <- createFolds(seq(1, nrow(daily_avg_train_sincefeb2022)), k = 10)
@@ -304,7 +367,7 @@ for (fold in seq(1, 10)) {
   test <- daily_avg_train_sincefeb2022[folds[[fold]], ]
   train <- anti_join(daily_avg_train_sincefeb2022, test, by = join_by(dist_dc, day))
   
-  h2s_da_model_10cv <- gam(I(log(H2S_daily_avg + 0.1))~s(as.numeric(month),bs='cc') + year + as.character(weekday) +
+  h2s_da_model_10cv <- gam(I(log(H2S_daily_avg))~s(as.numeric(month),bs='cc') + year + as.character(weekday) +
                          wd_avg + ws_avg + daily_downwind_ref + capacity +
                           I(1/dist_wrp^2) + I(1/MinDist^2) +
                          s(I(mon_utm_x/10^3), I(mon_utm_y/10^3), bs='tp', k = 10) + 
@@ -319,18 +382,18 @@ for (fold in seq(1, 10)) {
   r2_test <- R2(test$H2S_daily_avg, predictions)
   adj_r2_test <- adj_r2(r2_test, summary(h2s_da_model_10cv)$n, summary(h2s_da_model_10cv)$np)
   
-  obs_10cv_log_trans <- append(obs_10cv_log_trans, test %>% pull(H2S_daily_avg))
-  pred_10cv_log_trans <- append(pred_10cv_log_trans, predictions)
-  adj_r2_log_trans <- append(adj_r2_log_trans, summary(h2s_da_model_10cv)$r.sq)
-  adj_r2_test_log_trans <- append(adj_r2_test_log_trans, adj_r2_test)
+  obs_10cv_sincefeb2022 <- append(obs_10cv_sincefeb2022, test %>% pull(H2S_daily_avg))
+  pred_10cv_sincefeb2022 <- append(pred_10cv_sincefeb2022, predictions)
+  adj_r2_sincefeb2022 <- append(adj_r2_sincefeb2022, summary(h2s_da_model_10cv)$r.sq)
+  adj_r2_test_sincefeb2022 <- append(adj_r2_test_sincefeb2022, adj_r2_test)
 }
 
 result_10cv <- rbind(result_10cv, tibble(Model = 'Since Feb 2022 Log Transform',
-                               '10CV AVG Train R-Sq' = mean(adj_r2_log_trans),
-                               '10CV AVG Test R-Sq' = mean(adj_r2_test_log_trans),
-                               'Test RMSE' = RMSE(pred_10cv_log_trans, obs_10cv_log_trans)))
+                               '10CV AVG Train R-Sq' = mean(adj_r2_sincefeb2022),
+                               '10CV AVG Test R-Sq' = mean(adj_r2_test_sincefeb2022),
+                               'Test RMSE' = RMSE(pred_10cv_sincefeb2022, obs_10cv_sincefeb2022)))
 
-log_h2s_10cv_obs_vs_pred_plot <- ggplot(tibble(obs = obs_10cv_log_trans, pred = pred_10cv_log_trans),
+logh2s_10cv_ovp_plot_sincefeb2022 <- ggplot(tibble(obs = obs_10cv_sincefeb2022, pred = exp(pred_10cv_sincefeb2022)),
                              aes(x = pred, y = obs)) +
                         geom_point() +
                         stat_poly_line() +
@@ -341,80 +404,79 @@ log_h2s_10cv_obs_vs_pred_plot <- ggplot(tibble(obs = obs_10cv_log_trans, pred = 
 
 validation_result_10cv <- rbind(validation_result_10cv, 
                            tibble(Model = 'Since Feb 2022 Log Transform',
-                                  'Coef' = summary(lm(obs_10cv_log_trans ~
-                                                        pred_10cv_log_trans))$coefficients[2, 1], 
-                                  'R-Sq' = summary(lm(obs_10cv_log_trans ~
-                                                        pred_10cv_log_trans))$r.squared))
+                                  'Coef' = summary(lm(obs_10cv_sincefeb2022 ~
+                                                        pred_10cv_sincefeb2022))$coefficients[2, 1], 
+                                  'R-Sq' = summary(lm(obs_10cv_sincefeb2022 ~
+                                                        pred_10cv_sincefeb2022))$r.squared))
 
-# model 2: Transform Pred and Resp
-obs_10cv_both_trans <- c()
-pred_10cv_both_trans <- c()
-adj_r2_both_trans <- c()
-adj_r2_test_both_trans <- c()
+# model 2: Disaster Only
+obs_10cv_disaster <- c()
+pred_10cv_disaster <- c()
+adj_r2_disaster <- c()
+adj_r2_test_disaster <- c()
 
 set.seed(random_seeds[2])
-folds <- createFolds(seq(1, nrow(daily_avg_train_sincefeb2022_both_trans)), k = 10)
+folds <- createFolds(seq(1, nrow(disaster)), k = 10)
   
 for (fold in seq(1, 10)) {
-  test <- daily_avg_train_sincefeb2022_both_trans[folds[[fold]], ]
-  train <- anti_join(daily_avg_train_sincefeb2022_both_trans, test, by = join_by(dist_dc, day))
+  test <- disaster[folds[[fold]], ]
+  train <- anti_join(disaster, test, by = join_by(dist_dc, day))
   
-  h2s_da_model_10cv <- gam(H2S_daily_avg~s(as.numeric(month),bs='cc') + year + as.character(weekday) +
-                         wd_avg + ws_avg + daily_downwind_ref + capacity +
-                          dist_wrp + MinDist + 
-                         s(mon_utm_x, mon_utm_y, bs='tp', k = 10) + 
-                        te(mon_utm_x, mon_utm_y, as.numeric(day),
-                           k=c(10,10),d=c(2,1),bs=c('tp','cc')) +
+  h2s_da_model_10cv <- gam(I(log(H2S_daily_avg)) ~ month + as.character(weekday) +
+                         wd_avg + ws_avg + daily_downwind_ref + I(1/dist_wrp^2) + I(1/MinDist^2) +
+                         s(I(mon_utm_x/10^3), I(mon_utm_y/10^3), bs='tp', k = 10) + 
+                         te(I(mon_utm_x/10^3), I(mon_utm_y/10^3), as.numeric(day),
+                            k = c(10,10), d = c(2,1), bs = c('tp','cc')) +
                          monthly_oil_1km + monthly_gas_1km + active_1km + 
-                        daily_downwind_wrp + elevation + EVI + num_odor_complaints +
-                        dist_dc + avg_temp + avg_hum + precip, 
-                      data = daily_avg_train_sincefeb2022_both_trans)
+                         daily_downwind_wrp + elevation + EVI + num_odor_complaints +
+                         capacity + dist_dc + avg_temp + avg_hum + precip, 
+                          data = train)
 
   predictions <- predict(h2s_da_model_10cv, newdata = test)
   r2_test <- R2(test$H2S_daily_avg, predictions)
   adj_r2_test <- adj_r2(r2_test, summary(h2s_da_model_10cv)$n, summary(h2s_da_model_10cv)$np)
   
-  obs_10cv_both_trans <- append(obs_10cv_both_trans, test %>% pull(H2S_daily_avg))
-  pred_10cv_both_trans <- append(pred_10cv_both_trans, predictions)
-  adj_r2_both_trans <- append(adj_r2_both_trans, summary(h2s_da_model_10cv)$r.sq)
-  adj_r2_test_both_trans <- append(adj_r2_test_both_trans, adj_r2_test)
+  obs_10cv_disaster <- append(obs_10cv_disaster, test %>% pull(H2S_daily_avg))
+  pred_10cv_disaster <- append(pred_10cv_disaster, predictions)
+  adj_r2_disaster <- append(adj_r2_disaster, summary(h2s_da_model_10cv)$r.sq)
+  adj_r2_test_disaster <- append(adj_r2_test_disaster, adj_r2_test)
 }
 
-result_10cv <- rbind(result_10cv, tibble(Model = 'Since Feb 2022 Both Transform',
-                               '10CV AVG Train R-Sq' = mean(adj_r2_both_trans),
-                               '10CV AVG Test R-Sq' = mean(adj_r2_test_both_trans),
-                               'Test RMSE' = RMSE(pred_10cv_both_trans, obs_10cv_both_trans)))
+result_10cv <- rbind(result_10cv, tibble(Model = 'Disaster Only Log Transform',
+                               '10CV AVG Train R-Sq' = mean(adj_r2_disaster),
+                               '10CV AVG Test R-Sq' = mean(adj_r2_test_disaster),
+                               'Test RMSE' = RMSE(pred_10cv_disaster, obs_10cv_disaster)))
 
-both_trans_10cv_obs_vs_pred_plot <- ggplot(tibble(obs = obs_10cv_both_trans, pred = pred_10cv_both_trans),
+logh2s_10cv_ovp_plot_dis_only <- ggplot(tibble(obs = obs_10cv_disaster, pred = exp(pred_10cv_disaster)),
                              aes(x = pred, y = obs)) +
                         geom_point() +
                         stat_poly_line() +
                         stat_poly_eq(use_label(c("eq", "R2", "n"))) +
                         labs(y = 'Observed', x = 'Predicted', 
-                             title = 'Observed vs Predicted for Since 2022 GAM 10CV both transform') +
+                             title = 'Observed vs Predicted for Disaster GAM 10CV Log H2S') +
                         theme_bw()
 
 validation_result_10cv <- rbind(validation_result_10cv, 
-                           tibble(Model = 'Since Feb 2022 Both Transform',
-                                  'Coef' = summary(lm(obs_10cv_both_trans ~
-                                                        pred_10cv_both_trans))$coefficients[2, 1], 
-                                  'R-Sq' = summary(lm(obs_10cv_both_trans ~
-                                                        pred_10cv_both_trans))$r.squared))
+                           tibble(Model = 'Disaster Only Log Transform',
+                                  'Coef' = summary(lm(obs_10cv_disaster ~
+                                                        pred_10cv_disaster))$coefficients[2, 1], 
+                                  'R-Sq' = summary(lm(obs_10cv_disaster ~
+                                                        pred_10cv_disaster))$r.squared))
 
-# model 3: Transform response according to boxcox
-obs_10cv_resp_trans <- c()
-pred_10cv_resp_trans <- c()
-adj_r2_resp_trans <- c()
-adj_r2_test_resp_trans <- c()
+# model 3: Exclude Disaster
+obs_10cv_excl_dis <- c()
+pred_10cv_excl_dis <- c()
+adj_r2_excl_dis <- c()
+adj_r2_test_excl_dis <- c()
 
 set.seed(random_seeds[3])
-folds <- createFolds(seq(1, nrow(daily_avg_train_sincefeb2022_trans_resp)), k = 10)
+folds <- createFolds(seq(1, nrow(excl_disaster)), k = 10)
   
 for (fold in seq(1, 10)) {
-  test <- daily_avg_train_sincefeb2022_trans_resp[folds[[fold]], ]
-  train <- anti_join(daily_avg_train_sincefeb2022_trans_resp, test, by = join_by(dist_dc, day))
+  test <- excl_disaster[folds[[fold]], ]
+  train <- anti_join(excl_disaster, test, by = join_by(dist_dc, day))
   
-  h2s_da_model_10cv <- gam(H2S_daily_avg~s(as.numeric(month),bs='cc') + year + as.character(weekday) +
+  h2s_da_model_10cv <- gam(I(log(H2S_daily_avg))~s(as.numeric(month),bs='cc') + year + as.character(weekday) +
                          wd_avg + ws_avg + daily_downwind_ref + capacity +
                           I(1/dist_wrp^2) + I(1/MinDist^2) +
                          s(I(mon_utm_x/10^3), I(mon_utm_y/10^3), bs='tp', k = 10) + 
@@ -423,66 +485,180 @@ for (fold in seq(1, 10)) {
                          monthly_oil_1km + monthly_gas_1km + active_1km + 
                         daily_downwind_wrp + elevation + EVI + num_odor_complaints +
                         I(1/dist_dc^2) + avg_temp + avg_hum + precip, 
-                      data = daily_avg_train_sincefeb2022_trans_resp)
+                          data = train)
 
   predictions <- predict(h2s_da_model_10cv, newdata = test)
   r2_test <- R2(test$H2S_daily_avg, predictions)
   adj_r2_test <- adj_r2(r2_test, summary(h2s_da_model_10cv)$n, summary(h2s_da_model_10cv)$np)
   
-  obs_10cv_resp_trans <- append(obs_10cv_resp_trans, test %>% pull(H2S_daily_avg))
-  pred_10cv_resp_trans <- append(pred_10cv_resp_trans, predictions)
-  adj_r2_resp_trans <- append(adj_r2_resp_trans, summary(h2s_da_model_10cv)$r.sq)
-  adj_r2_test_resp_trans <- append(adj_r2_test_resp_trans, adj_r2_test)
+  obs_10cv_excl_dis <- append(obs_10cv_excl_dis, test %>% pull(H2S_daily_avg))
+  pred_10cv_excl_dis <- append(pred_10cv_excl_dis, predictions)
+  adj_r2_excl_dis <- append(adj_r2_excl_dis, summary(h2s_da_model_10cv)$r.sq)
+  adj_r2_test_excl_dis <- append(adj_r2_test_excl_dis, adj_r2_test)
 }
 
-result_10cv <- rbind(result_10cv, tibble(Model = 'Since Feb 2022 Resp Transform',
-                               '10CV AVG Train R-Sq' = mean(adj_r2_resp_trans),
-                               '10CV AVG Test R-Sq' = mean(adj_r2_test_resp_trans),
-                               'Test RMSE' = RMSE(pred_10cv_resp_trans, obs_10cv_resp_trans)))
+result_10cv <- rbind(result_10cv, tibble(Model = 'Exclude Disaster Log Transform',
+                               '10CV AVG Train R-Sq' = mean(adj_r2_excl_dis),
+                               '10CV AVG Test R-Sq' = mean(adj_r2_test_excl_dis),
+                               'Test RMSE' = RMSE(pred_10cv_excl_dis, obs_10cv_excl_dis)))
 
-resp_trans_10cv_obs_vs_pred_plot <- ggplot(tibble(obs = obs_10cv_resp_trans, pred = pred_10cv_resp_trans),
+logh2s_10cv_ovp_plot_excl_dis <- ggplot(tibble(obs = obs_10cv_excl_dis, pred = exp(pred_10cv_excl_dis)),
                              aes(x = pred, y = obs)) +
                         geom_point() +
                         stat_poly_line() +
                         stat_poly_eq(use_label(c("eq", "R2", "n"))) +
                         labs(y = 'Observed', x = 'Predicted', 
-                             title = 'Observed vs Predicted for Since 2022 GAM 10CV resp H2S') +
+                             title = 'Observed vs Predicted for Excl Dis GAM 10CV Log H2S') +
                         theme_bw()
 
 validation_result_10cv <- rbind(validation_result_10cv, 
-                           tibble(Model = 'Since Feb 2022 Resp Transform',
-                                  'Coef' = summary(lm(obs_10cv_resp_trans ~
-                                                        pred_10cv_resp_trans))$coefficients[2, 1], 
-                                  'R-Sq' = summary(lm(obs_10cv_resp_trans ~
-                                                        pred_10cv_resp_trans))$r.squared))
+                           tibble(Model = 'Exclude Disaster Log Transform',
+                                  'Coef' = summary(lm(obs_10cv_excl_dis ~
+                                                        pred_10cv_excl_dis))$coefficients[2, 1], 
+                                  'R-Sq' = summary(lm(obs_10cv_excl_dis ~
+                                                        pred_10cv_excl_dis))$r.squared))
+
+# model 4: Everything w. Disaster Indicator
+obs_10cv_disaster_ind <- c()
+pred_10cv_disaster_ind <- c()
+adj_r2_disaster_ind <- c()
+adj_r2_test_disaster_ind <- c()
+
+set.seed(random_seeds[4])
+folds <- createFolds(seq(1, nrow(everything)), k = 10)
+  
+for (fold in seq(1, 10)) {
+  test <- everything[folds[[fold]], ]
+  train <- anti_join(everything, test, by = join_by(dist_dc, day))
+  
+  h2s_da_model_10cv <- gam(I(log(H2S_daily_avg))~s(as.numeric(month),bs='cc') + year + as.character(weekday) +
+                         wd_avg + ws_avg + daily_downwind_ref + capacity +
+                          I(1/dist_wrp^2) + I(1/MinDist^2) +
+                         s(I(mon_utm_x/10^3), I(mon_utm_y/10^3), bs='tp', k = 10) + 
+                        te(I(mon_utm_x/10^3), I(mon_utm_y/10^3), as.numeric(day),
+                           k=c(10,10),d=c(2,1),bs=c('tp','cc')) +
+                         monthly_oil_1km + monthly_gas_1km + active_1km + 
+                        daily_downwind_wrp + elevation + EVI + num_odor_complaints +
+                        I(1/dist_dc^2) + avg_temp + avg_hum + precip + disaster, 
+                          data = train)
+
+  predictions <- predict(h2s_da_model_10cv, newdata = test)
+  r2_test <- R2(test$H2S_daily_avg, predictions)
+  adj_r2_test <- adj_r2(r2_test, summary(h2s_da_model_10cv)$n, summary(h2s_da_model_10cv)$np)
+  
+  obs_10cv_disaster_ind <- append(obs_10cv_disaster_ind, test %>% pull(H2S_daily_avg))
+  pred_10cv_disaster_ind <- append(pred_10cv_disaster_ind, predictions)
+  adj_r2_disaster_ind <- append(adj_r2_disaster_ind, summary(h2s_da_model_10cv)$r.sq)
+  adj_r2_test_disaster_ind <- append(adj_r2_test_disaster_ind, adj_r2_test)
+}
+
+result_10cv <- rbind(result_10cv, tibble(Model = 'Everything w. Disaster Indicator Log Transform',
+                               '10CV AVG Train R-Sq' = mean(adj_r2_disaster_ind),
+                               '10CV AVG Test R-Sq' = mean(adj_r2_test_disaster_ind),
+                               'Test RMSE' = RMSE(pred_10cv_disaster_ind, obs_10cv_disaster_ind)))
+
+logh2s_10cv_ovp_plot_dis_ind <- ggplot(tibble(obs = obs_10cv_disaster_ind, pred = exp(pred_10cv_disaster_ind)),
+                             aes(x = pred, y = obs)) +
+                        geom_point() +
+                        stat_poly_line() +
+                        stat_poly_eq(use_label(c("eq", "R2", "n"))) +
+                        labs(y = 'Observed', x = 'Predicted', 
+                             title = 'Everything w. Disaster Indicator') +
+                        theme_bw()
+
+validation_result_10cv <- rbind(validation_result_10cv, 
+                           tibble(Model = 'Everything w. Disaster Indicator Log Transform',
+                                  'Coef' = summary(lm(obs_10cv_disaster_ind ~
+                                                        pred_10cv_disaster_ind))$coefficients[2, 1], 
+                                  'R-Sq' = summary(lm(obs_10cv_disaster_ind ~
+                                                        pred_10cv_disaster_ind))$r.squared))
+
+# model 5: Everything w.o Disaster Indicator
+obs_10cv_everything <- c()
+pred_10cv_everything <- c()
+adj_r2_everything <- c()
+adj_r2_test_everything <- c()
+
+set.seed(random_seeds[5])
+folds <- createFolds(seq(1, nrow(everything)), k = 10)
+  
+for (fold in seq(1, 10)) {
+  test <- everything[folds[[fold]], ]
+  train <- anti_join(everything, test, by = join_by(dist_dc, day))
+  
+  h2s_da_model_10cv <- gam(I(log(H2S_daily_avg))~s(as.numeric(month),bs='cc') + year + as.character(weekday) +
+                         wd_avg + ws_avg + daily_downwind_ref + capacity +
+                          I(1/dist_wrp^2) + I(1/MinDist^2) +
+                         s(I(mon_utm_x/10^3), I(mon_utm_y/10^3), bs='tp', k = 10) + 
+                        te(I(mon_utm_x/10^3), I(mon_utm_y/10^3), as.numeric(day),
+                           k=c(10,10),d=c(2,1),bs=c('tp','cc')) +
+                         monthly_oil_1km + monthly_gas_1km + active_1km + 
+                        daily_downwind_wrp + elevation + EVI + num_odor_complaints +
+                        I(1/dist_dc^2) + avg_temp + avg_hum + precip, 
+                          data = train)
+
+  predictions <- predict(h2s_da_model_10cv, newdata = test)
+  r2_test <- R2(test$H2S_daily_avg, predictions)
+  adj_r2_test <- adj_r2(r2_test, summary(h2s_da_model_10cv)$n, summary(h2s_da_model_10cv)$np)
+  
+  obs_10cv_everything <- append(obs_10cv_everything, test %>% pull(H2S_daily_avg))
+  pred_10cv_everything <- append(pred_10cv_everything, predictions)
+  adj_r2_everything <- append(adj_r2_everything, summary(h2s_da_model_10cv)$r.sq)
+  adj_r2_test_everything <- append(adj_r2_test_everything, adj_r2_test)
+}
+
+result_10cv <- rbind(result_10cv, tibble(Model = 'Everything w.o Disaster Indicator Log Transform',
+                               '10CV AVG Train R-Sq' = mean(adj_r2_everything),
+                               '10CV AVG Test R-Sq' = mean(adj_r2_test_everything),
+                               'Test RMSE' = RMSE(pred_10cv_everything, obs_10cv_everything)))
+
+logh2s_10cv_ovp_plot_full <- ggplot(tibble(obs = obs_10cv_everything, pred = exp(pred_10cv_everything)),
+                             aes(x = pred, y = obs)) +
+                        geom_point() +
+                        stat_poly_line() +
+                        stat_poly_eq(use_label(c("eq", "R2", "n"))) +
+                        labs(y = 'Observed', x = 'Predicted', 
+                             title = 'Everything w.o Disaster Indicator') +
+                        theme_bw()
+
+validation_result_10cv <- rbind(validation_result_10cv, 
+                           tibble(Model = 'SEverything w.o Disaster Indicator Log Transform',
+                                  'Coef' = summary(lm(obs_10cv_everything ~
+                                                        pred_10cv_everything))$coefficients[2, 1], 
+                                  'R-Sq' = summary(lm(obs_10cv_everything ~
+                                                        pred_10cv_everything))$r.squared))
 
 validation_result_10cv
 ```
 
-
-# XGBoost: H2S^0.37
+# XGBoost: log(H2S)
+## Since Feb 2022
 ```{r}
 validation_result <- tibble(Model = character(),
                             'Coef' = character(),
-                            'R-Sq' = numeric())
+                            'R-Sq' = numeric(),
+                            'Disaster RMSE' = numeric(),
+                            'Normal RMSE' = numeric())
 
 xgb_result <- tibble(Model = character(),
-                 '10CV Train R-Sq' = numeric(),
-                 '10CV Test R-Sq' = numeric(),
-                 '10CV Test RMSE' = numeric())
+                 'XGB R-Sq' = numeric(),
+                 'XGB BT R-Sq' = numeric(),
+                 'XGB RMSE' = numeric(),
+                 'XGB BT RMSE' = numeric()
+                 )
 
-daily_avg_train_sincefeb2022_trans_resp <- daily_avg_train_sincefeb2022_trans_resp %>%
+train <- daily_avg_train_sincefeb2022 %>% 
   mutate(daily_downwind_ref = as.integer(daily_downwind_ref),
-         daily_downwind_wrp = as.integer(daily_downwind_wrp))
+         daily_downwind_wrp = as.integer(daily_downwind_wrp)) %>%
+  mutate(H2S_daily_avg = log(H2S_daily_avg))
 
-train <- fastDummies::dummy_cols(daily_avg_train_sincefeb2022_trans_resp %>%
+train <- fastDummies::dummy_cols(train %>%
                    select(-c(day)) %>%
                    mutate(MinDist = 1/(MinDist^2),
                           dist_wrp = 1/(dist_wrp^2),
                           weekday = as.character(weekday)),
                    remove_selected_columns = TRUE)
 
-# Try for a continuous month
 tune_grid <- expand.grid(nrounds = c(100, 200, 500),
                          max_depth = c(3, 4, 5),
                          eta = c(0.1, 0.3),
@@ -498,22 +674,22 @@ control <- trainControl(method="cv",
                         search='grid',
                         savePredictions = 'final')
 
-fit.xgb_da_resp_trans <- readRDS('rfiles/fit.xgb_da_resp_trans.rds')
-# fit.xgb_da_resp_trans <- train(H2S_daily_avg~.,
+fit.xgb_da_log_h2s_sincefeb2022 <- readRDS('rfiles/fit.xgb_da_log_h2s_sincefeb2022.rds')
+# fit.xgb_da_log_h2s_sincefeb2022 <- train(H2S_daily_avg~.,
 #                  method = 'xgbTree',
 #                  data = train,
 #                  trControl=control,
 #                  tuneGrid = tune_grid,
 #                  tuneLength = 10, importance=TRUE, verbosity = 0, verbose=FALSE)
-# saveRDS(fit.xgb_da_resp_trans, 'rfiles/fit.xgb_da_resp_trans.rds')
+# saveRDS(fit.xgb_da_log_h2s_sincefeb2022, 'rfiles/fit.xgb_da_log_h2s_sincefeb2022.rds')
 ```
 
 ```{r}
-getTrainPerf(fit.xgb_da_resp_trans)
+getTrainPerf(fit.xgb_da_log_h2s_sincefeb2022)
 ```
 
 ```{r}
-fit.xgb_da_resp_trans$finalModel
+fit.xgb_da_log_h2s_sincefeb2022$finalModel
 ```
 
 ```{r}
@@ -558,7 +734,7 @@ names <- c("Longitude" = "mon_utm_x", "Latitude" = "mon_utm_y",
         "Saturday" = "weekday_Sat",
         "Sunday" = "weekday_Sun")
 
-imp<-varImp(fit.xgb_da_resp_trans,scale=FALSE)
+imp<-varImp(fit.xgb_da_log_h2s_sincefeb2022,scale=FALSE)
 
 # rename variables
 imp <- tibble(variable = rownames(imp$importance), importance = imp$importance$Overall) %>%
@@ -581,136 +757,22 @@ imp %>%
 ### Fold Performance
 ```{r}
 # Here, we compute the R2 and RMSE for each fold and take the average
-fold_stat <- fit.xgb_da_resp_trans$pred %>% group_by(Resample) %>% 
-  summarise(R2 = R2(pred, obs), RMSE = RMSE(pred, obs))
+fold_stat <- fit.xgb_da_log_h2s_sincefeb2022$pred %>% group_by(Resample) %>% 
+  summarise(R2 = R2(pred, obs), RMSE = RMSE(pred, obs),
+            R2_BT = R2(exp(pred), exp(obs)), RMSE_BT = RMSE(exp(pred), exp(obs)))
 test_r2 <- mean(fold_stat$R2)
+test_r2_bt <- mean(fold_stat$R2_BT)
 test_rmse <- mean(fold_stat$RMSE)
+test_rmse_bt <- mean(fold_stat$RMSE_BT)
 ```
 
 ```{r}
-resp_trans_xgb_sincefeb2022_obs_vs_pred_plot <- ggplot(tibble(obs = fit.xgb_da_resp_trans$pred$obs, 
-                                                              pred = fit.xgb_da_resp_trans$pred$pred),
+log_h2s_xgb_sincefeb2022_obs_vs_pred_plot <- ggplot(tibble(obs = exp(fit.xgb_da_log_h2s_sincefeb2022$pred$obs), 
+                                                              pred = exp(fit.xgb_da_log_h2s_sincefeb2022$pred$pred)),
                              aes(x = pred, y = obs)) +
                         geom_point() +
                         labs(y = 'Observed', x = 'Predicted', 
-                             title = 'Observed vs Predicted for Since 2022 XGBoost Resp Transform') +
-                        stat_poly_line() +
-                        stat_poly_eq(use_label(c("eq", "R2", "n"))) +
-                        theme_bw()
-```
-
-```{r}
-validation_result <- rbind(validation_result, 
-                           tibble(Model = 'Since Feb 2022 Resp Transform',
-                                  'Coef' = summary(lm(fit.xgb_da_resp_trans$pred$obs ~
-                                                        fit.xgb_da_resp_trans$pred$pred))$coefficients[2, 1], 
-                                  'R-Sq' = summary(lm(fit.xgb_da_resp_trans$pred$obs ~
-                                                        fit.xgb_da_resp_trans$pred$pred))$r.squared))
-```
-
-### SHAP
-```{r}
-matrix <- train %>% select(-H2S_daily_avg)
-matrix <- as.matrix(sapply(matrix, as.numeric))  
-xgb.plot.shap(data = matrix, 
-              model = fit.xgb_da_resp_trans$finalModel, top_n = 12, n_col = 3)
-```
-
-```{r}
-xgb.ggplot.shap.summary(data = matrix, 
-              model = fit.xgb_da_resp_trans$finalModel, top_n = 20)
-```
-```{r}
-train_adj_r2 <- adj_r2(getTrainPerf(fit.xgb_da_resp_trans)$TrainRsquared, 
-                       nrow(fit.xgb_da_resp_trans$trainingData), 
-                       fit.xgb_da_resp_trans$finalModel$nfeatures)
-test_adj_r2 <- adj_r2(test_r2, 
-                       nrow(fit.xgb_da_resp_trans$trainingData), 
-                       fit.xgb_da_resp_trans$finalModel$nfeatures)
-
-xgb_result <- rbind(xgb_result, 
-                    tibble(Model = 'Since Feb 2022 Resp Transform',
-                           '10CV Train R-Sq' = train_adj_r2,
-                           '10CV Test R-Sq' = test_adj_r2,
-                           '10CV Test RMSE' = test_rmse))
-```
-
-# XGBoost: log(H2S+0.1)
-```{r}
-train <- daily_avg_train_sincefeb2022 %>% 
-  mutate(daily_downwind_ref = as.integer(daily_downwind_ref),
-         daily_downwind_wrp = as.integer(daily_downwind_wrp)) %>%
-  mutate(H2S_daily_avg = log(H2S_daily_avg+0.1))
-
-train <- fastDummies::dummy_cols(train %>%
-                   select(-c(day)) %>%
-                   mutate(MinDist = 1/(MinDist^2),
-                          dist_wrp = 1/(dist_wrp^2),
-                          weekday = as.character(weekday)),
-                   remove_selected_columns = TRUE)
-
-# Run algorithms using 10-fold cross validation
-control <- trainControl(method="cv", 
-                        number=10,
-                        verboseIter=TRUE, 
-                        search='grid',
-                        savePredictions = 'final')
-
-fit.xgb_da_log_h2s <- readRDS('rfiles/fit.xgb_da_log_h2s.rds')
-# fit.xgb_da_log_h2s <- train(H2S_daily_avg~.,
-#                  method = 'xgbTree',
-#                  data = train,
-#                  trControl=control,
-#                  tuneGrid = tune_grid,
-#                  tuneLength = 10, importance=TRUE, verbosity = 0, verbose=FALSE)
-# saveRDS(fit.xgb_da_log_h2s, 'rfiles/fit.xgb_da_log_h2s.rds')
-```
-
-```{r}
-getTrainPerf(fit.xgb_da_log_h2s)
-```
-
-```{r}
-fit.xgb_da_log_h2s$finalModel
-```
-
-```{r}
-imp<-varImp(fit.xgb_da_log_h2s,scale=FALSE)
-
-# rename variables
-imp <- tibble(variable = rownames(imp$importance), importance = imp$importance$Overall) %>%
-    pivot_wider(names_from = variable, 
-                values_from = importance) %>%
-    rename(any_of(names)) %>%
-    pivot_longer(cols = everything(),names_to = 'variable', values_to = 'importance')
-
-imp %>%
-  top_n(15, importance) %>%
-  ggplot(aes(x=reorder(variable, importance), y=importance)) + 
-  geom_point() +
-  geom_segment(aes(x=variable,xend=variable,y=0,yend=importance)) +
-  ylab("importance") +
-  xlab("Variable") +
-  coord_flip() +
-  theme_minimal()
-```
-
-### Fold Performance
-```{r}
-# Here, we compute the R2 and RMSE for each fold and take the average
-fold_stat <- fit.xgb_da_log_h2s$pred %>% group_by(Resample) %>% 
-  summarise(R2 = R2(pred, obs), RMSE = RMSE(pred, obs))
-test_r2 <- mean(fold_stat$R2)
-test_rmse <- mean(fold_stat$RMSE)
-```
-
-```{r}
-log_h2s_xgb_sincefeb2022_obs_vs_pred_plot <- ggplot(tibble(obs = fit.xgb_da_log_h2s$pred$obs, 
-                                                              pred = fit.xgb_da_log_h2s$pred$pred),
-                             aes(x = pred, y = obs)) +
-                        geom_point() +
-                        labs(y = 'Observed', x = 'Predicted', 
-                             title = 'Observed vs Predicted for Since 2022 XGBoost Log H2S') +
+                             title = 'Since Februrary 2022') +
                         stat_poly_line() +
                         stat_poly_eq(use_label(c("eq", "R2", "n"))) +
                         theme_bw()
@@ -719,10 +781,10 @@ log_h2s_xgb_sincefeb2022_obs_vs_pred_plot <- ggplot(tibble(obs = fit.xgb_da_log_
 ```{r}
 validation_result <- rbind(validation_result, 
                            tibble(Model = 'Since Feb 2022 Log Transform',
-                                  'Coef' = summary(lm(fit.xgb_da_log_h2s$pred$obs ~
-                                                        fit.xgb_da_log_h2s$pred$pred))$coefficients[2, 1], 
-                                  'R-Sq' = summary(lm(fit.xgb_da_log_h2s$pred$obs ~
-                                                        fit.xgb_da_log_h2s$pred$pred))$r.squared))
+                                  'Coef' = summary(lm(fit.xgb_da_log_h2s_sincefeb2022$pred$obs ~
+                                                        fit.xgb_da_log_h2s_sincefeb2022$pred$pred))$coefficients[2, 1], 
+                                  'R-Sq' = summary(lm(fit.xgb_da_log_h2s_sincefeb2022$pred$obs ~
+                                                        fit.xgb_da_log_h2s_sincefeb2022$pred$pred))$r.squared))
 ```
 
 ### SHAP
@@ -730,66 +792,65 @@ validation_result <- rbind(validation_result,
 matrix <- train %>% select(-H2S_daily_avg)
 matrix <- as.matrix(sapply(matrix, as.numeric))  
 xgb.plot.shap(data = matrix, 
-              model = fit.xgb_da_log_h2s$finalModel, top_n = 12, n_col = 3)
+              model = fit.xgb_da_log_h2s_sincefeb2022$finalModel, top_n = 12, n_col = 3)
 ```
 
 
 ```{r}
 xgb.ggplot.shap.summary(data = matrix, 
-              model = fit.xgb_da_log_h2s$finalModel, top_n = 20)
+              model = fit.xgb_da_log_h2s_sincefeb2022$finalModel, top_n = 20)
 ```
 
 ```{r}
-train_adj_r2 <- adj_r2(getTrainPerf(fit.xgb_da_log_h2s)$TrainRsquared, 
-                       nrow(fit.xgb_da_log_h2s$trainingData), 
-                       fit.xgb_da_log_h2s$finalModel$nfeatures)
-test_adj_r2 <- adj_r2(test_r2, 
-                       nrow(fit.xgb_da_log_h2s$trainingData), 
-                       fit.xgb_da_log_h2s$finalModel$nfeatures)
+train_adj_r2 <- adj_r2(getTrainPerf(fit.xgb_da_log_h2s_sincefeb2022)$TrainRsquared, 
+                       nrow(fit.xgb_da_log_h2s_sincefeb2022$trainingData), 
+                       fit.xgb_da_log_h2s_sincefeb2022$finalModel$nfeatures)
+BT_adj_r2 <- adj_r2(test_r2_bt,
+                       nrow(fit.xgb_da_log_h2s_sincefeb2022$trainingData), 
+                       fit.xgb_da_log_h2s_sincefeb2022$finalModel$nfeatures)
 
 xgb_result <- rbind(xgb_result, 
                     tibble(Model = 'Since Feb 2022 Log Transform',
-                           '10CV Train R-Sq' = train_adj_r2,
-                           '10CV Test R-Sq' = test_adj_r2,
-                           '10CV Test RMSE' = test_rmse))
+                           'XGB R-Sq' = train_adj_r2,
+                           'XGB BT R-Sq' = BT_adj_r2,
+                           'XGB RMSE' = test_rmse,
+                           'XGB BT RMSE' = test_rmse_bt))
 ```
 
-# XGBoost: Both Transform
+## Disaster Only
 ```{r}
-train <- fastDummies::dummy_cols(daily_avg_train_sincefeb2022_both_trans %>%
+train <- disaster %>% 
+  mutate(daily_downwind_ref = as.integer(daily_downwind_ref),
+         daily_downwind_wrp = as.integer(daily_downwind_wrp)) %>%
+  mutate(H2S_daily_avg = log(H2S_daily_avg))
+
+train <- fastDummies::dummy_cols(train %>%
                    select(-c(day)) %>%
                    mutate(MinDist = 1/(MinDist^2),
                           dist_wrp = 1/(dist_wrp^2),
                           weekday = as.character(weekday)),
                    remove_selected_columns = TRUE)
 
-# Run algorithms using 10-fold cross validation
-control <- trainControl(method="cv", 
-                        number=10,
-                        verboseIter=TRUE, 
-                        search='grid',
-                        savePredictions = 'final')
-
-fit.xgb_da_both_trans <- readRDS('rfiles/fit.xgb_da_both_trans.rds')
-# fit.xgb_da_both_trans <- train(H2S_daily_avg~.,
+fit.xgb_da_log_h2s_dis <- readRDS('rfiles/fit.xgb_da_log_h2s_dis.rds')
+# fit.xgb_da_log_h2s_dis <- train(H2S_daily_avg~.,
 #                  method = 'xgbTree',
 #                  data = train,
 #                  trControl=control,
 #                  tuneGrid = tune_grid,
 #                  tuneLength = 10, importance=TRUE, verbosity = 0, verbose=FALSE)
-# saveRDS(fit.xgb_da_both_trans, 'rfiles/fit.xgb_da_both_trans.rds')
+# saveRDS(fit.xgb_da_log_h2s_dis, 'rfiles/fit.xgb_da_log_h2s_dis.rds')
 ```
 
 ```{r}
-getTrainPerf(fit.xgb_da_both_trans)
+getTrainPerf(fit.xgb_da_log_h2s_dis)
 ```
 
 ```{r}
-fit.xgb_da_both_trans$finalModel
+fit.xgb_da_log_h2s_dis$finalModel
 ```
 
 ```{r}
-imp<-varImp(fit.xgb_da_both_trans,scale=FALSE)
+imp<-varImp(fit.xgb_da_log_h2s_dis,scale=FALSE)
 
 # rename variables
 imp <- tibble(variable = rownames(imp$importance), importance = imp$importance$Overall) %>%
@@ -812,19 +873,22 @@ imp %>%
 ### Fold Performance
 ```{r}
 # Here, we compute the R2 and RMSE for each fold and take the average
-fold_stat <- fit.xgb_da_both_trans$pred %>% group_by(Resample) %>% 
-  summarise(R2 = R2(pred, obs), RMSE = RMSE(pred, obs))
+fold_stat <- fit.xgb_da_log_h2s_dis$pred %>% group_by(Resample) %>% 
+  summarise(R2 = R2(pred, obs), RMSE = RMSE(pred, obs),
+            R2_BT = R2(exp(pred), exp(obs)), RMSE_BT = RMSE(exp(pred), exp(obs)))
 test_r2 <- mean(fold_stat$R2)
+test_r2_bt <- mean(fold_stat$R2_BT)
 test_rmse <- mean(fold_stat$RMSE)
+test_rmse_bt <- mean(fold_stat$RMSE_BT)
 ```
 
 ```{r}
-both_trans_xgb_sincefeb2022_obs_vs_pred_plot <- ggplot(tibble(obs = fit.xgb_da_both_trans$pred$obs, 
-                                                              pred = fit.xgb_da_both_trans$pred$pred),
+log_h2s_xgb_dis_obs_vs_pred_plot <- ggplot(tibble(obs = exp(fit.xgb_da_log_h2s_dis$pred$obs), 
+                                                              pred = exp(fit.xgb_da_log_h2s_dis$pred$pred)),
                              aes(x = pred, y = obs)) +
                         geom_point() +
                         labs(y = 'Observed', x = 'Predicted', 
-                             title = 'Observed vs Predicted for Since 2022 XGBoost Resp Transform') +
+                             title = 'Disaster Only') +
                         stat_poly_line() +
                         stat_poly_eq(use_label(c("eq", "R2", "n"))) +
                         theme_bw()
@@ -832,11 +896,11 @@ both_trans_xgb_sincefeb2022_obs_vs_pred_plot <- ggplot(tibble(obs = fit.xgb_da_b
 
 ```{r}
 validation_result <- rbind(validation_result, 
-                           tibble(Model = 'Since Feb 2022 Both Transform',
-                                  'Coef' = summary(lm(fit.xgb_da_both_trans$pred$obs ~
-                                                        fit.xgb_da_both_trans$pred$pred))$coefficients[2, 1], 
-                                  'R-Sq' = summary(lm(fit.xgb_da_both_trans$pred$obs ~
-                                                        fit.xgb_da_both_trans$pred$pred))$r.squared))
+                           tibble(Model = 'Disaster Only Log Transform',
+                                  'Coef' = summary(lm(fit.xgb_da_log_h2s_dis$pred$obs ~
+                                                        fit.xgb_da_log_h2s_dis$pred$pred))$coefficients[2, 1], 
+                                  'R-Sq' = summary(lm(fit.xgb_da_log_h2s_dis$pred$obs ~
+                                                        fit.xgb_da_log_h2s_dis$pred$pred))$r.squared))
 ```
 
 ### SHAP
@@ -844,28 +908,379 @@ validation_result <- rbind(validation_result,
 matrix <- train %>% select(-H2S_daily_avg)
 matrix <- as.matrix(sapply(matrix, as.numeric))  
 xgb.plot.shap(data = matrix, 
-              model = fit.xgb_da_both_trans$finalModel, top_n = 12, n_col = 3)
+              model = fit.xgb_da_log_h2s_dis$finalModel, top_n = 12, n_col = 3)
 ```
 
 
 ```{r}
 xgb.ggplot.shap.summary(data = matrix, 
-              model = fit.xgb_da_both_trans$finalModel, top_n = 20)
+              model = fit.xgb_da_log_h2s_dis$finalModel, top_n = 20)
 ```
 
 ```{r}
-train_adj_r2 <- adj_r2(getTrainPerf(fit.xgb_da_both_trans)$TrainRsquared, 
-                       nrow(fit.xgb_da_both_trans$trainingData), 
-                       fit.xgb_da_both_trans$finalModel$nfeatures)
-test_adj_r2 <- adj_r2(test_r2, 
-                       nrow(fit.xgb_da_both_trans$trainingData), 
-                       fit.xgb_da_both_trans$finalModel$nfeatures)
+train_adj_r2 <- adj_r2(getTrainPerf(fit.xgb_da_log_h2s_dis)$TrainRsquared, 
+                       nrow(fit.xgb_da_log_h2s_dis$trainingData), 
+                       fit.xgb_da_log_h2s_dis$finalModel$nfeatures)
+BT_adj_r2 <- adj_r2(test_r2_bt,
+                       nrow(fit.xgb_da_log_h2s_dis$trainingData), 
+                       fit.xgb_da_log_h2s_dis$finalModel$nfeatures)
 
 xgb_result <- rbind(xgb_result, 
-                    tibble(Model = 'Since Feb 2022 Both Transform',
-                           '10CV Train R-Sq' = train_adj_r2,
-                           '10CV Test R-Sq' = test_adj_r2,
-                           '10CV Test RMSE' = test_rmse))
+                    tibble(Model = 'Disaster Only Log Transform',
+                           'XGB R-Sq' = train_adj_r2,
+                           'XGB BT R-Sq' = BT_adj_r2,
+                           'XGB RMSE' = test_rmse,
+                           'XGB BT RMSE' = test_rmse_bt))
+```
+
+
+## Exclude Disaster
+```{r}
+train <- excl_disaster %>% 
+  mutate(daily_downwind_ref = as.integer(daily_downwind_ref),
+         daily_downwind_wrp = as.integer(daily_downwind_wrp)) %>%
+  mutate(H2S_daily_avg = log(H2S_daily_avg))
+
+train <- fastDummies::dummy_cols(train %>%
+                   select(-c(day)) %>%
+                   mutate(MinDist = 1/(MinDist^2),
+                          dist_wrp = 1/(dist_wrp^2),
+                          weekday = as.character(weekday)),
+                   remove_selected_columns = TRUE)
+
+fit.xgb_da_log_h2s_excl_dis <- readRDS('rfiles/fit.xgb_da_log_h2s_excl_dis.rds')
+# fit.xgb_da_log_h2s_excl_dis <- train(H2S_daily_avg~.,
+#                  method = 'xgbTree',
+#                  data = train,
+#                  trControl=control,
+#                  tuneGrid = tune_grid,
+#                  tuneLength = 10, importance=TRUE, verbosity = 0, verbose=FALSE)
+# saveRDS(fit.xgb_da_log_h2s_excl_dis, 'rfiles/fit.xgb_da_log_h2s_excl_dis.rds')
+```
+
+```{r}
+getTrainPerf(fit.xgb_da_log_h2s_excl_dis)
+```
+
+```{r}
+fit.xgb_da_log_h2s_excl_dis$finalModel
+```
+
+```{r}
+imp<-varImp(fit.xgb_da_log_h2s_excl_dis,scale=FALSE)
+
+# rename variables
+imp <- tibble(variable = rownames(imp$importance), importance = imp$importance$Overall) %>%
+    pivot_wider(names_from = variable, 
+                values_from = importance) %>%
+    rename(any_of(names)) %>%
+    pivot_longer(cols = everything(),names_to = 'variable', values_to = 'importance')
+
+imp %>%
+  top_n(15, importance) %>%
+  ggplot(aes(x=reorder(variable, importance), y=importance)) + 
+  geom_point() +
+  geom_segment(aes(x=variable,xend=variable,y=0,yend=importance)) +
+  ylab("importance") +
+  xlab("Variable") +
+  coord_flip() +
+  theme_minimal()
+```
+
+### Fold Performance
+```{r}
+# Here, we compute the R2 and RMSE for each fold and take the average
+fold_stat <- fit.xgb_da_log_h2s_excl_dis$pred %>% group_by(Resample) %>% 
+  summarise(R2 = R2(pred, obs), RMSE = RMSE(pred, obs),
+            R2_BT = R2(exp(pred), exp(obs)), RMSE_BT = RMSE(exp(pred), exp(obs)))
+test_r2 <- mean(fold_stat$R2)
+test_r2_bt <- mean(fold_stat$R2_BT)
+test_rmse <- mean(fold_stat$RMSE)
+test_rmse_bt <- mean(fold_stat$RMSE_BT)
+```
+
+```{r}
+log_h2s_xgb_excl_dis_obs_vs_pred_plot <- ggplot(tibble(obs = exp(fit.xgb_da_log_h2s_excl_dis$pred$obs), 
+                                                              pred = exp(fit.xgb_da_log_h2s_excl_dis$pred$pred)),
+                             aes(x = pred, y = obs)) +
+                        geom_point() +
+                        labs(y = 'Observed', x = 'Predicted', 
+                             title = 'Exclude Disaster') +
+                        stat_poly_line() +
+                        stat_poly_eq(use_label(c("eq", "R2", "n"))) +
+                        theme_bw()
+```
+
+```{r}
+validation_result <- rbind(validation_result, 
+                           tibble(Model = 'Exclude Disaster Log Transform',
+                                  'Coef' = summary(lm(fit.xgb_da_log_h2s_excl_dis$pred$obs ~
+                                                        fit.xgb_da_log_h2s_excl_dis$pred$pred))$coefficients[2, 1], 
+                                  'R-Sq' = summary(lm(fit.xgb_da_log_h2s_excl_dis$pred$obs ~
+                                                        fit.xgb_da_log_h2s_excl_dis$pred$pred))$r.squared))
+```
+
+### SHAP
+```{r}
+matrix <- train %>% select(-H2S_daily_avg)
+matrix <- as.matrix(sapply(matrix, as.numeric))  
+xgb.plot.shap(data = matrix, 
+              model = fit.xgb_da_log_h2s_excl_dis$finalModel, top_n = 12, n_col = 3)
+```
+
+
+```{r}
+xgb.ggplot.shap.summary(data = matrix, 
+              model = fit.xgb_da_log_h2s_excl_dis$finalModel, top_n = 20)
+```
+
+```{r}
+train_adj_r2 <- adj_r2(getTrainPerf(fit.xgb_da_log_h2s_excl_dis)$TrainRsquared, 
+                       nrow(fit.xgb_da_log_h2s_excl_dis$trainingData), 
+                       fit.xgb_da_log_h2s_excl_dis$finalModel$nfeatures)
+BT_adj_r2 <- adj_r2(test_r2_bt,
+                       nrow(fit.xgb_da_log_h2s_excl_dis$trainingData), 
+                       fit.xgb_da_log_h2s_excl_dis$finalModel$nfeatures)
+
+xgb_result <- rbind(xgb_result, 
+                    tibble(Model = 'Exclude Disaster Log Transform',
+                           'XGB R-Sq' = train_adj_r2,
+                           'XGB BT R-Sq' = BT_adj_r2,
+                           'XGB RMSE' = test_rmse,
+                           'XGB BT RMSE' = test_rmse_bt))
+```
+
+## Everything w. Disaster Indicator
+```{r}
+train <- everything %>% 
+  mutate(daily_downwind_ref = as.integer(daily_downwind_ref),
+         daily_downwind_wrp = as.integer(daily_downwind_wrp)) %>%
+  mutate(H2S_daily_avg = log(H2S_daily_avg))
+
+train <- fastDummies::dummy_cols(train %>%
+                   select(-c(day)) %>%
+                   mutate(MinDist = 1/(MinDist^2),
+                          dist_wrp = 1/(dist_wrp^2),
+                          weekday = as.character(weekday)),
+                   remove_selected_columns = TRUE)
+
+fit.xgb_da_log_h2s_dis_ind <- readRDS('rfiles/fit.xgb_da_log_h2s_dis_ind.rds')
+# fit.xgb_da_log_h2s_dis_ind <- train(H2S_daily_avg~.,
+#                  method = 'xgbTree',
+#                  data = train,
+#                  trControl=control,
+#                  tuneGrid = tune_grid,
+#                  tuneLength = 10, importance=TRUE, verbosity = 0, verbose=FALSE)
+# saveRDS(fit.xgb_da_log_h2s_dis_ind, 'rfiles/fit.xgb_da_log_h2s_dis_ind.rds')
+```
+
+```{r}
+getTrainPerf(fit.xgb_da_log_h2s_dis_ind)
+```
+
+```{r}
+fit.xgb_da_log_h2s_dis_ind$finalModel
+```
+
+```{r}
+imp<-varImp(fit.xgb_da_log_h2s_dis_ind,scale=FALSE)
+
+# rename variables
+imp <- tibble(variable = rownames(imp$importance), importance = imp$importance$Overall) %>%
+    pivot_wider(names_from = variable, 
+                values_from = importance) %>%
+    rename(any_of(names)) %>%
+    pivot_longer(cols = everything(),names_to = 'variable', values_to = 'importance')
+
+imp %>%
+  top_n(15, importance) %>%
+  ggplot(aes(x=reorder(variable, importance), y=importance)) + 
+  geom_point() +
+  geom_segment(aes(x=variable,xend=variable,y=0,yend=importance)) +
+  ylab("importance") +
+  xlab("Variable") +
+  coord_flip() +
+  theme_minimal()
+```
+
+### Fold Performance
+```{r}
+# Here, we compute the R2 and RMSE for each fold and take the average
+fold_stat <- fit.xgb_da_log_h2s_dis_ind$pred %>% group_by(Resample) %>% 
+  summarise(R2 = R2(pred, obs), RMSE = RMSE(pred, obs),
+            R2_BT = R2(exp(pred), exp(obs)), RMSE_BT = RMSE(exp(pred), exp(obs)))
+test_r2 <- mean(fold_stat$R2)
+test_r2_bt <- mean(fold_stat$R2_BT)
+test_rmse <- mean(fold_stat$RMSE)
+test_rmse_bt <- mean(fold_stat$RMSE_BT)
+```
+
+```{r}
+log_h2s_xgb_dis_ind_obs_vs_pred_plot <- ggplot(tibble(obs = exp(fit.xgb_da_log_h2s_dis_ind$pred$obs), 
+                                                              pred = exp(fit.xgb_da_log_h2s_dis_ind$pred$pred)),
+                             aes(x = pred, y = obs)) +
+                        geom_point() +
+                        labs(y = 'Observed', x = 'Predicted', 
+                             title = 'Everything w. Disaster Indicator') +
+                        stat_poly_line() +
+                        stat_poly_eq(use_label(c("eq", "R2", "n"))) +
+                        theme_bw()
+```
+
+```{r}
+validation_result <- rbind(validation_result, 
+                           tibble(Model = 'Everything w. Disaster Indicator Log Transform',
+                                  'Coef' = summary(lm(fit.xgb_da_log_h2s_dis_ind$pred$obs ~
+                                                        fit.xgb_da_log_h2s_dis_ind$pred$pred))$coefficients[2, 1], 
+                                  'R-Sq' = summary(lm(fit.xgb_da_log_h2s_dis_ind$pred$obs ~
+                                                        fit.xgb_da_log_h2s_dis_ind$pred$pred))$r.squared))
+```
+
+### SHAP
+```{r}
+matrix <- train %>% select(-H2S_daily_avg)
+matrix <- as.matrix(sapply(matrix, as.numeric))  
+xgb.plot.shap(data = matrix, 
+              model = fit.xgb_da_log_h2s_dis_ind$finalModel, top_n = 12, n_col = 3)
+```
+
+
+```{r}
+xgb.ggplot.shap.summary(data = matrix, 
+              model = fit.xgb_da_log_h2s_dis_ind$finalModel, top_n = 20)
+```
+
+```{r}
+train_adj_r2 <- adj_r2(getTrainPerf(fit.xgb_da_log_h2s_dis_ind)$TrainRsquared, 
+                       nrow(fit.xgb_da_log_h2s_dis_ind$trainingData), 
+                       fit.xgb_da_log_h2s_dis_ind$finalModel$nfeatures)
+BT_adj_r2 <- adj_r2(test_r2_bt,
+                       nrow(fit.xgb_da_log_h2s_dis_ind$trainingData), 
+                       fit.xgb_da_log_h2s_dis_ind$finalModel$nfeatures)
+
+xgb_result <- rbind(xgb_result, 
+                    tibble(Model = 'Everything w. Disaster Indicator Log Transform',
+                           'XGB R-Sq' = train_adj_r2,
+                           'XGB BT R-Sq' = BT_adj_r2,
+                           'XGB RMSE' = test_rmse,
+                           'XGB BT RMSE' = test_rmse_bt))
+```
+
+## Everything w.o Disaster Indicator
+```{r}
+train <- everything %>% 
+  select(-disaster) %>%
+  mutate(daily_downwind_ref = as.integer(daily_downwind_ref),
+         daily_downwind_wrp = as.integer(daily_downwind_wrp)) %>%
+  mutate(H2S_daily_avg = log(H2S_daily_avg))
+
+train <- fastDummies::dummy_cols(train %>%
+                   select(-c(day)) %>%
+                   mutate(MinDist = 1/(MinDist^2),
+                          dist_wrp = 1/(dist_wrp^2),
+                          weekday = as.character(weekday)),
+                   remove_selected_columns = TRUE)
+
+fit.xgb_da_log_h2s_full <- readRDS('rfiles/fit.xgb_da_log_h2s_full.rds')
+# fit.xgb_da_log_h2s_full <- train(H2S_daily_avg~.,
+#                  method = 'xgbTree',
+#                  data = train,
+#                  trControl=control,
+#                  tuneGrid = tune_grid,
+#                  tuneLength = 10, importance=TRUE, verbosity = 0, verbose=FALSE)
+# saveRDS(fit.xgb_da_log_h2s_full, 'rfiles/fit.xgb_da_log_h2s_full.rds')
+```
+
+```{r}
+getTrainPerf(fit.xgb_da_log_h2s_full)
+```
+
+```{r}
+fit.xgb_da_log_h2s_full$finalModel
+```
+
+```{r}
+imp<-varImp(fit.xgb_da_log_h2s_full,scale=FALSE)
+
+# rename variables
+imp <- tibble(variable = rownames(imp$importance), importance = imp$importance$Overall) %>%
+    pivot_wider(names_from = variable, 
+                values_from = importance) %>%
+    rename(any_of(names)) %>%
+    pivot_longer(cols = everything(),names_to = 'variable', values_to = 'importance')
+
+imp %>%
+  top_n(15, importance) %>%
+  ggplot(aes(x=reorder(variable, importance), y=importance)) + 
+  geom_point() +
+  geom_segment(aes(x=variable,xend=variable,y=0,yend=importance)) +
+  ylab("importance") +
+  xlab("Variable") +
+  coord_flip() +
+  theme_minimal()
+```
+
+### Fold Performance
+```{r}
+# Here, we compute the R2 and RMSE for each fold and take the average
+fold_stat <- fit.xgb_da_log_h2s_full$pred %>% group_by(Resample) %>% 
+  summarise(R2 = R2(pred, obs), RMSE = RMSE(pred, obs),
+            R2_BT = R2(exp(pred), exp(obs)), RMSE_BT = RMSE(exp(pred), exp(obs)))
+test_r2 <- mean(fold_stat$R2)
+test_r2_bt <- mean(fold_stat$R2_BT)
+test_rmse <- mean(fold_stat$RMSE)
+test_rmse_bt <- mean(fold_stat$RMSE_BT)
+```
+
+```{r}
+log_h2s_xgb_full_obs_vs_pred_plot <- ggplot(tibble(obs = exp(fit.xgb_da_log_h2s_full$pred$obs), 
+                                                              pred = exp(fit.xgb_da_log_h2s_full$pred$pred)),
+                             aes(x = pred, y = obs)) +
+                        geom_point() +
+                        labs(y = 'Observed', x = 'Predicted', 
+                             title = 'Everything w.o Disaster Indicator') +
+                        stat_poly_line() +
+                        stat_poly_eq(use_label(c("eq", "R2", "n"))) +
+                        theme_bw()
+```
+
+```{r}
+validation_result <- rbind(validation_result, 
+                           tibble(Model = 'Everything w.o Disaster Indicator Log Transform',
+                                  'Coef' = summary(lm(fit.xgb_da_log_h2s_full$pred$obs ~
+                                                        fit.xgb_da_log_h2s_full$pred$pred))$coefficients[2, 1], 
+                                  'R-Sq' = summary(lm(fit.xgb_da_log_h2s_full$pred$obs ~
+                                                        fit.xgb_da_log_h2s_full$pred$pred))$r.squared))
+```
+
+### SHAP
+```{r}
+matrix <- train %>% select(-H2S_daily_avg)
+matrix <- as.matrix(sapply(matrix, as.numeric))  
+xgb.plot.shap(data = matrix, 
+              model = fit.xgb_da_log_h2s_full$finalModel, top_n = 12, n_col = 3)
+```
+
+
+```{r}
+xgb.ggplot.shap.summary(data = matrix, 
+              model = fit.xgb_da_log_h2s_full$finalModel, top_n = 20)
+```
+
+```{r}
+train_adj_r2 <- adj_r2(getTrainPerf(fit.xgb_da_log_h2s_full)$TrainRsquared, 
+                       nrow(fit.xgb_da_log_h2s_full$trainingData), 
+                       fit.xgb_da_log_h2s_full$finalModel$nfeatures)
+BT_adj_r2 <- adj_r2(test_r2_bt, 
+                       nrow(fit.xgb_da_log_h2s_full$trainingData), 
+                       fit.xgb_da_log_h2s_full$finalModel$nfeatures)
+
+xgb_result <- rbind(xgb_result, 
+                    tibble(Model = 'Everything w.o Disaster Indicator Log Transform',
+                           'XGB R-Sq' = train_adj_r2,
+                           'XGB BT R-Sq' = BT_adj_r2,
+                           'XGB RMSE' = test_rmse,
+                           'XGB BT RMSE' = test_rmse_bt))
 ```
 
 # Result Comparison
@@ -873,35 +1288,50 @@ xgb_result <- rbind(xgb_result,
 ```{r}
 knitr::kable(tibble(Model = c('Since Feb 2022',
                               'Since Feb 2022 Log Transform',
-                              'Since Feb 2022 Both Transform',
-                              'Since Feb 2022 Resp Transform'),
-                    'Train R-sq' = c(0.67,
-                                    round(summary(h2s_da_model_f_logresp)$r.sq, 2),
-                                    round(summary(h2s_da_model_f_trans)$r.sq, 2),
-                                    round(summary(h2s_da_model_f_trans_resp)$r.sq, 2))) %>% 
+                              'Disaster Only Log Transform',
+                              'Exclude Disaster Log Transform',
+                              'Everything w. Disaster Indicator Log Transform',
+                              'Everything w.o Disaster Indicator Log Transform'),
+                    'Train R-sq' = c(round(summary(h2s_da_model_f)$r.sq, 2),
+                                     round(summary(logh2s_da_sincefeb2022)$r.sq, 2),
+                                     round(summary(logh2s_da_dis)$r.sq, 2),
+                                     round(summary(logh2s_da_excl_dis)$r.sq, 2),
+                                     round(summary(logh2s_da_full_dis_ind)$r.sq, 2),
+                                     round(summary(logh2s_da_full)$r.sq, 2))) %>% 
                left_join(rbind(result_10cv, tibble(Model = 'Since Feb 2022', 
                                                    '10CV AVG Train R-Sq' = 0.664,
-                                                   '10CV AVG Test R-Sq' = 0.665,
+                                                   '10CV AVG Test R-Sq' = 0.652,
                                                    'Test RMSE' = 0.357)), join_by(Model)) %>%
                left_join(rbind(xgb_result, tibble(Model = 'Since Feb 2022', 
-                                                   '10CV Train R-Sq' = 0.777,
-                                                   '10CV Test R-Sq' = 0.777,
-                                                   '10CV Test RMSE' = 0.283)), join_by(Model)),
+                                                   'XGB R-Sq' = 0.777,
+                                                   'XGB BT R-Sq' = NA,
+                                                   'XGB RMSE' = 0.283,
+                                                   'XGB BT RMSE' = NA)), join_by(Model)),
              digits = 3)
 ```
 
 ```{r}
-ggarrange(log_h2s_10cv_obs_vs_pred_plot, 
-          both_trans_10cv_obs_vs_pred_plot,
-          resp_trans_10cv_obs_vs_pred_plot, 
+# Gam Models
+ggarrange(logh2s_10cv_ovp_plot_sincefeb2022, 
+          logh2s_10cv_ovp_plot_dis_only,
+          logh2s_10cv_ovp_plot_excl_dis,
           labels = c("1", "2", "3"),
           nrow = 3)
+
+ggarrange(logh2s_10cv_ovp_plot_dis_ind,
+          logh2s_10cv_ovp_plot_full,
+          labels = c("4", "5"),
+          nrow = 2)
 ```
 
 ```{r}
 ggarrange(log_h2s_xgb_sincefeb2022_obs_vs_pred_plot, 
-          resp_trans_xgb_sincefeb2022_obs_vs_pred_plot,
-          both_trans_xgb_sincefeb2022_obs_vs_pred_plot, 
+          log_h2s_xgb_dis_obs_vs_pred_plot,
+          log_h2s_xgb_excl_dis_obs_vs_pred_plot, 
           labels = c("1", "2", "3"),
           nrow = 3)
+ggarrange(log_h2s_xgb_dis_ind_obs_vs_pred_plot, 
+          log_h2s_xgb_full_obs_vs_pred_plot,
+          labels = c("4", "5"),
+          nrow = 2)
 ```

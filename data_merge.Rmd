@@ -38,6 +38,7 @@ remove(new_data)
 gc()
 ```
 
+# Compute date variables
 ```{r}
 full_data <- full_data %>% 
   drop_na(c("wd", "ws")) %>% 
@@ -134,6 +135,19 @@ full_data <- full_data %>%
                                Monitor == 'Guenser Park' ~ 33.869231,
                                Monitor == 'Harbor Park' ~ 33.786252,
                                .default = latitude))
+```
+
+```{r}
+# For observations below MDL, set it to half of MDL
+# As confirmed, MDL for all monitors is 0.4
+# Check how many observations are below MDL
+full_data %>%
+  group_by() %>%
+  summarise('Below MDL' = sum(full_data$H2S < 0.4, na.rm=T),
+            'Proportion' = sum(full_data$H2S < 0.4, na.rm=T) / n())
+
+full_data <- full_data %>%
+  mutate(H2S = if_else(H2S < 0.4, 0.2, H2S))
 ```
 
 
