@@ -58,7 +58,7 @@ ggplot(daily_avg_train_sincefeb2022, aes(x = H2S_daily_avg)) +
 ## Since Feb 2022
 ```{r}
 # Since feb 2022
-h2s_da_model_f <- gam(H2S_daily_avg~s(as.numeric(month),bs='cc') + year + as.character(weekday) +
+h2s_da_model_f <- gam(H2S_daily_avg~s(as.numeric(month),bs='cc') + year + weekday +
                          wd_avg + ws_avg + daily_downwind_ref + capacity +
                           I(1/dist_wrp^2) + I(1/MinDist^2) +
                          s(I(mon_utm_x/10^3), I(mon_utm_y/10^3), bs='tp', k = 10) + 
@@ -193,7 +193,7 @@ ggplot(daily_avg_train_sincefeb2022, aes(x = log(H2S_daily_avg))) +
 ```
 
 ```{r}
-logh2s_da_sincefeb2022 <- gam(I(log(H2S_daily_avg))~s(as.numeric(month),bs='cc') + year + as.character(weekday) +
+logh2s_da_sincefeb2022 <- gam(I(log(H2S_daily_avg))~s(as.numeric(month),bs='cc') + year + weekday +
                          wd_avg + ws_avg + daily_downwind_ref + capacity +
                           I(1/dist_wrp^2) + I(1/MinDist^2) +
                          s(I(mon_utm_x/10^3), I(mon_utm_y/10^3), bs='tp', k = 10) + 
@@ -205,6 +205,30 @@ logh2s_da_sincefeb2022 <- gam(I(log(H2S_daily_avg))~s(as.numeric(month),bs='cc')
                       data = daily_avg_train_sincefeb2022)
 summary(logh2s_da_sincefeb2022)
 plot(logh2s_da_sincefeb2022)
+```
+#### Model table
+```{r}
+get_gam_result <- function(model_obj, model_name){
+  p <- summary(model_obj)$p.pv
+  coef <- tibble(Term = names(summary(model_obj)$p.coeff), x = summary(model_obj)$p.coeff) %>%
+              mutate(x = paste0(formatC(x, format = 'e', digits = 2), 
+                              case_when(p < 0.001 ~ '***', 
+                                        0.001 <= p & p < 0.01 ~ '**', 
+                                        0.01 <= p & p < 0.05 ~ '*', 
+                                        0.05 <= p & p < 0.1 ~ '.', 
+                                        TRUE ~ '')))  %>%
+              rename({{model_name}} := x)
+  coef <- rbind(coef, tibble(Term = 'Adj.R-sq', {{model_name}} := 
+                             formatC(summary(model_obj)$r.sq, format = 'e', 
+                             digits = 2)))
+  return(coef)
+}
+sincefeb2022_model_stat <- get_gam_result(logh2s_da_sincefeb2022, 'Daily Average H2S Since Feb 2022') 
+
+sincefeb2022_model_stat_latex <- knitr::kable(sincefeb2022_model_stat, format = 'latex', digits = 2)
+writeLines(sincefeb2022_model_stat_latex, 'figures/sincefeb2022_log_model.tex')
+
+knitr::kable(sincefeb2022_model_stat, format = 'html', digits = 2)
 ```
 
 #### Condition 1
@@ -249,7 +273,7 @@ ggplot(disaster,
 ```
 
 ```{r}
-logh2s_da_dis <- gam(I(log(H2S_daily_avg))~month + as.character(weekday) +
+logh2s_da_dis <- gam(I(log(H2S_daily_avg))~month + weekday +
                          wd_avg + ws_avg + daily_downwind_ref + I(1/dist_wrp^2) + I(1/MinDist^2) +
                          s(I(mon_utm_x/10^3), I(mon_utm_y/10^3), bs='tp', k = 10) + 
                          te(I(mon_utm_x/10^3), I(mon_utm_y/10^3), as.numeric(day),
@@ -277,7 +301,7 @@ ggplot(excl_disaster,
 ```
 
 ```{r}
-logh2s_da_excl_dis <- gam(I(log(H2S_daily_avg))~s(as.numeric(month),bs='cc') + year + as.character(weekday) +
+logh2s_da_excl_dis <- gam(I(log(H2S_daily_avg))~s(as.numeric(month),bs='cc') + year + weekday +
                          wd_avg + ws_avg + daily_downwind_ref + I(1/dist_wrp^2) + I(1/MinDist^2) +
                          s(I(mon_utm_x/10^3), I(mon_utm_y/10^3), bs='tp', k = 10) + 
                          te(I(mon_utm_x/10^3), I(mon_utm_y/10^3), as.numeric(day),
@@ -304,7 +328,7 @@ ggplot(everything, aes(x = log(H2S_daily_avg))) +
 ```
 
 ```{r}
-logh2s_da_full_dis_ind <- gam(I(log(H2S_daily_avg))~s(as.numeric(month),bs='cc') + year + as.character(weekday) +
+logh2s_da_full_dis_ind <- gam(I(log(H2S_daily_avg))~s(as.numeric(month),bs='cc') + year + weekday +
                          wd_avg + ws_avg + daily_downwind_ref + I(1/dist_wrp^2) + I(1/MinDist^2) +
                          s(I(mon_utm_x/10^3), I(mon_utm_y/10^3), bs='tp', k = 10) + 
                          te(I(mon_utm_x/10^3), I(mon_utm_y/10^3), as.numeric(day),
@@ -319,7 +343,7 @@ plot(logh2s_da_full_dis_ind)
 
 ### Everything w.o Disaster Indicator
 ```{r}
-logh2s_da_full <- gam(I(log(H2S_daily_avg))~s(as.numeric(month),bs='cc') + year + as.character(weekday) +
+logh2s_da_full <- gam(I(log(H2S_daily_avg))~s(as.numeric(month),bs='cc') + year + weekday +
                          wd_avg + ws_avg + daily_downwind_ref + I(1/dist_wrp^2) + I(1/MinDist^2) +
                          s(I(mon_utm_x/10^3), I(mon_utm_y/10^3), bs='tp', k = 10) + 
                          te(I(mon_utm_x/10^3), I(mon_utm_y/10^3), as.numeric(day),
@@ -367,7 +391,7 @@ for (fold in seq(1, 10)) {
   test <- daily_avg_train_sincefeb2022[folds[[fold]], ]
   train <- anti_join(daily_avg_train_sincefeb2022, test, by = join_by(dist_dc, day))
   
-  h2s_da_model_10cv <- gam(I(log(H2S_daily_avg))~s(as.numeric(month),bs='cc') + year + as.character(weekday) +
+  h2s_da_model_10cv <- gam(I(log(H2S_daily_avg))~s(as.numeric(month),bs='cc') + year + weekday +
                          wd_avg + ws_avg + daily_downwind_ref + capacity +
                           I(1/dist_wrp^2) + I(1/MinDist^2) +
                          s(I(mon_utm_x/10^3), I(mon_utm_y/10^3), bs='tp', k = 10) + 
@@ -379,7 +403,7 @@ for (fold in seq(1, 10)) {
                           data = train)
 
   predictions <- predict(h2s_da_model_10cv, newdata = test)
-  r2_test <- R2(test$H2S_daily_avg, predictions)
+  r2_test <- R2(test$H2S_daily_avg, exp(predictions))
   adj_r2_test <- adj_r2(r2_test, summary(h2s_da_model_10cv)$n, summary(h2s_da_model_10cv)$np)
   
   obs_10cv_sincefeb2022 <- append(obs_10cv_sincefeb2022, test %>% pull(H2S_daily_avg))
@@ -422,7 +446,7 @@ for (fold in seq(1, 10)) {
   test <- disaster[folds[[fold]], ]
   train <- anti_join(disaster, test, by = join_by(dist_dc, day))
   
-  h2s_da_model_10cv <- gam(I(log(H2S_daily_avg)) ~ month + as.character(weekday) +
+  h2s_da_model_10cv <- gam(I(log(H2S_daily_avg)) ~ month + weekday +
                          wd_avg + ws_avg + daily_downwind_ref + I(1/dist_wrp^2) + I(1/MinDist^2) +
                          s(I(mon_utm_x/10^3), I(mon_utm_y/10^3), bs='tp', k = 10) + 
                          te(I(mon_utm_x/10^3), I(mon_utm_y/10^3), as.numeric(day),
@@ -433,7 +457,7 @@ for (fold in seq(1, 10)) {
                           data = train)
 
   predictions <- predict(h2s_da_model_10cv, newdata = test)
-  r2_test <- R2(test$H2S_daily_avg, predictions)
+  r2_test <- R2(test$H2S_daily_avg, exp(predictions))
   adj_r2_test <- adj_r2(r2_test, summary(h2s_da_model_10cv)$n, summary(h2s_da_model_10cv)$np)
   
   obs_10cv_disaster <- append(obs_10cv_disaster, test %>% pull(H2S_daily_avg))
@@ -476,7 +500,7 @@ for (fold in seq(1, 10)) {
   test <- excl_disaster[folds[[fold]], ]
   train <- anti_join(excl_disaster, test, by = join_by(dist_dc, day))
   
-  h2s_da_model_10cv <- gam(I(log(H2S_daily_avg))~s(as.numeric(month),bs='cc') + year + as.character(weekday) +
+  h2s_da_model_10cv <- gam(I(log(H2S_daily_avg))~s(as.numeric(month),bs='cc') + year + weekday +
                          wd_avg + ws_avg + daily_downwind_ref + capacity +
                           I(1/dist_wrp^2) + I(1/MinDist^2) +
                          s(I(mon_utm_x/10^3), I(mon_utm_y/10^3), bs='tp', k = 10) + 
@@ -488,7 +512,7 @@ for (fold in seq(1, 10)) {
                           data = train)
 
   predictions <- predict(h2s_da_model_10cv, newdata = test)
-  r2_test <- R2(test$H2S_daily_avg, predictions)
+  r2_test <- R2(test$H2S_daily_avg, exp(predictions))
   adj_r2_test <- adj_r2(r2_test, summary(h2s_da_model_10cv)$n, summary(h2s_da_model_10cv)$np)
   
   obs_10cv_excl_dis <- append(obs_10cv_excl_dis, test %>% pull(H2S_daily_avg))
@@ -531,7 +555,7 @@ for (fold in seq(1, 10)) {
   test <- everything[folds[[fold]], ]
   train <- anti_join(everything, test, by = join_by(dist_dc, day))
   
-  h2s_da_model_10cv <- gam(I(log(H2S_daily_avg))~s(as.numeric(month),bs='cc') + year + as.character(weekday) +
+  h2s_da_model_10cv <- gam(I(log(H2S_daily_avg))~s(as.numeric(month),bs='cc') + year + weekday +
                          wd_avg + ws_avg + daily_downwind_ref + capacity +
                           I(1/dist_wrp^2) + I(1/MinDist^2) +
                          s(I(mon_utm_x/10^3), I(mon_utm_y/10^3), bs='tp', k = 10) + 
@@ -543,7 +567,7 @@ for (fold in seq(1, 10)) {
                           data = train)
 
   predictions <- predict(h2s_da_model_10cv, newdata = test)
-  r2_test <- R2(test$H2S_daily_avg, predictions)
+  r2_test <- R2(test$H2S_daily_avg, exp(predictions))
   adj_r2_test <- adj_r2(r2_test, summary(h2s_da_model_10cv)$n, summary(h2s_da_model_10cv)$np)
   
   obs_10cv_disaster_ind <- append(obs_10cv_disaster_ind, test %>% pull(H2S_daily_avg))
@@ -586,7 +610,7 @@ for (fold in seq(1, 10)) {
   test <- everything[folds[[fold]], ]
   train <- anti_join(everything, test, by = join_by(dist_dc, day))
   
-  h2s_da_model_10cv <- gam(I(log(H2S_daily_avg))~s(as.numeric(month),bs='cc') + year + as.character(weekday) +
+  h2s_da_model_10cv <- gam(I(log(H2S_daily_avg))~s(as.numeric(month),bs='cc') + year + weekday +
                          wd_avg + ws_avg + daily_downwind_ref + capacity +
                           I(1/dist_wrp^2) + I(1/MinDist^2) +
                          s(I(mon_utm_x/10^3), I(mon_utm_y/10^3), bs='tp', k = 10) + 
@@ -598,7 +622,7 @@ for (fold in seq(1, 10)) {
                           data = train)
 
   predictions <- predict(h2s_da_model_10cv, newdata = test)
-  r2_test <- R2(test$H2S_daily_avg, predictions)
+  r2_test <- R2(test$H2S_daily_avg, exp(predictions))
   adj_r2_test <- adj_r2(r2_test, summary(h2s_da_model_10cv)$n, summary(h2s_da_model_10cv)$np)
   
   obs_10cv_everything <- append(obs_10cv_everything, test %>% pull(H2S_daily_avg))
@@ -656,7 +680,7 @@ train <- fastDummies::dummy_cols(train %>%
                    select(-c(day)) %>%
                    mutate(MinDist = 1/(MinDist^2),
                           dist_wrp = 1/(dist_wrp^2),
-                          weekday = as.character(weekday)),
+                          weekday = weekday),
                    remove_selected_columns = TRUE)
 
 tune_grid <- expand.grid(nrounds = c(100, 200, 500),
@@ -828,7 +852,7 @@ train <- fastDummies::dummy_cols(train %>%
                    select(-c(day)) %>%
                    mutate(MinDist = 1/(MinDist^2),
                           dist_wrp = 1/(dist_wrp^2),
-                          weekday = as.character(weekday)),
+                          weekday = weekday),
                    remove_selected_columns = TRUE)
 
 fit.xgb_da_log_h2s_dis <- readRDS('rfiles/fit.xgb_da_log_h2s_dis.rds')
@@ -945,7 +969,7 @@ train <- fastDummies::dummy_cols(train %>%
                    select(-c(day)) %>%
                    mutate(MinDist = 1/(MinDist^2),
                           dist_wrp = 1/(dist_wrp^2),
-                          weekday = as.character(weekday)),
+                          weekday = weekday),
                    remove_selected_columns = TRUE)
 
 fit.xgb_da_log_h2s_excl_dis <- readRDS('rfiles/fit.xgb_da_log_h2s_excl_dis.rds')
@@ -1061,7 +1085,7 @@ train <- fastDummies::dummy_cols(train %>%
                    select(-c(day)) %>%
                    mutate(MinDist = 1/(MinDist^2),
                           dist_wrp = 1/(dist_wrp^2),
-                          weekday = as.character(weekday)),
+                          weekday = weekday),
                    remove_selected_columns = TRUE)
 
 fit.xgb_da_log_h2s_dis_ind <- readRDS('rfiles/fit.xgb_da_log_h2s_dis_ind.rds')
@@ -1178,7 +1202,7 @@ train <- fastDummies::dummy_cols(train %>%
                    select(-c(day)) %>%
                    mutate(MinDist = 1/(MinDist^2),
                           dist_wrp = 1/(dist_wrp^2),
-                          weekday = as.character(weekday)),
+                          weekday = weekday),
                    remove_selected_columns = TRUE)
 
 fit.xgb_da_log_h2s_full <- readRDS('rfiles/fit.xgb_da_log_h2s_full.rds')
@@ -1286,28 +1310,23 @@ xgb_result <- rbind(xgb_result,
 # Result Comparison
 # Comparison
 ```{r}
-knitr::kable(tibble(Model = c('Since Feb 2022',
-                              'Since Feb 2022 Log Transform',
+log_model_perf_table <- tibble(Model = c('Since Feb 2022 Log Transform',
                               'Disaster Only Log Transform',
                               'Exclude Disaster Log Transform',
                               'Everything w. Disaster Indicator Log Transform',
                               'Everything w.o Disaster Indicator Log Transform'),
-                    'Train R-sq' = c(round(summary(h2s_da_model_f)$r.sq, 2),
-                                     round(summary(logh2s_da_sincefeb2022)$r.sq, 2),
-                                     round(summary(logh2s_da_dis)$r.sq, 2),
-                                     round(summary(logh2s_da_excl_dis)$r.sq, 2),
-                                     round(summary(logh2s_da_full_dis_ind)$r.sq, 2),
-                                     round(summary(logh2s_da_full)$r.sq, 2))) %>% 
-               left_join(rbind(result_10cv, tibble(Model = 'Since Feb 2022', 
-                                                   '10CV AVG Train R-Sq' = 0.664,
-                                                   '10CV AVG Test R-Sq' = 0.652,
-                                                   'Test RMSE' = 0.357)), join_by(Model)) %>%
-               left_join(rbind(xgb_result, tibble(Model = 'Since Feb 2022', 
-                                                   'XGB R-Sq' = 0.777,
-                                                   'XGB BT R-Sq' = NA,
-                                                   'XGB RMSE' = 0.283,
-                                                   'XGB BT RMSE' = NA)), join_by(Model)),
-             digits = 3)
+                    n = c(nrow(fit.xgb_da_log_h2s_sincefeb2022$trainingData),
+                          nrow(fit.xgb_da_log_h2s_dis$trainingData),
+                          nrow(fit.xgb_da_log_h2s_excl_dis$trainingData),
+                          nrow(fit.xgb_da_log_h2s_dis_ind$trainingData),
+                          nrow(fit.xgb_da_log_h2s_full$trainingData))) %>% 
+               left_join(rbind(result_10cv)) %>%
+               left_join(rbind(xgb_result))
+
+log_model_perf_latex <- knitr::kable(log_model_perf_table, digits = 3, format = 'latex')
+writeLines(log_model_perf_latex, 'figures/log_model_perf.tex')
+
+knitr::kable(log_model_perf_table, digits = 3, format = 'html')
 ```
 
 ```{r}
@@ -1335,3 +1354,27 @@ ggarrange(log_h2s_xgb_dis_ind_obs_vs_pred_plot,
           labels = c("4", "5"),
           nrow = 2)
 ```
+
+# For Figures
+```{r}
+ggarrange(logh2s_10cv_ovp_plot_sincefeb2022 + labs(title = 'GAM'),
+          log_h2s_xgb_sincefeb2022_obs_vs_pred_plot + labs(title = 'XGBoost'),
+          nrow = 1)
+```
+
+```{r}
+ggarrange(log_h2s_xgb_dis_obs_vs_pred_plot + labs(title = ''),
+          log_h2s_xgb_dis_obs_vs_pred_plot + 
+            labs(title = '') + 
+            coord_cartesian(xlim = c(0, 15), ylim = c(0, 15)),
+          nrow = 1)
+```
+
+```{r}
+ggarrange(log_h2s_xgb_dis_ind_obs_vs_pred_plot + labs(title = ''),
+          log_h2s_xgb_dis_ind_obs_vs_pred_plot + 
+            labs(title = '') + 
+            coord_cartesian(xlim = c(0, 15), ylim = c(0, 15)),
+          nrow = 1)
+```
+

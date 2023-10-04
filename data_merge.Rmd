@@ -55,7 +55,7 @@ full_data <- full_data %>%
   mutate(yearmonth = format(day, "%Y-%m"),
          year = format(day, "%Y"),
          month = format(day, "%m"),
-         weekday = wday(full_data$day, label=TRUE))
+         weekday = relevel(factor(wday(full_data$day, label=TRUE), ordered = FALSE), ref = "Sun"))
 ```
 
 ```{r}

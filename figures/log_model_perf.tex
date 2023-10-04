@@ -1,0 +1,16 @@
+
+\begin{tabular}{l|r|r|r|r|r|r|r|r}
+\hline
+Model & n & 10CV AVG Train R-Sq & 10CV AVG Test R-Sq & Test RMSE & XGB R-Sq & XGB BT R-Sq & XGB RMSE & XGB BT RMSE\\
+\hline
+Since Feb 2022 Log Transform & 2664 & 0.764 & 0.625 & 1.345 & 0.834 & 0.766 & 0.294 & 0.275\\
+\hline
+Disaster Only Log Transform & 827 & 0.773 & 0.504 & 29.274 & 0.835 & 0.829 & 0.435 & 13.459\\
+\hline
+Exclude Disaster Log Transform & 6162 & 0.607 & 0.457 & 1.372 & 0.777 & 0.642 & 0.341 & 0.386\\
+\hline
+Everything w. Disaster Indicator Log Transform & 6989 & 0.629 & 0.431 & 10.185 & 0.805 & 0.737 & 0.359 & 4.687\\
+\hline
+Everything w.o Disaster Indicator Log Transform & 6989 & 0.601 & 0.361 & 10.188 & 0.798 & 0.630 & 0.365 & 4.392\\
+\hline
+\end{tabular}
