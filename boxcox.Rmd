@@ -372,7 +372,8 @@ random_seeds <- floor(runif(5, min=0, max=1)*100)
 result_10cv <- tibble(Model = character(),
                  '10CV AVG Train R-Sq' = numeric(),
                  '10CV AVG Test R-Sq' = numeric(),
-                 'Test RMSE' = numeric())
+                 'Test RMSE' = numeric(),
+                 'B-T Test RMSE' = numeric())
 
 validation_result_10cv <- tibble(Model = character(),
                             'Coef' = numeric(),
@@ -383,6 +384,8 @@ obs_10cv_sincefeb2022 <- c()
 pred_10cv_sincefeb2022 <- c()
 adj_r2_sincefeb2022 <- c()
 adj_r2_test_sincefeb2022 <- c()
+rmse_sincefeb2022 <- c()
+btrmse_sincefeb2022 <- c()
 
 set.seed(random_seeds[1])
 folds <- createFolds(seq(1, nrow(daily_avg_train_sincefeb2022)), k = 10)
@@ -410,12 +413,15 @@ for (fold in seq(1, 10)) {
   pred_10cv_sincefeb2022 <- append(pred_10cv_sincefeb2022, predictions)
   adj_r2_sincefeb2022 <- append(adj_r2_sincefeb2022, summary(h2s_da_model_10cv)$r.sq)
   adj_r2_test_sincefeb2022 <- append(adj_r2_test_sincefeb2022, adj_r2_test)
+  rmse_sincefeb2022 <- append(rmse_sincefeb2022, RMSE(pred_10cv_sincefeb2022, obs_10cv_sincefeb2022))
+  btrmse_sincefeb2022 <- append(btrmse_sincefeb2022, RMSE(exp(pred_10cv_sincefeb2022), obs_10cv_sincefeb2022))
 }
 
 result_10cv <- rbind(result_10cv, tibble(Model = 'Since Feb 2022 Log Transform',
                                '10CV AVG Train R-Sq' = mean(adj_r2_sincefeb2022),
                                '10CV AVG Test R-Sq' = mean(adj_r2_test_sincefeb2022),
-                               'Test RMSE' = RMSE(pred_10cv_sincefeb2022, obs_10cv_sincefeb2022)))
+                               'Test RMSE' = mean(rmse_sincefeb2022),
+                               'B-T Test RMSE' = mean(btrmse_sincefeb2022)))
 
 logh2s_10cv_ovp_plot_sincefeb2022 <- ggplot(tibble(obs = obs_10cv_sincefeb2022, pred = exp(pred_10cv_sincefeb2022)),
                              aes(x = pred, y = obs)) +
@@ -438,6 +444,8 @@ obs_10cv_disaster <- c()
 pred_10cv_disaster <- c()
 adj_r2_disaster <- c()
 adj_r2_test_disaster <- c()
+rmse_disaster <- c()
+btrmse_disaster <- c()
 
 set.seed(random_seeds[2])
 folds <- createFolds(seq(1, nrow(disaster)), k = 10)
@@ -464,12 +472,15 @@ for (fold in seq(1, 10)) {
   pred_10cv_disaster <- append(pred_10cv_disaster, predictions)
   adj_r2_disaster <- append(adj_r2_disaster, summary(h2s_da_model_10cv)$r.sq)
   adj_r2_test_disaster <- append(adj_r2_test_disaster, adj_r2_test)
+  rmse_disaster <- append(rmse_disaster, RMSE(pred_10cv_disaster, obs_10cv_disaster))
+  btrmse_disaster <- append(btrmse_disaster, RMSE(exp(pred_10cv_disaster), obs_10cv_disaster))
 }
 
 result_10cv <- rbind(result_10cv, tibble(Model = 'Disaster Only Log Transform',
                                '10CV AVG Train R-Sq' = mean(adj_r2_disaster),
                                '10CV AVG Test R-Sq' = mean(adj_r2_test_disaster),
-                               'Test RMSE' = RMSE(pred_10cv_disaster, obs_10cv_disaster)))
+                               'Test RMSE' = mean(rmse_disaster),
+                               'B-T Test RMSE' = mean(btrmse_disaster)))
 
 logh2s_10cv_ovp_plot_dis_only <- ggplot(tibble(obs = obs_10cv_disaster, pred = exp(pred_10cv_disaster)),
                              aes(x = pred, y = obs)) +
@@ -492,6 +503,8 @@ obs_10cv_excl_dis <- c()
 pred_10cv_excl_dis <- c()
 adj_r2_excl_dis <- c()
 adj_r2_test_excl_dis <- c()
+rmse_excl_dis <- c()
+btrmse_excl_dis <- c()
 
 set.seed(random_seeds[3])
 folds <- createFolds(seq(1, nrow(excl_disaster)), k = 10)
@@ -519,12 +532,15 @@ for (fold in seq(1, 10)) {
   pred_10cv_excl_dis <- append(pred_10cv_excl_dis, predictions)
   adj_r2_excl_dis <- append(adj_r2_excl_dis, summary(h2s_da_model_10cv)$r.sq)
   adj_r2_test_excl_dis <- append(adj_r2_test_excl_dis, adj_r2_test)
+  rmse_excl_dis <- append(rmse_excl_dis, RMSE(pred_10cv_excl_dis, obs_10cv_excl_dis))
+  btrmse_excl_dis <- append(btrmse_excl_dis, RMSE(exp(pred_10cv_excl_dis), obs_10cv_excl_dis))
 }
 
 result_10cv <- rbind(result_10cv, tibble(Model = 'Exclude Disaster Log Transform',
                                '10CV AVG Train R-Sq' = mean(adj_r2_excl_dis),
                                '10CV AVG Test R-Sq' = mean(adj_r2_test_excl_dis),
-                               'Test RMSE' = RMSE(pred_10cv_excl_dis, obs_10cv_excl_dis)))
+                               'Test RMSE' = mean(rmse_excl_dis),
+                               'B-T Test RMSE' = mean(btrmse_excl_dis)))
 
 logh2s_10cv_ovp_plot_excl_dis <- ggplot(tibble(obs = obs_10cv_excl_dis, pred = exp(pred_10cv_excl_dis)),
                              aes(x = pred, y = obs)) +
@@ -547,6 +563,8 @@ obs_10cv_disaster_ind <- c()
 pred_10cv_disaster_ind <- c()
 adj_r2_disaster_ind <- c()
 adj_r2_test_disaster_ind <- c()
+rmse_disaster_ind <- c()
+btrmse_disaster_ind <- c()
 
 set.seed(random_seeds[4])
 folds <- createFolds(seq(1, nrow(everything)), k = 10)
@@ -574,12 +592,15 @@ for (fold in seq(1, 10)) {
   pred_10cv_disaster_ind <- append(pred_10cv_disaster_ind, predictions)
   adj_r2_disaster_ind <- append(adj_r2_disaster_ind, summary(h2s_da_model_10cv)$r.sq)
   adj_r2_test_disaster_ind <- append(adj_r2_test_disaster_ind, adj_r2_test)
+  rmse_disaster_ind <- append(rmse_disaster_ind, RMSE(pred_10cv_disaster_ind, obs_10cv_disaster_ind))
+  btrmse_disaster_ind <- append(btrmse_disaster_ind, RMSE(exp(pred_10cv_disaster_ind), obs_10cv_disaster_ind))
 }
 
 result_10cv <- rbind(result_10cv, tibble(Model = 'Everything w. Disaster Indicator Log Transform',
                                '10CV AVG Train R-Sq' = mean(adj_r2_disaster_ind),
                                '10CV AVG Test R-Sq' = mean(adj_r2_test_disaster_ind),
-                               'Test RMSE' = RMSE(pred_10cv_disaster_ind, obs_10cv_disaster_ind)))
+                               'Test RMSE' = mean(rmse_disaster_ind),
+                               'B-T Test RMSE' = mean(btrmse_disaster_ind)))
 
 logh2s_10cv_ovp_plot_dis_ind <- ggplot(tibble(obs = obs_10cv_disaster_ind, pred = exp(pred_10cv_disaster_ind)),
                              aes(x = pred, y = obs)) +
@@ -602,6 +623,8 @@ obs_10cv_everything <- c()
 pred_10cv_everything <- c()
 adj_r2_everything <- c()
 adj_r2_test_everything <- c()
+rmse_everything <- c()
+btrmse_everything <- c()
 
 set.seed(random_seeds[5])
 folds <- createFolds(seq(1, nrow(everything)), k = 10)
@@ -629,12 +652,15 @@ for (fold in seq(1, 10)) {
   pred_10cv_everything <- append(pred_10cv_everything, predictions)
   adj_r2_everything <- append(adj_r2_everything, summary(h2s_da_model_10cv)$r.sq)
   adj_r2_test_everything <- append(adj_r2_test_everything, adj_r2_test)
+  rmse_everything <- append(rmse_everything, RMSE(pred_10cv_everything, obs_10cv_everything))
+  btrmse_everything <- append(btrmse_everything, RMSE(exp(pred_10cv_everything), obs_10cv_everything))
 }
 
 result_10cv <- rbind(result_10cv, tibble(Model = 'Everything w.o Disaster Indicator Log Transform',
                                '10CV AVG Train R-Sq' = mean(adj_r2_everything),
                                '10CV AVG Test R-Sq' = mean(adj_r2_test_everything),
-                               'Test RMSE' = RMSE(pred_10cv_everything, obs_10cv_everything)))
+                               'Test RMSE' = mean(rmse_everything),
+                               'B-T Test RMSE' = mean(btrmse_everything)))
 
 logh2s_10cv_ovp_plot_full <- ggplot(tibble(obs = obs_10cv_everything, pred = exp(pred_10cv_everything)),
                              aes(x = pred, y = obs)) +
