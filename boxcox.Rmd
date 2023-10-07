@@ -413,8 +413,8 @@ for (fold in seq(1, 10)) {
   pred_10cv_sincefeb2022 <- append(pred_10cv_sincefeb2022, predictions)
   adj_r2_sincefeb2022 <- append(adj_r2_sincefeb2022, summary(h2s_da_model_10cv)$r.sq)
   adj_r2_test_sincefeb2022 <- append(adj_r2_test_sincefeb2022, adj_r2_test)
-  rmse_sincefeb2022 <- append(rmse_sincefeb2022, RMSE(pred_10cv_sincefeb2022, obs_10cv_sincefeb2022))
-  btrmse_sincefeb2022 <- append(btrmse_sincefeb2022, RMSE(exp(pred_10cv_sincefeb2022), obs_10cv_sincefeb2022))
+  rmse_sincefeb2022 <- append(rmse_sincefeb2022, RMSE(predictions, test$H2S_daily_avg))
+  btrmse_sincefeb2022 <- append(btrmse_sincefeb2022, RMSE(exp(predictions), test$H2S_daily_avg))
 }
 
 result_10cv <- rbind(result_10cv, tibble(Model = 'Since Feb 2022 Log Transform',
@@ -472,8 +472,8 @@ for (fold in seq(1, 10)) {
   pred_10cv_disaster <- append(pred_10cv_disaster, predictions)
   adj_r2_disaster <- append(adj_r2_disaster, summary(h2s_da_model_10cv)$r.sq)
   adj_r2_test_disaster <- append(adj_r2_test_disaster, adj_r2_test)
-  rmse_disaster <- append(rmse_disaster, RMSE(pred_10cv_disaster, obs_10cv_disaster))
-  btrmse_disaster <- append(btrmse_disaster, RMSE(exp(pred_10cv_disaster), obs_10cv_disaster))
+  rmse_disaster <- append(rmse_disaster, RMSE(predictions, test$H2S_daily_avg))
+  btrmse_disaster <- append(btrmse_disaster, RMSE(exp(predictions), test$H2S_daily_avg))
 }
 
 result_10cv <- rbind(result_10cv, tibble(Model = 'Disaster Only Log Transform',
@@ -532,8 +532,8 @@ for (fold in seq(1, 10)) {
   pred_10cv_excl_dis <- append(pred_10cv_excl_dis, predictions)
   adj_r2_excl_dis <- append(adj_r2_excl_dis, summary(h2s_da_model_10cv)$r.sq)
   adj_r2_test_excl_dis <- append(adj_r2_test_excl_dis, adj_r2_test)
-  rmse_excl_dis <- append(rmse_excl_dis, RMSE(pred_10cv_excl_dis, obs_10cv_excl_dis))
-  btrmse_excl_dis <- append(btrmse_excl_dis, RMSE(exp(pred_10cv_excl_dis), obs_10cv_excl_dis))
+  rmse_excl_dis <- append(rmse_excl_dis, RMSE(predictions, test$H2S_daily_avg))
+  btrmse_excl_dis <- append(btrmse_excl_dis, RMSE(exp(predictions), test$H2S_daily_avg))
 }
 
 result_10cv <- rbind(result_10cv, tibble(Model = 'Exclude Disaster Log Transform',
@@ -592,8 +592,8 @@ for (fold in seq(1, 10)) {
   pred_10cv_disaster_ind <- append(pred_10cv_disaster_ind, predictions)
   adj_r2_disaster_ind <- append(adj_r2_disaster_ind, summary(h2s_da_model_10cv)$r.sq)
   adj_r2_test_disaster_ind <- append(adj_r2_test_disaster_ind, adj_r2_test)
-  rmse_disaster_ind <- append(rmse_disaster_ind, RMSE(pred_10cv_disaster_ind, obs_10cv_disaster_ind))
-  btrmse_disaster_ind <- append(btrmse_disaster_ind, RMSE(exp(pred_10cv_disaster_ind), obs_10cv_disaster_ind))
+  rmse_disaster_ind <- append(rmse_disaster_ind, RMSE(predictions, test$H2S_daily_avg))
+  btrmse_disaster_ind <- append(btrmse_disaster_ind, RMSE(exp(predictions), test$H2S_daily_avg))
 }
 
 result_10cv <- rbind(result_10cv, tibble(Model = 'Everything w. Disaster Indicator Log Transform',
@@ -652,8 +652,8 @@ for (fold in seq(1, 10)) {
   pred_10cv_everything <- append(pred_10cv_everything, predictions)
   adj_r2_everything <- append(adj_r2_everything, summary(h2s_da_model_10cv)$r.sq)
   adj_r2_test_everything <- append(adj_r2_test_everything, adj_r2_test)
-  rmse_everything <- append(rmse_everything, RMSE(pred_10cv_everything, obs_10cv_everything))
-  btrmse_everything <- append(btrmse_everything, RMSE(exp(pred_10cv_everything), obs_10cv_everything))
+  rmse_everything <- append(rmse_everything, RMSE(predictions, test$H2S_daily_avg))
+  btrmse_everything <- append(btrmse_everything, RMSE(exp(predictions), test$H2S_daily_avg))
 }
 
 result_10cv <- rbind(result_10cv, tibble(Model = 'Everything w.o Disaster Indicator Log Transform',
@@ -841,6 +841,7 @@ validation_result <- rbind(validation_result,
 ```{r}
 matrix <- train %>% select(-H2S_daily_avg)
 matrix <- as.matrix(sapply(matrix, as.numeric))  
+matrix <- matrix[,c(1:33, 39, 35, 40, 34, 38, 36, 37)]
 xgb.plot.shap(data = matrix, 
               model = fit.xgb_da_log_h2s_sincefeb2022$finalModel, top_n = 12, n_col = 3)
 ```
@@ -957,6 +958,7 @@ validation_result <- rbind(validation_result,
 ```{r}
 matrix <- train %>% select(-H2S_daily_avg)
 matrix <- as.matrix(sapply(matrix, as.numeric))  
+matrix <- matrix[,c(1:23, 29, 25, 30, 24, 28, 26, 27)]
 xgb.plot.shap(data = matrix, 
               model = fit.xgb_da_log_h2s_dis$finalModel, top_n = 12, n_col = 3)
 ```
@@ -1074,6 +1076,7 @@ validation_result <- rbind(validation_result,
 ```{r}
 matrix <- train %>% select(-H2S_daily_avg)
 matrix <- as.matrix(sapply(matrix, as.numeric))  
+matrix <- matrix[,c(1:35, 41, 37, 42, 36, 40, 38, 39)]
 xgb.plot.shap(data = matrix, 
               model = fit.xgb_da_log_h2s_excl_dis$finalModel, top_n = 12, n_col = 3)
 ```
@@ -1190,6 +1193,7 @@ validation_result <- rbind(validation_result,
 ```{r}
 matrix <- train %>% select(-H2S_daily_avg)
 matrix <- as.matrix(sapply(matrix, as.numeric))  
+matrix <- matrix[,c(1:36, 42, 38, 43, 37, 41, 39, 40)]
 xgb.plot.shap(data = matrix, 
               model = fit.xgb_da_log_h2s_dis_ind$finalModel, top_n = 12, n_col = 3)
 ```
@@ -1307,6 +1311,7 @@ validation_result <- rbind(validation_result,
 ```{r}
 matrix <- train %>% select(-H2S_daily_avg)
 matrix <- as.matrix(sapply(matrix, as.numeric))  
+matrix <- matrix[,c(1:35, 41, 37, 42, 36, 40, 38, 39)]
 xgb.plot.shap(data = matrix, 
               model = fit.xgb_da_log_h2s_full$finalModel, top_n = 12, n_col = 3)
 ```

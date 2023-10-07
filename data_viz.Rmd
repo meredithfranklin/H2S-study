@@ -346,7 +346,7 @@ getplot <- function(mon) {
   return(mon_plot)
 }
 
-for loop doesn't work with png() and bg='transparent' for some reason...
+# for loop doesn't work with png() and bg='transparent' for some reason...
 mon <- dis_mon[1]
 mon_plot <- getplot(mon)
 mon <- str_replace_all(str_replace_all(mon, '[()]', ''), ' ', '_')
@@ -553,7 +553,7 @@ getplot <- function(mon) {
   return(mon_plot)
 }
 
-for loop doesn't work with png() and bg='transparent' for some reason...
+# for loop doesn't work with png() and bg='transparent' for some reason...
 mon <- norm_mon[2]
 mon_plot <- getplot(mon)
 mon <- str_replace_all(str_replace_all(mon, '[()]', ''), ' ', '_')
