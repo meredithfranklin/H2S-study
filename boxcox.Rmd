@@ -77,9 +77,9 @@ plot(h2s_da_model_f)
 # Check Condition 1
 ggplot(tibble(obs = daily_avg_train_sincefeb2022$H2S_daily_avg, pred = fitted(h2s_da_model_f)),
                              aes(x = pred, y = obs)) +
-                        geom_point() +
+                        geom_abline(slope = 1, intercept = 0, linetype = 'dashed') +                                                         geom_point() +
                         stat_poly_line() +
-                        stat_poly_eq(use_label(c("eq", "R2", "n"))) +
+                        stat_poly_eq(use_label(c("eq")), label.x = "right", label.y = 0.15) +                                                stat_poly_eq(use_label(c("R2")), label.x = "right", label.y = 0.1) +                                                 stat_poly_eq(use_label(c("n")), label.x = "right", label.y = 0.05) +
                         labs(y = 'Observed', x = 'Predicted', 
                              title = 'Observed vs Predicted for Since 2022 GAM') +
                         theme_bw()
@@ -98,6 +98,7 @@ ggplot(tibble(obs = daily_avg_train_sincefeb2022$H2S_daily_avg, pred = fitted(h2
 rs_full <- h2s_da_model_f$residuals
 plot(rs_full~fitted(h2s_da_model_f), xlab="Fitted", ylab="Residuals")
 ```
+
 ```{r}
 par(mfrow=c(2,3))
 for(i in c(2:3, 5:length(daily_avg_train_sincefeb2022))){
@@ -236,9 +237,9 @@ knitr::kable(sincefeb2022_model_stat, format = 'html', digits = 2)
 # Check Condition 1
 ggplot(tibble(obs = log(daily_avg_train_sincefeb2022$H2S_daily_avg), pred = fitted(logh2s_da_sincefeb2022)),
                              aes(x = pred, y = obs)) +
-                        geom_point() +
+                        geom_abline(slope = 1, intercept = 0, linetype = 'dashed') +                                                         geom_point() +
                         stat_poly_line() +
-                        stat_poly_eq(use_label(c("eq", "R2", "n"))) +
+                        stat_poly_eq(use_label(c("eq")), label.x = "right", label.y = 0.15) +                                                stat_poly_eq(use_label(c("R2")), label.x = "right", label.y = 0.1) +                                                 stat_poly_eq(use_label(c("n")), label.x = "right", label.y = 0.05) +
                         labs(y = 'Observed', x = 'Predicted', 
                              title = 'Obs vs Pred with log(H2S) transformation',
                              subtitle = 'Since Feb 2022') +
@@ -425,9 +426,12 @@ result_10cv <- rbind(result_10cv, tibble(Model = 'Since Feb 2022 Log Transform',
 
 logh2s_10cv_ovp_plot_sincefeb2022 <- ggplot(tibble(obs = obs_10cv_sincefeb2022, pred = exp(pred_10cv_sincefeb2022)),
                              aes(x = pred, y = obs)) +
+                        geom_abline(slope = 1, intercept = 0, linetype = 'dashed') +
                         geom_point() +
                         stat_poly_line() +
-                        stat_poly_eq(use_label(c("eq", "R2", "n"))) +
+                        stat_poly_eq(use_label(c("eq")), label.x = "right", label.y = 0.05) +
+                        stat_poly_eq(use_label(c("R2")), label.x = "right", label.y = 0.1) +
+                        stat_poly_eq(use_label(c("n")), label.x = "right", label.y = 0.15) +
                         labs(y = 'Observed', x = 'Predicted', 
                              title = 'Observed vs Predicted for Since 2022 GAM 10CV Log H2S') +
                         theme_bw()
@@ -484,9 +488,9 @@ result_10cv <- rbind(result_10cv, tibble(Model = 'Disaster Only Log Transform',
 
 logh2s_10cv_ovp_plot_dis_only <- ggplot(tibble(obs = obs_10cv_disaster, pred = exp(pred_10cv_disaster)),
                              aes(x = pred, y = obs)) +
-                        geom_point() +
+                        geom_abline(slope = 1, intercept = 0, linetype = 'dashed') +                                                         geom_point() +
                         stat_poly_line() +
-                        stat_poly_eq(use_label(c("eq", "R2", "n"))) +
+                        stat_poly_eq(use_label(c("eq")), label.x = "right", label.y = 0.15) +                                                stat_poly_eq(use_label(c("R2")), label.x = "right", label.y = 0.1) +                                                 stat_poly_eq(use_label(c("n")), label.x = "right", label.y = 0.05) +
                         labs(y = 'Observed', x = 'Predicted', 
                              title = 'Observed vs Predicted for Disaster GAM 10CV Log H2S') +
                         theme_bw()
@@ -544,9 +548,9 @@ result_10cv <- rbind(result_10cv, tibble(Model = 'Exclude Disaster Log Transform
 
 logh2s_10cv_ovp_plot_excl_dis <- ggplot(tibble(obs = obs_10cv_excl_dis, pred = exp(pred_10cv_excl_dis)),
                              aes(x = pred, y = obs)) +
-                        geom_point() +
+                        geom_abline(slope = 1, intercept = 0, linetype = 'dashed') +                                                         geom_point() +
                         stat_poly_line() +
-                        stat_poly_eq(use_label(c("eq", "R2", "n"))) +
+                        stat_poly_eq(use_label(c("eq")), label.x = "right", label.y = 0.15) +                         stat_poly_eq(use_label(c("R2")), label.x = "right", label.y = 0.1) +                         stat_poly_eq(use_label(c("n")), label.x = "right", label.y = 0.05) +
                         labs(y = 'Observed', x = 'Predicted', 
                              title = 'Observed vs Predicted for Excl Dis GAM 10CV Log H2S') +
                         theme_bw()
@@ -604,9 +608,9 @@ result_10cv <- rbind(result_10cv, tibble(Model = 'Everything w. Disaster Indicat
 
 logh2s_10cv_ovp_plot_dis_ind <- ggplot(tibble(obs = obs_10cv_disaster_ind, pred = exp(pred_10cv_disaster_ind)),
                              aes(x = pred, y = obs)) +
-                        geom_point() +
+                        geom_abline(slope = 1, intercept = 0, linetype = 'dashed') +                                                         geom_point() +
                         stat_poly_line() +
-                        stat_poly_eq(use_label(c("eq", "R2", "n"))) +
+                        stat_poly_eq(use_label(c("eq")), label.x = "right", label.y = 0.15) +                         stat_poly_eq(use_label(c("R2")), label.x = "right", label.y = 0.1) +                         stat_poly_eq(use_label(c("n")), label.x = "right", label.y = 0.05) +
                         labs(y = 'Observed', x = 'Predicted', 
                              title = 'Everything w. Disaster Indicator') +
                         theme_bw()
@@ -664,9 +668,9 @@ result_10cv <- rbind(result_10cv, tibble(Model = 'Everything w.o Disaster Indica
 
 logh2s_10cv_ovp_plot_full <- ggplot(tibble(obs = obs_10cv_everything, pred = exp(pred_10cv_everything)),
                              aes(x = pred, y = obs)) +
-                        geom_point() +
+                        geom_abline(slope = 1, intercept = 0, linetype = 'dashed') +                                                         geom_point() +
                         stat_poly_line() +
-                        stat_poly_eq(use_label(c("eq", "R2", "n"))) +
+                        stat_poly_eq(use_label(c("eq")), label.x = "right", label.y = 0.15) +                         stat_poly_eq(use_label(c("R2")), label.x = "right", label.y = 0.1) +                         stat_poly_eq(use_label(c("n")), label.x = "right", label.y = 0.05) +
                         labs(y = 'Observed', x = 'Predicted', 
                              title = 'Everything w.o Disaster Indicator') +
                         theme_bw()
@@ -820,11 +824,11 @@ test_rmse_bt <- mean(fold_stat$RMSE_BT)
 log_h2s_xgb_sincefeb2022_obs_vs_pred_plot <- ggplot(tibble(obs = exp(fit.xgb_da_log_h2s_sincefeb2022$pred$obs), 
                                                               pred = exp(fit.xgb_da_log_h2s_sincefeb2022$pred$pred)),
                              aes(x = pred, y = obs)) +
-                        geom_point() +
+                        geom_abline(slope = 1, intercept = 0, linetype = 'dashed') +                                                         geom_point() +
                         labs(y = 'Observed', x = 'Predicted', 
                              title = 'Since Februrary 2022') +
                         stat_poly_line() +
-                        stat_poly_eq(use_label(c("eq", "R2", "n"))) +
+                        stat_poly_eq(use_label(c("eq")), label.x = "right", label.y = 0.05) +                                                stat_poly_eq(use_label(c("R2")), label.x = "right", label.y = 0.1) +                                                 stat_poly_eq(use_label(c("n")), label.x = "right", label.y = 0.15) +
                         theme_bw()
 ```
 
@@ -841,7 +845,6 @@ validation_result <- rbind(validation_result,
 ```{r}
 matrix <- train %>% select(-H2S_daily_avg)
 matrix <- as.matrix(sapply(matrix, as.numeric))  
-matrix <- matrix[,c(1:33, 39, 35, 40, 34, 38, 36, 37)]
 xgb.plot.shap(data = matrix, 
               model = fit.xgb_da_log_h2s_sincefeb2022$finalModel, top_n = 12, n_col = 3)
 ```
@@ -937,11 +940,11 @@ test_rmse_bt <- mean(fold_stat$RMSE_BT)
 log_h2s_xgb_dis_obs_vs_pred_plot <- ggplot(tibble(obs = exp(fit.xgb_da_log_h2s_dis$pred$obs), 
                                                               pred = exp(fit.xgb_da_log_h2s_dis$pred$pred)),
                              aes(x = pred, y = obs)) +
-                        geom_point() +
+                        geom_abline(slope = 1, intercept = 0, linetype = 'dashed') +                                                         geom_point() +
                         labs(y = 'Observed', x = 'Predicted', 
                              title = 'Disaster Only') +
                         stat_poly_line() +
-                        stat_poly_eq(use_label(c("eq", "R2", "n"))) +
+                        stat_poly_eq(use_label(c("eq")), label.x = "right", label.y = 0.03) +                                                stat_poly_eq(use_label(c("R2")), label.x = "right", label.y = 0.1) +                                                 stat_poly_eq(use_label(c("n")), label.x = "right", label.y = 0.18) +
                         theme_bw()
 ```
 
@@ -957,8 +960,7 @@ validation_result <- rbind(validation_result,
 ### SHAP
 ```{r}
 matrix <- train %>% select(-H2S_daily_avg)
-matrix <- as.matrix(sapply(matrix, as.numeric))  
-matrix <- matrix[,c(1:23, 29, 25, 30, 24, 28, 26, 27)]
+matrix <- as.matrix(sapply(matrix, as.numeric))
 xgb.plot.shap(data = matrix, 
               model = fit.xgb_da_log_h2s_dis$finalModel, top_n = 12, n_col = 3)
 ```
@@ -1055,11 +1057,11 @@ test_rmse_bt <- mean(fold_stat$RMSE_BT)
 log_h2s_xgb_excl_dis_obs_vs_pred_plot <- ggplot(tibble(obs = exp(fit.xgb_da_log_h2s_excl_dis$pred$obs), 
                                                               pred = exp(fit.xgb_da_log_h2s_excl_dis$pred$pred)),
                              aes(x = pred, y = obs)) +
-                        geom_point() +
+                        geom_abline(slope = 1, intercept = 0, linetype = 'dashed') +                                                         geom_point() +
                         labs(y = 'Observed', x = 'Predicted', 
                              title = 'Exclude Disaster') +
                         stat_poly_line() +
-                        stat_poly_eq(use_label(c("eq", "R2", "n"))) +
+                        stat_poly_eq(use_label(c("eq")), label.x = "right", label.y = 0.15) +                                                stat_poly_eq(use_label(c("R2")), label.x = "right", label.y = 0.1) +                                                 stat_poly_eq(use_label(c("n")), label.x = "right", label.y = 0.05) +
                         theme_bw()
 ```
 
@@ -1075,8 +1077,7 @@ validation_result <- rbind(validation_result,
 ### SHAP
 ```{r}
 matrix <- train %>% select(-H2S_daily_avg)
-matrix <- as.matrix(sapply(matrix, as.numeric))  
-matrix <- matrix[,c(1:35, 41, 37, 42, 36, 40, 38, 39)]
+matrix <- as.matrix(sapply(matrix, as.numeric))
 xgb.plot.shap(data = matrix, 
               model = fit.xgb_da_log_h2s_excl_dis$finalModel, top_n = 12, n_col = 3)
 ```
@@ -1172,11 +1173,11 @@ test_rmse_bt <- mean(fold_stat$RMSE_BT)
 log_h2s_xgb_dis_ind_obs_vs_pred_plot <- ggplot(tibble(obs = exp(fit.xgb_da_log_h2s_dis_ind$pred$obs), 
                                                               pred = exp(fit.xgb_da_log_h2s_dis_ind$pred$pred)),
                              aes(x = pred, y = obs)) +
-                        geom_point() +
+                        geom_abline(slope = 1, intercept = 0, linetype = 'dashed') +                                                         geom_point() +
                         labs(y = 'Observed', x = 'Predicted', 
                              title = 'Everything w. Disaster Indicator') +
                         stat_poly_line() +
-                        stat_poly_eq(use_label(c("eq", "R2", "n"))) +
+                        stat_poly_eq(use_label(c("eq")), label.x = "right", label.y = 0.03) +                                                stat_poly_eq(use_label(c("R2")), label.x = "right", label.y = 0.08) +                                                 stat_poly_eq(use_label(c("n")), label.x = "right", label.y = 0.17) +
                         theme_bw()
 ```
 
@@ -1192,8 +1193,7 @@ validation_result <- rbind(validation_result,
 ### SHAP
 ```{r}
 matrix <- train %>% select(-H2S_daily_avg)
-matrix <- as.matrix(sapply(matrix, as.numeric))  
-matrix <- matrix[,c(1:36, 42, 38, 43, 37, 41, 39, 40)]
+matrix <- as.matrix(sapply(matrix, as.numeric))
 xgb.plot.shap(data = matrix, 
               model = fit.xgb_da_log_h2s_dis_ind$finalModel, top_n = 12, n_col = 3)
 ```
@@ -1290,11 +1290,11 @@ test_rmse_bt <- mean(fold_stat$RMSE_BT)
 log_h2s_xgb_full_obs_vs_pred_plot <- ggplot(tibble(obs = exp(fit.xgb_da_log_h2s_full$pred$obs), 
                                                               pred = exp(fit.xgb_da_log_h2s_full$pred$pred)),
                              aes(x = pred, y = obs)) +
-                        geom_point() +
+                        geom_abline(slope = 1, intercept = 0, linetype = 'dashed') +                                                         geom_point() +
                         labs(y = 'Observed', x = 'Predicted', 
                              title = 'Everything w.o Disaster Indicator') +
                         stat_poly_line() +
-                        stat_poly_eq(use_label(c("eq", "R2", "n"))) +
+                        stat_poly_eq(use_label(c("eq")), label.x = "right", label.y = 0.15) +                                                stat_poly_eq(use_label(c("R2")), label.x = "right", label.y = 0.1) +                                                 stat_poly_eq(use_label(c("n")), label.x = "right", label.y = 0.05) +
                         theme_bw()
 ```
 
@@ -1310,8 +1310,7 @@ validation_result <- rbind(validation_result,
 ### SHAP
 ```{r}
 matrix <- train %>% select(-H2S_daily_avg)
-matrix <- as.matrix(sapply(matrix, as.numeric))  
-matrix <- matrix[,c(1:35, 41, 37, 42, 36, 40, 38, 39)]
+matrix <- as.matrix(sapply(matrix, as.numeric)) 
 xgb.plot.shap(data = matrix, 
               model = fit.xgb_da_log_h2s_full$finalModel, top_n = 12, n_col = 3)
 ```

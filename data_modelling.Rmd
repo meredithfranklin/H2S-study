@@ -1361,7 +1361,6 @@ validation_result <- rbind(validation_result,
 ```{r}
 matrix <- train %>% select(-H2S_daily_avg)
 matrix <- as.matrix(sapply(matrix, as.numeric))  
-matrix <- matrix[,c(1:35, 41, 37, 42, 36, 40, 38, 39)]
 xgb.plot.shap(data = matrix, 
               model = fit.xgb_da$finalModel, top_n = 12, n_col = 3)
 ```
@@ -1716,7 +1715,6 @@ validation_result <- rbind(validation_result,
 ```{r}
 matrix <- train %>% select(-H2S_daily_avg)
 matrix <- as.matrix(sapply(matrix, as.numeric))
-matrix <- matrix[,c(1:24, 30, 26, 31, 25, 29, 27, 28)]
 xgb.plot.shap(data = matrix,
               model = fit.xgb_da_dis$finalModel, top_n = 12, n_col = 3)
 ```
@@ -1978,7 +1976,6 @@ xgb_result <- rbind(xgb_result,
 ```{r}
 matrix <- train %>% select(-H2S_daily_avg)
 matrix <- as.matrix(sapply(matrix, as.numeric))
-matrix <- matrix[,c(1:37, 43, 39, 44, 38, 42, 40, 41)]
 xgb.plot.shap(data = matrix,
               model = fit.xgb_da_excl_dis$finalModel, top_n = 12, n_col = 3)
 ```
@@ -2127,7 +2124,6 @@ xgb_result <- rbind(xgb_result,
 ```{r}
 matrix <- train %>% select(-H2S_daily_avg)
 matrix <- as.matrix(sapply(matrix, as.numeric))
-matrix <- matrix[, c(1:38, 44, 40, 45, 39, 43, 41, 42)]
 xgb.plot.shap(data = matrix,
               model = fit.xgb_da_full_dis_ind$finalModel, top_n = 12, n_col = 3)
 ```
@@ -2259,7 +2255,6 @@ validation_result <- rbind(validation_result,
 ```{r}
 matrix <- train %>% select(-H2S_daily_avg)
 matrix <- as.matrix(sapply(matrix, as.numeric))
-matrix <- matrix[,c(1:37, 43, 39, 44, 38, 42, 40, 41)]
 xgb.plot.shap(data = matrix,
               model = fit.xgb_da_full$finalModel, top_n = 12, n_col = 3)
 ```

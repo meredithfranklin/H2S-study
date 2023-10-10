@@ -213,7 +213,7 @@ basemap <- leaflet() %>%
 
 
 basemap
-# saveWidget(basemap, file="basemap.html")
+saveWidget(basemap, file="basemap.html")
 ```
 
 
