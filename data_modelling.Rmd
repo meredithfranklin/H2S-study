@@ -2466,7 +2466,7 @@ model_perf_table <- tibble(Model = c('Since Feb 2022',
                                     nrow(fit.xgb_da_full$trainingData))) %>%
                left_join(result_10cv, join_by(Model)) %>%
                left_join(xgb_result, join_by(Model)) %>%
-               select(-c('80/20 Train R-Sq', '80/20 Test R-Sq'))
+               select(-c('10CV Train R-Sq', '80/20 Train R-Sq', '80/20 Test R-Sq'))
 
 model_perf_latex <- knitr::kable(model_perf_table, digits = 3, format = 'latex')
 writeLines(model_perf_latex, 'figures/model_perf.tex')

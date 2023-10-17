@@ -1,7 +1,7 @@
 ---
 title: "Data Visualizations"
 author: "Jerry Wu"
-date: "10/3/2023"
+date: "10/15/2023"
 output:
   html_document:
     df_print: paged
@@ -439,6 +439,14 @@ png(paste0("polarplot_components/disaster/", mon, ".png"), width=20, height=15, 
 mon_plot
 dev.off()
 
+mon <- dis_mon[14]
+mon_plot <- getplot(mon)
+mon <- str_replace_all(str_replace_all(mon, '[()]', ''), ' ', '_')
+png(paste0("polarplot_components/disaster/", mon, ".png"), width=20, height=15, units="cm", res=800, bg="transparent")
+mon_plot
+dev.off()
+
+
 
 parOrig <- par()
 par(parOrig)
@@ -633,6 +641,20 @@ mon_plot
 dev.off()
 
 mon <- norm_mon[13]
+mon_plot <- getplot(mon)
+mon <- str_replace_all(str_replace_all(mon, '[()]', ''), ' ', '_')
+png(paste0("polarplot_components/normal/", mon, ".png"), width=20, height=15, units="cm", res=800, bg="transparent")
+mon_plot
+dev.off()
+
+mon <- norm_mon[14]
+mon_plot <- getplot(mon)
+mon <- str_replace_all(str_replace_all(mon, '[()]', ''), ' ', '_')
+png(paste0("polarplot_components/normal/", mon, ".png"), width=20, height=15, units="cm", res=800, bg="transparent")
+mon_plot
+dev.off()
+
+mon <- norm_mon[15]
 mon_plot <- getplot(mon)
 mon <- str_replace_all(str_replace_all(mon, '[()]', ''), ' ', '_')
 png(paste0("polarplot_components/normal/", mon, ".png"), width=20, height=15, units="cm", res=800, bg="transparent")

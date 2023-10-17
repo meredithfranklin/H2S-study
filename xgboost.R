@@ -1,0 +1,253 @@
+# XGB Models
+library(tidyverse)
+library(caret)
+library(fastDummies)
+select <- dplyr::select
+
+daily_full <- readRDS('data/daily_full.rds')
+
+# Since Feb 2022
+daily_full <- daily_full %>%
+  mutate(Refinery = str_replace_all(str_replace_all(Refinery, '[()]', ''), ' ', '_'),
+         Monitor = str_replace_all(Monitor, ' ', '_'),
+         weekday = weekday,
+         daily_downwind_ref = as.integer(daily_downwind_ref),
+         daily_downwind_wrp = as.integer(daily_downwind_wrp))
+
+train <- daily_full[complete.cases(daily_full),] %>%
+  filter(day >= '2022-02-01')
+
+train <- fastDummies::dummy_cols(train %>%
+                                   select(-c(Refinery, Monitor, day, H2S_daily_max, H2S_monthly_average,
+                                             monitor_lat, monitor_lon, county, dist_213)) %>%
+                                   mutate(MinDist = 1/(MinDist^2),
+                                          dist_wrp = 1/(dist_wrp^2)),
+                                 remove_selected_columns = TRUE)
+
+# Try for a continuous month
+tune_grid <- expand.grid(nrounds = c(100, 200, 500),
+                         max_depth = c(3, 4, 5),
+                         eta = c(0.1, 0.3),
+                         gamma = c(0.01, 0.001),
+                         colsample_bytree = c(0.5, 1),
+                         min_child_weight = 0,
+                         subsample = c(0.5, 0.75, 1))
+
+# Run algorithms using 10-fold cross validation
+control <- trainControl(method="cv", 
+                        number=10,
+                        verboseIter=TRUE, 
+                        search='grid',
+                        savePredictions = 'final')
+
+fit.xgb_da <- train(H2S_daily_avg~.,
+                 method = 'xgbTree',
+                 data = train,
+                 trControl=control,
+                 tuneGrid = tune_grid,
+                 tuneLength = 10, importance=TRUE, verbosity = 0, verbose=FALSE)
+saveRDS(fit.xgb_da, 'rfiles/fit.xgb_da.rds')
+
+# Disaster Only
+train <- daily_full[complete.cases(daily_full),] %>%
+  filter(year == '2021', month %in% c('10', '11', '12'))
+
+train <- fastDummies::dummy_cols(train %>%
+                                   select(-c(Refinery, Monitor, day, H2S_daily_max, H2S_monthly_average,
+                                             monitor_lat, monitor_lon, county, dist_213, year)) %>%
+                                   mutate(MinDist = 1/(MinDist^2),
+                                          dist_wrp = 1/(dist_wrp^2)),
+                                 remove_selected_columns = TRUE)
+
+fit.xgb_da_dis <- train(H2S_daily_avg~.,
+                 method = 'xgbTree',
+                 data = train,
+                 trControl=control,
+                 tuneGrid = tune_grid,
+                 tuneLength = 10, importance=TRUE, verbosity = 0, verbose=FALSE)
+saveRDS(fit.xgb_da_dis, 'rfiles/fit.xgb_da_dis.rds')
+
+# Exclude Disaster
+train <- daily_full[complete.cases(daily_full),] %>%
+  filter(!(year == '2021' & month %in% c('10', '11', '12')))
+
+train <- fastDummies::dummy_cols(train %>%
+                                   select(-c(Refinery, Monitor, day, H2S_daily_max, H2S_monthly_average,
+                                             monitor_lat, monitor_lon, county, dist_213)) %>%
+                                   mutate(MinDist = 1/(MinDist^2),
+                                          dist_wrp = 1/(dist_wrp^2)),
+                                 remove_selected_columns = TRUE)
+
+fit.xgb_da_excl_dis <- train(H2S_daily_avg~.,
+                 method = 'xgbTree',
+                 data = train,
+                 trControl=control,
+                 tuneGrid = tune_grid,
+                 tuneLength = 10, importance=TRUE, verbosity = 0, verbose=FALSE)
+saveRDS(fit.xgb_da_excl_dis, 'rfiles/fit.xgb_da_excl_dis.rds')
+
+# Everything w. Disaster Indicator
+train <- daily_full[complete.cases(daily_full),] %>%
+  mutate(disaster = if_else(year == '2021', month %in% c('10', '11', '12'), 1, 0))
+
+train <- fastDummies::dummy_cols(train %>%
+                                   select(-c(Refinery, Monitor, day, H2S_daily_max, H2S_monthly_average,
+                                             monitor_lat, monitor_lon, county, dist_213)) %>%
+                                   mutate(MinDist = 1/(MinDist^2),
+                                          dist_wrp = 1/(dist_wrp^2)),
+                                 remove_selected_columns = TRUE)
+
+fit.xgb_da_full_dis_ind <- train(H2S_daily_avg~.,
+                 method = 'xgbTree',
+                 data = train,
+                 trControl=control,
+                 tuneGrid = tune_grid,
+                 tuneLength = 10, importance=TRUE, verbosity = 0, verbose=FALSE)
+saveRDS(fit.xgb_da_full_dis_ind, 'rfiles/fit.xgb_da_full_dis_ind.rds')
+
+# Everything w.o Disaster Indicator
+train <- daily_full[complete.cases(daily_full),]
+
+train <- fastDummies::dummy_cols(train %>%
+                                   select(-c(Refinery, Monitor, day, H2S_daily_max, H2S_monthly_average,
+                                             monitor_lat, monitor_lon, county, dist_213)) %>%
+                                   mutate(MinDist = 1/(MinDist^2),
+                                          dist_wrp = 1/(dist_wrp^2)),
+                                 remove_selected_columns = TRUE)
+
+fit.xgb_da_full <- train(H2S_daily_avg~.,
+                 method = 'xgbTree',
+                 data = train,
+                 trControl=control,
+                 tuneGrid = tune_grid,
+                 tuneLength = 10, importance=TRUE, verbosity = 0, verbose=FALSE)
+saveRDS(fit.xgb_da_full, 'rfiles/fit.xgb_da_full.rds')
+
+# Box Cox
+predictors <- c('H2S_daily_avg', 'month', 'year', 'weekday', 'wd_avg', 'ws_avg', 
+                'daily_downwind_ref', 'dist_wrp', 'MinDist',
+                'mon_utm_x', 'mon_utm_y', 'day', 'monthly_oil_1km', 'monthly_gas_1km', 
+                'active_1km', 'daily_downwind_wrp', 'elevation', 'EVI', 'num_odor_complaints',
+                'dist_dc', 'capacity', 'avg_temp', 'avg_hum', 'precip') 
+
+# Since Feb 2022
+daily_avg_train_sincefeb2022 <- daily_full[complete.cases(daily_full),] %>% 
+  filter(day >= '2022-02-01') %>%
+  select(all_of(predictors))
+
+train <- daily_avg_train_sincefeb2022 %>% 
+  mutate(daily_downwind_ref = as.integer(daily_downwind_ref),
+         daily_downwind_wrp = as.integer(daily_downwind_wrp)) %>%
+  mutate(H2S_daily_avg = log(H2S_daily_avg))
+
+train <- fastDummies::dummy_cols(train %>%
+                                   select(-c(day)) %>%
+                                   mutate(MinDist = 1/(MinDist^2),
+                                          dist_wrp = 1/(dist_wrp^2)),
+                                 remove_selected_columns = TRUE)
+
+fit.xgb_da_log_h2s_sincefeb2022 <- train(H2S_daily_avg~.,
+                 method = 'xgbTree',
+                 data = train,
+                 trControl=control,
+                 tuneGrid = tune_grid,
+                 tuneLength = 10, importance=TRUE, verbosity = 0, verbose=FALSE)
+saveRDS(fit.xgb_da_log_h2s_sincefeb2022, 'rfiles/fit.xgb_da_log_h2s_sincefeb2022.rds')
+
+# Disaster Only
+disaster <- daily_full %>% 
+  filter(year == '2021', month %in% c('10', '11', '12')) %>% 
+  select(all_of(predictors)) %>% 
+  filter(complete.cases(.))
+
+train <- disaster %>% 
+  mutate(daily_downwind_ref = as.integer(daily_downwind_ref),
+         daily_downwind_wrp = as.integer(daily_downwind_wrp)) %>%
+  mutate(H2S_daily_avg = log(H2S_daily_avg))
+
+train <- fastDummies::dummy_cols(train %>%
+                                   select(-c(day)) %>%
+                                   mutate(MinDist = 1/(MinDist^2),
+                                          dist_wrp = 1/(dist_wrp^2)),
+                                 remove_selected_columns = TRUE)
+
+fit.xgb_da_log_h2s_dis <- readRDS('rfiles/fit.xgb_da_log_h2s_dis.rds')
+fit.xgb_da_log_h2s_dis <- train(H2S_daily_avg~.,
+                 method = 'xgbTree',
+                 data = train,
+                 trControl=control,
+                 tuneGrid = tune_grid,
+                 tuneLength = 10, importance=TRUE, verbosity = 0, verbose=FALSE)
+saveRDS(fit.xgb_da_log_h2s_dis, 'rfiles/fit.xgb_da_log_h2s_dis.rds')
+
+# Exclude Disaster
+excl_disaster <- daily_full %>% 
+  filter(!(year == '2021' & month %in% c('10', '11', '12'))) %>% 
+  select(all_of(predictors)) %>% 
+  filter(complete.cases(.))
+
+train <- excl_disaster %>% 
+  mutate(daily_downwind_ref = as.integer(daily_downwind_ref),
+         daily_downwind_wrp = as.integer(daily_downwind_wrp)) %>%
+  mutate(H2S_daily_avg = log(H2S_daily_avg))
+
+train <- fastDummies::dummy_cols(train %>%
+                                   select(-c(day)) %>%
+                                   mutate(MinDist = 1/(MinDist^2),
+                                          dist_wrp = 1/(dist_wrp^2)),
+                                 remove_selected_columns = TRUE)
+
+fit.xgb_da_log_h2s_excl_dis <- train(H2S_daily_avg~.,
+                 method = 'xgbTree',
+                 data = train,
+                 trControl=control,
+                 tuneGrid = tune_grid,
+                 tuneLength = 10, importance=TRUE, verbosity = 0, verbose=FALSE)
+saveRDS(fit.xgb_da_log_h2s_excl_dis, 'rfiles/fit.xgb_da_log_h2s_excl_dis.rds')
+
+# Everything w. Disaster Indicator
+everything <- daily_full %>% 
+  select(all_of(predictors)) %>% 
+  mutate(disaster = if_else(year == '2021' & month %in% c('10', '11', '12'), 1, 0)) %>% 
+  filter(complete.cases(.)) 
+
+train <- everything %>% 
+  mutate(daily_downwind_ref = as.integer(daily_downwind_ref),
+         daily_downwind_wrp = as.integer(daily_downwind_wrp)) %>%
+  mutate(H2S_daily_avg = log(H2S_daily_avg))
+
+train <- fastDummies::dummy_cols(train %>%
+                                   select(-c(day)) %>%
+                                   mutate(MinDist = 1/(MinDist^2),
+                                          dist_wrp = 1/(dist_wrp^2)),
+                                 remove_selected_columns = TRUE)
+
+fit.xgb_da_log_h2s_dis_ind <- train(H2S_daily_avg~.,
+                 method = 'xgbTree',
+                 data = train,
+                 trControl=control,
+                 tuneGrid = tune_grid,
+                 tuneLength = 10, importance=TRUE, verbosity = 0, verbose=FALSE)
+saveRDS(fit.xgb_da_log_h2s_dis_ind, 'rfiles/fit.xgb_da_log_h2s_dis_ind.rds')
+
+# Everything w.o Disaster Indicator
+train <- everything %>% 
+  select(-disaster) %>%
+  mutate(daily_downwind_ref = as.integer(daily_downwind_ref),
+         daily_downwind_wrp = as.integer(daily_downwind_wrp)) %>%
+  mutate(H2S_daily_avg = log(H2S_daily_avg))
+
+train <- fastDummies::dummy_cols(train %>%
+                                   select(-c(day)) %>%
+                                   mutate(MinDist = 1/(MinDist^2),
+                                          dist_wrp = 1/(dist_wrp^2)),
+                                 remove_selected_columns = TRUE)
+
+fit.xgb_da_log_h2s_full <- train(H2S_daily_avg~.,
+                 method = 'xgbTree',
+                 data = train,
+                 trControl=control,
+                 tuneGrid = tune_grid,
+                 tuneLength = 10, importance=TRUE, verbosity = 0, verbose=FALSE)
+saveRDS(fit.xgb_da_log_h2s_full, 'rfiles/fit.xgb_da_log_h2s_full.rds')
+

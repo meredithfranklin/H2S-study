@@ -429,9 +429,9 @@ logh2s_10cv_ovp_plot_sincefeb2022 <- ggplot(tibble(obs = obs_10cv_sincefeb2022, 
                         geom_abline(slope = 1, intercept = 0, linetype = 'dashed') +
                         geom_point() +
                         stat_poly_line() +
-                        stat_poly_eq(use_label(c("eq")), label.x = "right", label.y = 0.05) +
-                        stat_poly_eq(use_label(c("R2")), label.x = "right", label.y = 0.1) +
-                        stat_poly_eq(use_label(c("n")), label.x = "right", label.y = 0.15) +
+                        stat_poly_eq(use_label(c("eq")), label.x = "right", label.y = 0.45) +
+                        stat_poly_eq(use_label(c("R2")), label.x = "right", label.y = 0.52) +
+                        stat_poly_eq(use_label(c("n")), label.x = "right", label.y = 0.60) +
                         labs(y = 'Observed', x = 'Predicted', 
                              title = 'Observed vs Predicted for Since 2022 GAM 10CV Log H2S') +
                         theme_bw()

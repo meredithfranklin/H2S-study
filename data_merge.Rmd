@@ -41,15 +41,15 @@ gc()
 # Compute date variables
 ```{r}
 full_data <- full_data %>% 
-  drop_na(c("wd", "ws")) %>% 
-  mutate(DateTime = parse_date_time(DateTime, c('mdy HM', 'ymd HMS')),
-         DateTime = as.POSIXct(DateTime, "%Y-%m-%d %H:%M:%OS", tz = 'UTC'))
+  mutate(DateTime = case_when(Monitor %in% c('North HS', 'West HS', 'Elm Ave') ~ parse_date_time(DateTime, 'ymd HMS'),
+                              .default = parse_date_time(DateTime, 'mdy HM'))) %>%
+  mutate(DateTime = as.POSIXct(DateTime, "%Y-%m-%d %H:%M:%OS", tz = 'UTC'))
 
 full_data <- full_data %>% 
   mutate(day = as.POSIXct(format(DateTime, "%Y-%m-%d"), format="%Y-%m-%d", tz = 'UTC'))
  
 # Remove observations before 2020
-full_data <- full_data %>% filter(day >= '2020-01-01') %>% distinct()
+full_data <- full_data %>% filter(day > '2019-12-31') %>% distinct()
  
 full_data <- full_data %>% 
   mutate(yearmonth = format(day, "%Y-%m"),
@@ -57,6 +57,37 @@ full_data <- full_data %>%
          month = format(day, "%m"),
          weekday = relevel(factor(wday(full_data$day, label=TRUE), ordered = FALSE), ref = "Sun"))
 ```
+
+# Add wind data for El Segundo and St Anthony
+```{r}
+klax_data <- read_csv('data/KLAX_2020-2023.csv', show_col_types = FALSE) %>% 
+  filter(!row_number() == 1)
+
+klax_daily <- klax_data %>%
+  group_by(Date) %>%
+  summarise(avg_temp = mean(as.numeric(air_temp), na.rm=T),
+            avg_hum = mean(as.numeric(relative_humidity), na.rm=T),
+            precip = precip_accum_24_hour[which(!is.na(precip_accum_24_hour))[1]],
+            ws = mean(as.numeric(wind_speed), na.rm=TRUE),
+            wd = as.numeric(mean(circular(as.numeric(wind_direction), units = 'degrees'), na.rm=TRUE))) %>%
+  mutate(precip = coalesce(as.numeric(precip), 0),
+         Date = parse_date_time(Date, c('m/d/y')),
+         Date = as.POSIXct(Date, "%Y-%m-%d", tz = 'UTC'))
+
+full_data <- rbind(full_data %>% 
+                     filter(!(Monitor %in% c('El Segundo', 'St. Anthony'))), 
+                   full_data %>%
+                     select(-c(wd, ws)) %>%
+                     filter(Monitor %in% c('El Segundo', 'St. Anthony')) %>%
+                     left_join(klax_daily %>% select(Date, ws, wd), join_by(day == Date))) 
+```
+
+```{r}
+# Remove rows without wd or ws
+full_data <- full_data %>% 
+  drop_na(c("wd", "ws"))
+```
+
 
 ```{r}
 # Check for duplicate time
@@ -276,8 +307,8 @@ gc()
 
 # Weather data from National Weather Service
 ```{r}
-klax_data <- read_csv('data/KLAX_2020-2023.csv', show_col_types = FALSE) %>% 
-  filter(!row_number() == 1)
+# klax_data <- read_csv('data/KLAX_2020-2023.csv', show_col_types = FALSE) %>% 
+#   filter(!row_number() == 1)
 ktoa_data <- read_csv('data/KTOA_2020-2023.csv', show_col_types = FALSE) %>% 
   filter(!row_number() == 1)
 klgb_data <- read_csv('data/KLGB_2020-2023.csv', show_col_types = FALSE) %>% 
@@ -286,14 +317,17 @@ klgb_data <- read_csv('data/KLGB_2020-2023.csv', show_col_types = FALSE) %>%
 
 ```{r}
 # compute daily average temperature, humidity, and precipitation
-klax_daily <- klax_data %>%
-  group_by(Date) %>%
-  summarise(avg_temp = mean(as.numeric(air_temp), na.rm=T),
-            avg_hum = mean(as.numeric(relative_humidity), na.rm=T),
-            precip = precip_accum_24_hour[which(!is.na(precip_accum_24_hour))[1]]) %>%
-  mutate(precip = coalesce(as.numeric(precip), 0),
-         Date = parse_date_time(Date, c('m/d/y')),
-         Date = as.POSIXct(Date, "%Y-%m-%d", tz = 'UTC'))
+# klax_daily <- klax_data %>%
+#   group_by(Date) %>%
+#   summarise(avg_temp = mean(as.numeric(air_temp), na.rm=T),
+#             avg_hum = mean(as.numeric(relative_humidity), na.rm=T),
+#             precip = precip_accum_24_hour[which(!is.na(precip_accum_24_hour))[1]]) %>%
+#   mutate(precip = coalesce(as.numeric(precip), 0),
+#          Date = parse_date_time(Date, c('m/d/y')),
+#          Date = as.POSIXct(Date, "%Y-%m-%d", tz = 'UTC'))
+
+klax_daily <- klax_daily %>% 
+  select(-c(ws, wd))
 
 klgb_daily <- klgb_data %>%
   group_by(Date) %>%

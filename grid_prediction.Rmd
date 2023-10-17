@@ -1,0 +1,223 @@
+---
+title: "Prediction Grid"
+author: "Jerry Wu"
+date: "2023-10-16"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+library(tidyverse)
+library(sf)
+```
+
+```{r}
+daily_full <- readRDS('data/daily_full.rds')
+```
+
+```{r}
+mon_location <- daily_full %>%
+  select(Monitor, mon_utm_x, mon_utm_y) %>%
+  distinct() %>%
+  st_as_sf(coords = c('mon_utm_x', 'mon_utm_y')) %>%
+  st_set_crs(CRS_UTM)
+
+res=120
+xs=seq(min(daily_full$mon_utm_x),max(daily_full$mon_utm_x),len=res)
+ys=seq(min(daily_full$mon_utm_y),max(daily_full$mon_utm_y),len=res)
+myGrid=expand.grid(xs,ys)
+names(myGrid)=c('x','y')
+
+# make sure it looks correct
+plot(myGrid, pch=19, cex=0.5)
+
+proj_albers<- CRS("+proj=aea +lat_1=34.0 +lat_2=40.5 +lon_0=-120.0 +x_0=0 +y_0=-4000000 +ellps=GRS80 +datum=NAD83 +units=km")
+CRS_UTM <- CRS("+proj=utm +zone=11 ellps=WGS84")
+
+myGrid <- myGrid %>%
+  st_as_sf(coords = c('x', 'y')) %>% 
+  st_set_crs(CRS_UTM)
+
+myGrid_ll<- st_transform(myGrid, proj_albers)
+plot(myGrid_ll, pch=19, cex=0.5)
+```
+
+```{r}
+la_county <- read_sf('shapefiles/Zip_Codes_(LA_County)/Zip_Codes_(LA_County).shp')
+
+la_county_trans <- st_transform(la_county, CRS_UTM)      # apply transformation to polygons sf
+
+# intersect and extract state name
+mon_location$county <- apply(st_intersects(la_county_trans, mon_location, sparse = FALSE), 2, 
+               function(col) { 
+                  la_county_trans[which(col), ]$ZIPCODE
+               })
+# These are the counties with a Monitor
+la_county_present <- la_county_trans[la_county_trans$ZIPCODE %in% unique(mon_location$county), ]
+# Add some more
+la_county_full <- rbind(la_county_present, 
+                           la_county_trans[la_county_trans$ZIPCODE %in% c(90278, 90260, 90501, 90505, 90710, 90746, 90248, 90806, 90807, 90247, 90710, 90502, 90717, 90250, 90249, 90506, 90747, 90755, 90731, 90732, 90275, 90274, 90802, 90277, 90254, 90261), ])
+monitor_zip_graph <- ggplot() +
+  geom_sf(data = la_county_full, aes(fill = ZIPCODE)) +
+  geom_sf(data = mon_location)
+monitor_zip_graph
+```
+
+
+
+```{r}
+# Get a good looking grid using the Stars package
+grd <- st_bbox(la_county_full) %>%
+          st_as_stars(dx = 300) %>%
+          st_crop(la_county_full)
+
+image(grd, text_values = TRUE, axes = TRUE)
+```
+```{r}
+# Convert to a data frame so we can compute the prediction at each grid
+grd_df <- as.data.frame(grd) %>% filter(values == 0)
+
+# There are 4580 points
+```
+
+```{r}
+# For each point, we will compute the predicted H2S concentration using the 
+# Disaster Only Log Models and Since Feb 2022 Models as a comparison
+# Load the GAM model first
+predictors <- c('H2S_daily_avg', 'month', 'year', 'weekday', 'wd_avg', 'ws_avg', 
+                'daily_downwind_ref', 'dist_wrp', 'MinDist',
+                'mon_utm_x', 'mon_utm_y', 'day', 'monthly_oil_1km', 'monthly_gas_1km', 
+                'active_1km', 'daily_downwind_wrp', 'elevation', 'EVI', 'num_odor_complaints',
+                'dist_dc', 'capacity', 'avg_temp', 'avg_hum', 'precip') 
+
+# get train data set for daily average H2S
+daily_avg_train_sincefeb2022 <- daily_full[complete.cases(daily_full),] %>% 
+  filter(day >= '2022-02-01') %>%
+  select(all_of(predictors))
+
+logh2s_da_sincefeb2022 <- gam(I(log(H2S_daily_avg))~s(as.numeric(month),bs='cc') + year + weekday +
+                         wd_avg + ws_avg + daily_downwind_ref + capacity +
+                          I(1/dist_wrp^2) + I(1/MinDist^2) +
+                         s(I(mon_utm_x/10^3), I(mon_utm_y/10^3), bs='tp', k = 10) + 
+                        te(I(mon_utm_x/10^3), I(mon_utm_y/10^3), as.numeric(day),
+                           k=c(10,10),d=c(2,1),bs=c('tp','cc')) +
+                         monthly_oil_1km + monthly_gas_1km + active_1km + 
+                        daily_downwind_wrp + elevation + EVI + num_odor_complaints +
+                        I(1/dist_dc^2) + avg_temp + avg_hum + precip, 
+                      data = daily_avg_train_sincefeb2022)
+
+disaster <- daily_full %>% 
+  filter(year == '2021', month %in% c('10', '11', '12')) %>% 
+  select(all_of(predictors)) %>% 
+  filter(complete.cases(.))
+
+logh2s_da_dis <- gam(I(log(H2S_daily_avg))~month + weekday +
+                         wd_avg + ws_avg + daily_downwind_ref + I(1/dist_wrp^2) + I(1/MinDist^2) +
+                         s(I(mon_utm_x/10^3), I(mon_utm_y/10^3), bs='tp', k = 10) + 
+                         te(I(mon_utm_x/10^3), I(mon_utm_y/10^3), as.numeric(day),
+                            k = c(10,10), d = c(2,1), bs = c('tp','cc')) +
+                         monthly_oil_1km + monthly_gas_1km + active_1km + 
+                         daily_downwind_wrp + elevation + EVI + num_odor_complaints +
+                         capacity + dist_dc + avg_temp + avg_hum + precip, 
+                      data = disaster)
+
+# Load the XGBoost models
+fit.xgb_da_log_h2s_sincefeb2022 <- readRDS('rfiles/fit.xgb_da_log_h2s_sincefeb2022.rds')
+fit.xgb_da_log_h2s_dis <- readRDS('rfiles/fit.xgb_da_log_h2s_dis.rds')
+```
+
+Then, we will compute the predicted H2S concentration for each day October 2021 using the Disaster Models
+
+```{r}
+# Helper Functions 
+get_sf_loc <- function(utm_x, utm_y) {
+  sf_loc <- st_as_sf(c(utm_x, utm_y), 
+                     coords = c('mon_utm_x', 'mon_utm_y')) %>%
+    st_set_crs(CRS_UTM)
+  return(sf_loc)
+}
+
+# Get Wind data from closest Monitor
+# Aggregate wind data from all Monitors first
+wind_disaster <- daily_full %>%
+  filter(between(day, as.Date('2021-10-01'), as.Date('2021-10-31'))) %>%
+  select(Monitor, day, wd_avg, ws_avg)
+
+wind_norm <- daily_full %>%
+  filter(between(day, as.Date('2022-10-01'), as.Date('2022-10-31'))) %>%
+  select(Monitor, day, wd_avg, ws_avg)
+
+# Get the weather from the nearest weather station
+klax_data <- read_csv('data/KLAX_2020-2023.csv', show_col_types = FALSE) %>% 
+  filter(!row_number() == 1)
+ktoa_data <- read_csv('data/KTOA_2020-2023.csv', show_col_types = FALSE) %>% 
+  filter(!row_number() == 1)
+klgb_data <- read_csv('data/KLGB_2020-2023.csv', show_col_types = FALSE) %>% 
+  filter(!row_number() == 1)
+
+klax_daily <- klax_data %>%
+  group_by(Date) %>%
+  summarise(avg_temp = mean(as.numeric(air_temp), na.rm=T),
+            avg_hum = mean(as.numeric(relative_humidity), na.rm=T),
+            precip = precip_accum_24_hour[which(!is.na(precip_accum_24_hour))[1]]) %>%
+  mutate(precip = coalesce(as.numeric(precip), 0),
+         Date = parse_date_time(Date, c('m/d/y')),
+         Date = as.POSIXct(Date, "%Y-%m-%d", tz = 'UTC'))
+
+klgb_daily <- klgb_data %>%
+  group_by(Date) %>%
+  summarise(avg_temp = mean(as.numeric(air_temp), na.rm=T),
+            avg_hum = mean(as.numeric(relative_humidity), na.rm=T),
+            precip = precip_accum_24_hour[which(!is.na(precip_accum_24_hour))[1]]) %>%
+  mutate(precip = coalesce(as.numeric(precip), 0),
+         Date = parse_date_time(Date, c('m/d/y')),
+         Date = as.POSIXct(Date, "%Y-%m-%d", tz = 'UTC'))
+
+ktoa_daily <- ktoa_data %>%
+  group_by(Date) %>%
+  summarise(avg_temp = mean(as.numeric(air_temp), na.rm=T),
+            avg_hum = mean(as.numeric(relative_humidity), na.rm=T)) %>%
+  mutate(Date = parse_date_time(Date, c('m/d/y')),
+         Date = as.POSIXct(Date, "%Y-%m-%d", tz = 'UTC'))
+
+klax_disaster <- klax_daily %>% filter(between(Date, as.Date('2021-10-01'), as.Date('2021-10-31')))
+klgb_disaster <- klgb_daily %>% filter(between(Date, as.Date('2021-10-01'), as.Date('2021-10-31')))
+ktoa_disaster <- ktoa_daily %>% filter(between(Date, as.Date('2021-10-01'), as.Date('2021-10-31')))
+
+klax_norm <- klax_daily %>% filter(between(Date, as.Date('2022-10-01'), as.Date('2022-10-31')))
+klgb_norm <- klgb_daily %>% filter(between(Date, as.Date('2022-10-01'), as.Date('2022-10-31')))
+ktoa_norm <- ktoa_daily %>% filter(between(Date, as.Date('2022-10-01'), as.Date('2022-10-31')))
+
+remove(klax_data, ktoa_data, klgb_data, ktoa_daily, klax_daily, klgb_daily)
+
+# weather station coordinates
+weather_stations <- tibble(station = c('KLAX', 'KLGB', 'KTOA'),
+                           latitude = c(33.93806, 33.81167, 33.803979),
+                           longitude = c(-118.33194, -118.38889, -118.339432)) %>%
+  st_as_sf(coords = c('longitude', 'latitude')) %>% 
+  st_set_crs(4326)
+
+# To UTM
+weather_stations <- st_transform(weather_stations, CRS_UTM)
+
+get_weather <- function(utm_x, utm_y, period) {
+  location <-get_sf_loc(utm_x, utm_y)
+  closest_temp_hum_station <- weather_stations$station[st_nearest_feature(location, weather_stations)]
+  closest_precip_station <- weather_stations$station[st_nearest_feature(location, weather_stations %>% filter(station != 'KTOA'))]
+  
+  if (closest_temp_hum_station == 'KLAX' & period == 'disaster'){
+    return(klax_disaster)
+  } else if (closest_temp_hum_station == 'KLGB' & period == 'disaster'){
+    return(klgb_disaster)
+  } else if (closest_temp_hum_station == 'KTOA' & period == 'disaster'){
+    return(ktoa_disaster)
+  } else if (closest_temp_hum_station == 'KLAX' & period == 'norm'){
+    return(klax_norm)
+  } else if (closest_temp_hum_station == 'KLGB' & period == 'norm'){
+    return(klgb_norm)
+  } else {
+    return(ktoa_norm)
+  }
+}
+
+```
+
