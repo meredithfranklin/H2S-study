@@ -86,31 +86,57 @@ fit.xgb_da_excl_dis <- train(H2S_daily_avg~.,
                  tuneLength = 10, importance=TRUE, verbosity = 0, verbose=FALSE)
 saveRDS(fit.xgb_da_excl_dis, 'rfiles/fit.xgb_da_excl_dis.rds')
 
+
 # Everything w. Disaster Indicator
-train <- daily_full[complete.cases(daily_full),] %>%
-  mutate(disaster = if_else(year == '2021', month %in% c('10', '11', '12'), 1, 0))
+everything <- daily_full %>% 
+  select(all_of(predictors)) %>% 
+  mutate(disaster = if_else(year == '2021' & month %in% c('10', '11', '12'), 1, 0)) %>% 
+  filter(complete.cases(.)) 
+
+train <- everything %>% 
+  mutate(daily_downwind_ref = as.integer(daily_downwind_ref),
+         daily_downwind_wrp = as.integer(daily_downwind_wrp))
 
 train <- fastDummies::dummy_cols(train %>%
-                                   select(-c(Refinery, Monitor, day, H2S_daily_max, H2S_monthly_average,
-                                             monitor_lat, monitor_lon, county, dist_213)) %>%
+                                   select(-c(day)) %>%
                                    mutate(MinDist = 1/(MinDist^2),
                                           dist_wrp = 1/(dist_wrp^2)),
                                  remove_selected_columns = TRUE)
 
+# 10 Fold for Everything models
+set.seed(90)
+folds_1 <- createFolds(which(train$disaster == 1), k = 10)
+folds_0 <- createFolds(which(train$disaster == 0), k = 10)
+folds <- list()
+for (i in 1:10){
+  folds <- append(folds, list(c(which(train$disaster == 1)[folds_1[[i]]], 
+                           which(train$disaster == 0)[folds_0[[i]]])))
+}
+
+# Separate trainControl for everything models, stratified sampling folds
+control_everything <- trainControl(method="cv", 
+                        number=10,
+                        indexOut = folds,
+                        verboseIter=TRUE, 
+                        search='grid',
+                        savePredictions = 'final')
+
 fit.xgb_da_full_dis_ind <- train(H2S_daily_avg~.,
                  method = 'xgbTree',
                  data = train,
-                 trControl=control,
+                 trControl=control_everything,
                  tuneGrid = tune_grid,
                  tuneLength = 10, importance=TRUE, verbosity = 0, verbose=FALSE)
 saveRDS(fit.xgb_da_full_dis_ind, 'rfiles/fit.xgb_da_full_dis_ind.rds')
 
 # Everything w.o Disaster Indicator
-train <- daily_full[complete.cases(daily_full),]
+train <- everything %>% 
+  select(-disaster) %>%
+  mutate(daily_downwind_ref = as.integer(daily_downwind_ref),
+         daily_downwind_wrp = as.integer(daily_downwind_wrp))
 
 train <- fastDummies::dummy_cols(train %>%
-                                   select(-c(Refinery, Monitor, day, H2S_daily_max, H2S_monthly_average,
-                                             monitor_lat, monitor_lon, county, dist_213)) %>%
+                                   select(-c(day)) %>%
                                    mutate(MinDist = 1/(MinDist^2),
                                           dist_wrp = 1/(dist_wrp^2)),
                                  remove_selected_columns = TRUE)
@@ -118,7 +144,7 @@ train <- fastDummies::dummy_cols(train %>%
 fit.xgb_da_full <- train(H2S_daily_avg~.,
                  method = 'xgbTree',
                  data = train,
-                 trControl=control,
+                 trControl=control_everything,
                  tuneGrid = tune_grid,
                  tuneLength = 10, importance=TRUE, verbosity = 0, verbose=FALSE)
 saveRDS(fit.xgb_da_full, 'rfiles/fit.xgb_da_full.rds')
@@ -225,7 +251,7 @@ train <- fastDummies::dummy_cols(train %>%
 fit.xgb_da_log_h2s_dis_ind <- train(H2S_daily_avg~.,
                  method = 'xgbTree',
                  data = train,
-                 trControl=control,
+                 trControl=control_everything,
                  tuneGrid = tune_grid,
                  tuneLength = 10, importance=TRUE, verbosity = 0, verbose=FALSE)
 saveRDS(fit.xgb_da_log_h2s_dis_ind, 'rfiles/fit.xgb_da_log_h2s_dis_ind.rds')
@@ -246,7 +272,7 @@ train <- fastDummies::dummy_cols(train %>%
 fit.xgb_da_log_h2s_full <- train(H2S_daily_avg~.,
                  method = 'xgbTree',
                  data = train,
-                 trControl=control,
+                 trControl=control_everything,
                  tuneGrid = tune_grid,
                  tuneLength = 10, importance=TRUE, verbosity = 0, verbose=FALSE)
 saveRDS(fit.xgb_da_log_h2s_full, 'rfiles/fit.xgb_da_log_h2s_full.rds')

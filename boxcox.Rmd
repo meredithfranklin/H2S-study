@@ -40,7 +40,7 @@ predictors <- c('H2S_daily_avg', 'month', 'year', 'weekday', 'wd_avg', 'ws_avg',
 
 # get train data set for daily average H2S
 daily_avg_train_sincefeb2022 <- daily_full[complete.cases(daily_full),] %>% 
-  filter(day >= '2022-02-01') %>%
+  filter(day > '2022-01-31') %>%
   select(all_of(predictors))
 ```
 
@@ -366,7 +366,7 @@ adj_r2 <- function(r2, n, p){
 
 ```{r}
 set.seed(1)
-random_seeds <- floor(runif(5, min=0, max=1)*100)
+random_seeds <- floor(runif(4, min=0, max=1)*100)
 ```
 
 ```{r}
@@ -430,7 +430,7 @@ logh2s_10cv_ovp_plot_sincefeb2022 <- ggplot(tibble(obs = obs_10cv_sincefeb2022, 
                         geom_point() +
                         stat_poly_line() +
                         stat_poly_eq(use_label(c("eq")), label.x = "right", label.y = 0.45) +
-                        stat_poly_eq(use_label(c("R2")), label.x = "right", label.y = 0.52) +
+                        stat_poly_eq(use_label(c("R2")), label.x = "right", label.y = 0.56) +
                         stat_poly_eq(use_label(c("n")), label.x = "right", label.y = 0.60) +
                         labs(y = 'Observed', x = 'Predicted', 
                              title = 'Observed vs Predicted for Since 2022 GAM 10CV Log H2S') +
@@ -571,10 +571,12 @@ rmse_disaster_ind <- c()
 btrmse_disaster_ind <- c()
 
 set.seed(random_seeds[4])
-folds <- createFolds(seq(1, nrow(everything)), k = 10)
+folds_1 <- createFolds(which(everything$disaster == 1), k = 10)
+folds_0 <- createFolds(which(everything$disaster == 0), k = 10)
   
 for (fold in seq(1, 10)) {
-  test <- everything[folds[[fold]], ]
+  test <- rbind(everything[which(everything$disaster == 1)[folds_1[[fold]]], ], 
+                everything[which(everything$disaster == 0)[folds_0[[fold]]], ])
   train <- anti_join(everything, test, by = join_by(dist_dc, day))
   
   h2s_da_model_10cv <- gam(I(log(H2S_daily_avg))~s(as.numeric(month),bs='cc') + year + weekday +
@@ -630,11 +632,11 @@ adj_r2_test_everything <- c()
 rmse_everything <- c()
 btrmse_everything <- c()
 
-set.seed(random_seeds[5])
-folds <- createFolds(seq(1, nrow(everything)), k = 10)
+# Use same folds as before
   
 for (fold in seq(1, 10)) {
-  test <- everything[folds[[fold]], ]
+  test <- rbind(everything[which(everything$disaster == 1)[folds_1[[fold]]], ], 
+                everything[which(everything$disaster == 0)[folds_0[[fold]]], ])
   train <- anti_join(everything, test, by = join_by(dist_dc, day))
   
   h2s_da_model_10cv <- gam(I(log(H2S_daily_avg))~s(as.numeric(month),bs='cc') + year + weekday +
@@ -1173,11 +1175,14 @@ test_rmse_bt <- mean(fold_stat$RMSE_BT)
 log_h2s_xgb_dis_ind_obs_vs_pred_plot <- ggplot(tibble(obs = exp(fit.xgb_da_log_h2s_dis_ind$pred$obs), 
                                                               pred = exp(fit.xgb_da_log_h2s_dis_ind$pred$pred)),
                              aes(x = pred, y = obs)) +
-                        geom_abline(slope = 1, intercept = 0, linetype = 'dashed') +                                                         geom_point() +
+                        geom_abline(slope = 1, intercept = 0, linetype = 'dashed') +
+                        geom_point() +
                         labs(y = 'Observed', x = 'Predicted', 
                              title = 'Everything w. Disaster Indicator') +
                         stat_poly_line() +
-                        stat_poly_eq(use_label(c("eq")), label.x = "right", label.y = 0.03) +                                                stat_poly_eq(use_label(c("R2")), label.x = "right", label.y = 0.08) +                                                 stat_poly_eq(use_label(c("n")), label.x = "right", label.y = 0.17) +
+                        stat_poly_eq(use_label(c("eq")), label.x = "right", label.y = 0.03) + 
+                        stat_poly_eq(use_label(c("R2")), label.x = "right", label.y = 0.08) + 
+                        stat_poly_eq(use_label(c("n")), label.x = "right", label.y = 0.17) +
                         theme_bw()
 ```
 
@@ -1231,8 +1236,7 @@ train <- everything %>%
 train <- fastDummies::dummy_cols(train %>%
                    select(-c(day)) %>%
                    mutate(MinDist = 1/(MinDist^2),
-                          dist_wrp = 1/(dist_wrp^2),
-                          weekday = weekday),
+                          dist_wrp = 1/(dist_wrp^2)),
                    remove_selected_columns = TRUE)
 
 fit.xgb_da_log_h2s_full <- readRDS('rfiles/fit.xgb_da_log_h2s_full.rds')
@@ -1290,11 +1294,14 @@ test_rmse_bt <- mean(fold_stat$RMSE_BT)
 log_h2s_xgb_full_obs_vs_pred_plot <- ggplot(tibble(obs = exp(fit.xgb_da_log_h2s_full$pred$obs), 
                                                               pred = exp(fit.xgb_da_log_h2s_full$pred$pred)),
                              aes(x = pred, y = obs)) +
-                        geom_abline(slope = 1, intercept = 0, linetype = 'dashed') +                                                         geom_point() +
+                        geom_abline(slope = 1, intercept = 0, linetype = 'dashed') +                                                         
+                        geom_point() +
                         labs(y = 'Observed', x = 'Predicted', 
                              title = 'Everything w.o Disaster Indicator') +
                         stat_poly_line() +
-                        stat_poly_eq(use_label(c("eq")), label.x = "right", label.y = 0.15) +                                                stat_poly_eq(use_label(c("R2")), label.x = "right", label.y = 0.1) +                                                 stat_poly_eq(use_label(c("n")), label.x = "right", label.y = 0.05) +
+                        stat_poly_eq(use_label(c("eq")), label.x = "right", label.y = 0.15) + 
+                        stat_poly_eq(use_label(c("R2")), label.x = "right", label.y = 0.1) +                                                 
+                        stat_poly_eq(use_label(c("n")), label.x = "right", label.y = 0.05) +
                         theme_bw()
 ```
 

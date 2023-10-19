@@ -63,7 +63,7 @@ knitr::kable(base_monitor_stat, digits = 2, format = 'html')
 ## Since Feb 2022
 ```{r}
 sincefeb2022_stat <- daily_full %>%
-  filter(day >= '2022-02-01') %>%
+  filter(day > '2022-01-31') %>%
   group_by(Monitor) %>%
   summarise('Daily observations' = n(),
             'Max Daily Max' = max(H2S_daily_max, na.rm=T),
@@ -164,7 +164,7 @@ h2s_da_model_f <- gam(H2S_daily_avg~s(as.numeric(month),bs='cc') + year + weekda
                          monthly_oil_1km + monthly_gas_1km + active_1km + 
                         daily_downwind_wrp + elevation + EVI + num_odor_complaints +
                         I(1/dist_dc^2) + avg_temp + avg_hum + precip, 
-                      data = daily_full %>% filter(day >= '2022-02-01'))
+                      data = daily_full %>% filter(day > '2022-01-31'))
 summary(h2s_da_model_f)
 plot(h2s_da_model_f)
 
@@ -305,13 +305,13 @@ set.seed(123)
 
 # model 1: since Feb 2022
 train <- daily_full %>% 
-  filter(day >= '2022-02-01') %>% 
+  filter(day > '2022-01-31') %>% 
   select(all_of(predictors)) %>% 
   filter(complete.cases(.)) %>% 
   slice_sample(prop = 0.8)
 
 test <- anti_join(daily_full %>% 
-                  filter(day >= '2022-02-01') %>% 
+                  filter(day > '2022-01-31') %>% 
                   select(all_of(predictors)) %>% 
                   filter(complete.cases(.)), train)
 
@@ -545,7 +545,7 @@ result_cv <- tibble(Model = character(),
 
 # model 1: since Feb 2022
 post2022feb <- daily_full %>% 
-  filter(day >= '2022-02-01') %>% 
+  filter(day > '2022-01-31') %>% 
   select(all_of(predictors), Monitor) %>% 
   filter(complete.cases(.))
 
@@ -787,7 +787,7 @@ cv5_result
 # 10-fold CV
 ```{r}
 set.seed(1)
-random_seeds <- floor(runif(5, min=0, max=1)*100)
+random_seeds <- floor(runif(4, min=0, max=1)*100)
 ```
 
 ```{r}
@@ -808,7 +808,7 @@ adj_r2_test_sincefeb2022 <- c()
 rmse_sincefeb2022 <- c()
 
 sincefeb2022 <- daily_full %>% 
-  filter(day >= '2022-02-01') %>% 
+  filter(day >= '2022-01-31') %>% 
   select(all_of(predictors)) %>% 
   filter(complete.cases(.))
 
@@ -1063,9 +1063,7 @@ everything <- daily_full %>%
   mutate(disaster = if_else(year == '2021' & month %in% c('10', '11', '12'), 1, 0)) %>% 
   filter(complete.cases(.))
 
-set.seed(random_seeds[5])
-folds_1 <- createFolds(which(everything$disaster == 1), k = 10)
-folds_0 <- createFolds(which(everything$disaster == 0), k = 10)
+# Use same folds as before
 
 for (fold in seq(1, 10)) {
   test <- rbind(everything[which(everything$disaster == 1)[folds_1[[fold]]], ], 
@@ -1201,7 +1199,7 @@ daily_full <- daily_full %>%
          daily_downwind_wrp = as.integer(daily_downwind_wrp))
 
 train <- daily_full[complete.cases(daily_full),] %>%
-  filter(day >= '2022-02-01')
+  filter(day >= '2022-01-31')
 
 train <- fastDummies::dummy_cols(train %>%
                    select(-c(Refinery, Monitor, day, H2S_daily_max, H2S_monthly_average,
@@ -1380,10 +1378,10 @@ validation_result_8020 <- tibble(Model = character(),
                                  'R-Sq' = numeric())
 
 train <- daily_full[complete.cases(daily_full),] %>%
-  filter(day >= '2022-02-01') %>%
+  filter(day > '2022-01-31') %>%
   slice_sample(prop = 0.8)
 
-test <- anti_join(daily_full[complete.cases(daily_full),] %>% filter(day >= '2022-02-01'), 
+test <- anti_join(daily_full[complete.cases(daily_full),] %>% filter(day > '2022-01-31'), 
                   train)
 
 train <- fastDummies::dummy_cols(train %>%
@@ -1510,7 +1508,7 @@ xgb.ggplot.shap.summary(data = matrix,
 ### CV by leaving each monitor out once
 ```{r}
 post2022feb <- daily_full %>% 
-  filter(day >= '2022-02-01')
+  filter(day > '2022-01-31')
 
 monitor_names <- unique(post2022feb$Monitor)
 
@@ -1989,15 +1987,26 @@ xgb.ggplot.shap.summary(data = matrix,
 
 ### GridSearch + 10-fold CV
 ```{r echo = T, results = 'hide'}
-train <- daily_full[complete.cases(daily_full),] %>%
-  mutate(disaster = if_else(year == '2021', month %in% c('10', '11', '12'), 1, 0))
+predictors <- c('H2S_daily_avg', 'month', 'year', 'weekday', 'wd_avg', 'ws_avg', 
+                'daily_downwind_ref', 'dist_wrp', 'MinDist',
+                'mon_utm_x', 'mon_utm_y', 'day', 'monthly_oil_1km', 'monthly_gas_1km', 
+                'active_1km', 'daily_downwind_wrp', 'elevation', 'EVI', 'num_odor_complaints',
+                'dist_dc', 'capacity', 'avg_temp', 'avg_hum', 'precip') 
+
+everything <- daily_full %>% 
+  select(all_of(predictors)) %>% 
+  mutate(disaster = if_else(year == '2021' & month %in% c('10', '11', '12'), 1, 0)) %>% 
+  filter(complete.cases(.)) 
+
+train <- everything %>% 
+  mutate(daily_downwind_ref = as.integer(daily_downwind_ref),
+         daily_downwind_wrp = as.integer(daily_downwind_wrp))
 
 train <- fastDummies::dummy_cols(train %>%
-                   select(-c(Refinery, Monitor, day, H2S_daily_max, H2S_monthly_average,
-                             monitor_lat, monitor_lon, county, dist_213)) %>%
-                   mutate(MinDist = 1/(MinDist^2),
-                          dist_wrp = 1/(dist_wrp^2)),
-                   remove_selected_columns = TRUE)
+                                   select(-c(day)) %>%
+                                   mutate(MinDist = 1/(MinDist^2),
+                                          dist_wrp = 1/(dist_wrp^2)),
+                                 remove_selected_columns = TRUE)
 
 fit.xgb_da_full_dis_ind <- readRDS('rfiles/fit.xgb_da_full_dis_ind.rds')
 # fit.xgb_da_full_dis_ind <- train(H2S_daily_avg~.,
@@ -2137,14 +2146,16 @@ xgb.ggplot.shap.summary(data = matrix,
 
 ### GridSearch + 10-fold CV
 ```{r echo = T, results = 'hide'}
-train <- daily_full[complete.cases(daily_full),]
+train <- everything %>% 
+  select(-disaster) %>%
+  mutate(daily_downwind_ref = as.integer(daily_downwind_ref),
+         daily_downwind_wrp = as.integer(daily_downwind_wrp))
 
 train <- fastDummies::dummy_cols(train %>%
-                   select(-c(Refinery, Monitor, day, H2S_daily_max, H2S_monthly_average,
-                             monitor_lat, monitor_lon, county, dist_213)) %>%
-                   mutate(MinDist = 1/(MinDist^2),
-                          dist_wrp = 1/(dist_wrp^2)),
-                   remove_selected_columns = TRUE)
+                                   select(-c(day)) %>%
+                                   mutate(MinDist = 1/(MinDist^2),
+                                          dist_wrp = 1/(dist_wrp^2)),
+                                 remove_selected_columns = TRUE)
 
 fit.xgb_da_full <- readRDS('rfiles/fit.xgb_da_full.rds')
 # fit.xgb_da_full <- train(H2S_daily_avg~.,

@@ -429,7 +429,7 @@ monitor_well <- well_location %>%
          `5km` = dist_to_closest_monitor<=5000)
 
 well_prod <- well_prod %>%
-  left_join(monitor_well %>% select(-geometry), join_by(`API/UWI`))
+  right_join(monitor_well %>% select(-geometry), join_by(`API/UWI`))
 ```
 
 ```{r}
