@@ -4,16 +4,25 @@ library(caret)
 library(fastDummies)
 select <- dplyr::select
 
-daily_full <- readRDS('data/daily_full.rds')
-
-# Since Feb 2022
-daily_full <- daily_full %>%
+daily_full <- readRDS('data/daily_full.rds') %>%
   mutate(Refinery = str_replace_all(str_replace_all(Refinery, '[()]', ''), ' ', '_'),
          Monitor = str_replace_all(Monitor, ' ', '_'),
          weekday = weekday,
          daily_downwind_ref = as.integer(daily_downwind_ref),
          daily_downwind_wrp = as.integer(daily_downwind_wrp))
 
+predictors <- c('H2S_daily_avg', 'month', 'year', 'weekday', 'wd_avg', 'ws_avg', 
+                'daily_downwind_ref', 'dist_wrp', 'MinDist',
+                'mon_utm_x', 'mon_utm_y', 'day', 'monthly_oil_1km', 'monthly_gas_1km', 
+                'active_1km', 'daily_downwind_wrp', 'elevation', 'EVI', 'num_odor_complaints',
+                'dist_dc', 'capacity', 'avg_temp', 'avg_hum', 'precip') 
+
+predictors_no_met <- c('H2S_daily_avg', 'month', 'year', 'weekday', 'dist_wrp', 'MinDist',
+                'mon_utm_x', 'mon_utm_y', 'day', 'monthly_oil_1km', 'monthly_gas_1km', 
+                'active_1km', 'elevation', 'EVI', 'num_odor_complaints',
+                'dist_dc', 'capacity') 
+
+# Since Feb 2022
 train <- daily_full[complete.cases(daily_full),] %>%
   filter(day >= '2022-02-01')
 
@@ -93,9 +102,7 @@ everything <- daily_full %>%
   mutate(disaster = if_else(year == '2021' & month %in% c('10', '11', '12'), 1, 0)) %>% 
   filter(complete.cases(.)) 
 
-train <- everything %>% 
-  mutate(daily_downwind_ref = as.integer(daily_downwind_ref),
-         daily_downwind_wrp = as.integer(daily_downwind_wrp))
+train <- everything
 
 train <- fastDummies::dummy_cols(train %>%
                                    select(-c(day)) %>%
@@ -131,9 +138,7 @@ saveRDS(fit.xgb_da_full_dis_ind, 'rfiles/fit.xgb_da_full_dis_ind.rds')
 
 # Everything w.o Disaster Indicator
 train <- everything %>% 
-  select(-disaster) %>%
-  mutate(daily_downwind_ref = as.integer(daily_downwind_ref),
-         daily_downwind_wrp = as.integer(daily_downwind_wrp))
+  select(-disaster)
 
 train <- fastDummies::dummy_cols(train %>%
                                    select(-c(day)) %>%
@@ -162,8 +167,6 @@ daily_avg_train_sincefeb2022 <- daily_full[complete.cases(daily_full),] %>%
   select(all_of(predictors))
 
 train <- daily_avg_train_sincefeb2022 %>% 
-  mutate(daily_downwind_ref = as.integer(daily_downwind_ref),
-         daily_downwind_wrp = as.integer(daily_downwind_wrp)) %>%
   mutate(H2S_daily_avg = log(H2S_daily_avg))
 
 train <- fastDummies::dummy_cols(train %>%
@@ -187,8 +190,6 @@ disaster <- daily_full %>%
   filter(complete.cases(.))
 
 train <- disaster %>% 
-  mutate(daily_downwind_ref = as.integer(daily_downwind_ref),
-         daily_downwind_wrp = as.integer(daily_downwind_wrp)) %>%
   mutate(H2S_daily_avg = log(H2S_daily_avg))
 
 train <- fastDummies::dummy_cols(train %>%
@@ -213,8 +214,6 @@ excl_disaster <- daily_full %>%
   filter(complete.cases(.))
 
 train <- excl_disaster %>% 
-  mutate(daily_downwind_ref = as.integer(daily_downwind_ref),
-         daily_downwind_wrp = as.integer(daily_downwind_wrp)) %>%
   mutate(H2S_daily_avg = log(H2S_daily_avg))
 
 train <- fastDummies::dummy_cols(train %>%
@@ -238,8 +237,6 @@ everything <- daily_full %>%
   filter(complete.cases(.)) 
 
 train <- everything %>% 
-  mutate(daily_downwind_ref = as.integer(daily_downwind_ref),
-         daily_downwind_wrp = as.integer(daily_downwind_wrp)) %>%
   mutate(H2S_daily_avg = log(H2S_daily_avg))
 
 train <- fastDummies::dummy_cols(train %>%
@@ -259,8 +256,6 @@ saveRDS(fit.xgb_da_log_h2s_dis_ind, 'rfiles/fit.xgb_da_log_h2s_dis_ind.rds')
 # Everything w.o Disaster Indicator
 train <- everything %>% 
   select(-disaster) %>%
-  mutate(daily_downwind_ref = as.integer(daily_downwind_ref),
-         daily_downwind_wrp = as.integer(daily_downwind_wrp)) %>%
   mutate(H2S_daily_avg = log(H2S_daily_avg))
 
 train <- fastDummies::dummy_cols(train %>%
@@ -277,3 +272,133 @@ fit.xgb_da_log_h2s_full <- train(H2S_daily_avg~.,
                  tuneLength = 10, importance=TRUE, verbosity = 0, verbose=FALSE)
 saveRDS(fit.xgb_da_log_h2s_full, 'rfiles/fit.xgb_da_log_h2s_full.rds')
 
+# 80/20 split on everything log models
+# Everything w. Disaster Indicator
+set.seed(123)
+everything_80train <- daily_full %>% 
+  select(all_of(predictors)) %>% 
+  mutate(disaster = if_else(year == '2021' & month %in% c('10', '11', '12'), 1, 0)) %>% 
+  filter(complete.cases(.)) %>%
+  slice_sample(prop = 0.8) 
+
+everything_20test <- anti_join(daily_full %>% 
+                               select(all_of(predictors)) %>% 
+                               mutate(disaster = if_else(year == '2021' & month %in% c('10', '11', '12'), 1, 0)) %>% 
+                               filter(complete.cases(.)),
+                             everything_train)
+
+train <- everything_80train %>% 
+  mutate(H2S_daily_avg = log(H2S_daily_avg))
+
+train <- fastDummies::dummy_cols(train %>%
+                                   select(-c(day)) %>%
+                                   mutate(MinDist = 1/(MinDist^2),
+                                          dist_wrp = 1/(dist_wrp^2)),
+                                 remove_selected_columns = TRUE)
+
+test <- everything_20test  %>% 
+  mutate(H2S_daily_avg = log(H2S_daily_avg))
+
+test <- fastDummies::dummy_cols(test %>%
+                                  select(-c(day)) %>%
+                                  mutate(MinDist = 1/(MinDist^2),
+                                         dist_wrp = 1/(dist_wrp^2)),
+                                remove_selected_columns = TRUE)
+
+# 10 Fold for Everything models
+set.seed(90)
+folds_1 <- createFolds(which(train$disaster == 1), k = 10)
+folds_0 <- createFolds(which(train$disaster == 0), k = 10)
+folds <- list()
+for (i in 1:10){
+  folds <- append(folds, list(c(which(train$disaster == 1)[folds_1[[i]]], 
+                                which(train$disaster == 0)[folds_0[[i]]])))
+}
+
+# Separate trainControl for everything models, stratified sampling folds
+control_everything_8020 <- trainControl(method="cv", 
+                                   number=10,
+                                   indexOut = folds,
+                                   verboseIter=TRUE, 
+                                   search='grid',
+                                   savePredictions = 'final')
+
+fit.xgb_da_log_h2s_dis_ind_8020 <- train(H2S_daily_avg~.,
+                                    method = 'xgbTree',
+                                    data = train,
+                                    trControl=control_everything_8020,
+                                    tuneGrid = tune_grid,
+                                    tuneLength = 10, importance=TRUE, verbosity = 0, verbose=FALSE)
+saveRDS(fit.xgb_da_log_h2s_dis_ind_8020, 'rfiles/fit.xgb_da_log_h2s_dis_ind_8020.rds')
+
+# Everything w.o Disaster Indicator
+train <- train %>% select(-disaster)
+test <- test %>% select(-disaster)
+fit.xgb_da_log_h2s_full_8020 <- train(H2S_daily_avg~.,
+                                 method = 'xgbTree',
+                                 data = train,
+                                 trControl=control_everything_8020,
+                                 tuneGrid = tune_grid,
+                                 tuneLength = 10, importance=TRUE, verbosity = 0, verbose=FALSE)
+saveRDS(fit.xgb_da_log_h2s_full_8020, 'rfiles/fit.xgb_da_log_h2s_full_8020.rds')
+
+# Everything Models without meteorological
+# Everything w. Disaster Indicator
+everything_no_met <- daily_full %>% 
+  select(all_of(predictors_no_met)) %>% 
+  mutate(disaster = if_else(year == '2021' & month %in% c('10', '11', '12'), 1, 0)) %>% 
+  filter(complete.cases(.)) 
+
+train <- everything_no_met %>% 
+  mutate(H2S_daily_avg = log(H2S_daily_avg))
+
+train <- fastDummies::dummy_cols(train %>%
+                                   select(-c(day)) %>%
+                                   mutate(MinDist = 1/(MinDist^2),
+                                          dist_wrp = 1/(dist_wrp^2)),
+                                 remove_selected_columns = TRUE)
+
+# 10 Fold for Everything models
+set.seed(90)
+folds_1 <- createFolds(which(train$disaster == 1), k = 10)
+folds_0 <- createFolds(which(train$disaster == 0), k = 10)
+folds <- list()
+for (i in 1:10){
+  folds <- append(folds, list(c(which(train$disaster == 1)[folds_1[[i]]], 
+                                which(train$disaster == 0)[folds_0[[i]]])))
+}
+
+# Separate trainControl for everything models, stratified sampling folds
+control_everything_no_met <- trainControl(method="cv", 
+                                   number=10,
+                                   indexOut = folds,
+                                   verboseIter=TRUE, 
+                                   search='grid',
+                                   savePredictions = 'final')
+
+fit.xgb_da_log_h2s_dis_ind_no_met <- train(H2S_daily_avg~.,
+                                    method = 'xgbTree',
+                                    data = train,
+                                    trControl=control_everything_no_met,
+                                    tuneGrid = tune_grid,
+                                    tuneLength = 10, importance=TRUE, verbosity = 0, verbose=FALSE)
+saveRDS(fit.xgb_da_log_h2s_dis_ind_no_met, 'rfiles/fit.xgb_da_log_h2s_dis_ind_no_met.rds')
+
+# Everything w.o Disaster Indicator
+train <- everything_no_met %>% 
+  select(-disaster) %>%
+  mutate(H2S_daily_avg = log(H2S_daily_avg))
+
+train <- fastDummies::dummy_cols(train %>%
+                                   select(-c(day)) %>%
+                                   mutate(MinDist = 1/(MinDist^2),
+                                          dist_wrp = 1/(dist_wrp^2)),
+                                 remove_selected_columns = TRUE)
+
+fit.xgb_da_log_h2s_full_no_met <- train(H2S_daily_avg~.,
+                                 method = 'xgbTree',
+                                 data = train,
+                                 trControl=control_everything_no_met,
+                                 tuneGrid = tune_grid,
+                                 tuneLength = 10, importance=TRUE, verbosity = 0, verbose=FALSE)
+saveRDS(fit.xgb_da_log_h2s_full_no_met, 'rfiles/fit.xgb_da_log_h2s_full_no_met.rds')

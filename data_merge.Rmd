@@ -20,6 +20,7 @@ library(units)
 library(lwgeom)
 library(circular)
 library(raster)
+library(units)
 select <- dplyr::select
 ```
 
@@ -428,8 +429,17 @@ monitor_well <- well_location %>%
          `2p5km` = dist_to_closest_monitor<=2500,
          `5km` = dist_to_closest_monitor<=5000)
 
+# monitor_wells <- list()
+# for (i in 1:nrow(monitors)){
+#   monitor_well_api <- drop_units(st_distance(monitors[i, ], well_location))
+#   monitor_well_api <- well_location[which(monitor_well_api <= 1000), ] %>% st_drop_geometry()
+#   monitor_wells <- append(monitor_wells, list(monitor_well_api))
+# }
+# 
+# monitor_well <- st_distance(monitors, well_location)
+
 well_prod <- well_prod %>%
-  right_join(monitor_well %>% select(-geometry), join_by(`API/UWI`))
+  left_join(monitor_well %>% select(-geometry), join_by(`API/UWI`))
 ```
 
 ```{r}

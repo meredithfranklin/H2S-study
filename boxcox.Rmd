@@ -371,8 +371,10 @@ random_seeds <- floor(runif(4, min=0, max=1)*100)
 
 ```{r}
 result_10cv <- tibble(Model = character(),
-                 '10CV AVG Train R-Sq' = numeric(),
-                 '10CV AVG Test R-Sq' = numeric(),
+                 'Train R-Sq' = numeric(),
+                 'BT Train R-Sq' = numeric(),
+                 'Test R-Sq' = numeric(),
+                 'BT Test R-Sq' = numeric(),
                  'Test RMSE' = numeric(),
                  'B-T Test RMSE' = numeric())
 
@@ -385,6 +387,8 @@ obs_10cv_sincefeb2022 <- c()
 pred_10cv_sincefeb2022 <- c()
 adj_r2_sincefeb2022 <- c()
 adj_r2_test_sincefeb2022 <- c()
+bt_adj_r2_sincefeb2022 <- c()
+bt_adj_r2_test_sincefeb2022 <- c()
 rmse_sincefeb2022 <- c()
 btrmse_sincefeb2022 <- c()
 
@@ -406,23 +410,32 @@ for (fold in seq(1, 10)) {
                         I(1/dist_dc^2) + avg_temp + avg_hum + precip, 
                           data = train)
 
-  predictions <- predict(h2s_da_model_10cv, newdata = test)
-  r2_test <- R2(test$H2S_daily_avg, exp(predictions))
+  predictions <- predict(h2s_da_model_10cv, newdata = test) 
+  r2_test <- R2(log(test$H2S_daily_avg), predictions)
+  bt_r2_test <- R2(test$H2S_daily_avg, exp(predictions))
   adj_r2_test <- adj_r2(r2_test, summary(h2s_da_model_10cv)$n, summary(h2s_da_model_10cv)$np)
+  bt_adj_r2_test <- adj_r2(bt_r2_test, summary(h2s_da_model_10cv)$n, summary(h2s_da_model_10cv)$np)
   
   obs_10cv_sincefeb2022 <- append(obs_10cv_sincefeb2022, test %>% pull(H2S_daily_avg))
   pred_10cv_sincefeb2022 <- append(pred_10cv_sincefeb2022, predictions)
+  
   adj_r2_sincefeb2022 <- append(adj_r2_sincefeb2022, summary(h2s_da_model_10cv)$r.sq)
+  bt_adj_r2_sincefeb2022 <- c(bt_adj_r2_sincefeb2022, 
+                              adj_r2(R2(exp(predict(h2s_da_model_10cv, newdata = train)), train$H2S_daily_avg),
+                              summary(h2s_da_model_10cv)$n, summary(h2s_da_model_10cv)$np))
   adj_r2_test_sincefeb2022 <- append(adj_r2_test_sincefeb2022, adj_r2_test)
-  rmse_sincefeb2022 <- append(rmse_sincefeb2022, RMSE(predictions, test$H2S_daily_avg))
+  bt_adj_r2_test_sincefeb2022 <- c(bt_adj_r2_test_sincefeb2022, bt_adj_r2_test)
+  rmse_sincefeb2022 <- append(rmse_sincefeb2022, RMSE(predictions, log(test$H2S_daily_avg)))
   btrmse_sincefeb2022 <- append(btrmse_sincefeb2022, RMSE(exp(predictions), test$H2S_daily_avg))
 }
 
 result_10cv <- rbind(result_10cv, tibble(Model = 'Since Feb 2022 Log Transform',
-                               '10CV AVG Train R-Sq' = mean(adj_r2_sincefeb2022),
-                               '10CV AVG Test R-Sq' = mean(adj_r2_test_sincefeb2022),
-                               'Test RMSE' = mean(rmse_sincefeb2022),
-                               'B-T Test RMSE' = mean(btrmse_sincefeb2022)))
+                                         'Train R-Sq' = mean(adj_r2_sincefeb2022),
+                                         'BT Train R-Sq' = mean(bt_adj_r2_sincefeb2022),
+                                         'Test R-Sq' = mean(adj_r2_test_sincefeb2022),
+                                         'BT Test R-Sq' = mean(bt_adj_r2_test_sincefeb2022),
+                                         'Test RMSE' = mean(rmse_sincefeb2022),
+                                         'B-T Test RMSE' = mean(btrmse_sincefeb2022)))
 
 logh2s_10cv_ovp_plot_sincefeb2022 <- ggplot(tibble(obs = obs_10cv_sincefeb2022, pred = exp(pred_10cv_sincefeb2022)),
                              aes(x = pred, y = obs)) +
@@ -448,6 +461,8 @@ obs_10cv_disaster <- c()
 pred_10cv_disaster <- c()
 adj_r2_disaster <- c()
 adj_r2_test_disaster <- c()
+bt_adj_r2_disaster <- c()
+bt_adj_r2_test_disaster <- c()
 rmse_disaster <- c()
 btrmse_disaster <- c()
 
@@ -468,23 +483,32 @@ for (fold in seq(1, 10)) {
                          capacity + dist_dc + avg_temp + avg_hum + precip, 
                           data = train)
 
-  predictions <- predict(h2s_da_model_10cv, newdata = test)
-  r2_test <- R2(test$H2S_daily_avg, exp(predictions))
+  predictions <- predict(h2s_da_model_10cv, newdata = test) 
+  r2_test <- R2(log(test$H2S_daily_avg), predictions)
+  bt_r2_test <- R2(test$H2S_daily_avg, exp(predictions))
   adj_r2_test <- adj_r2(r2_test, summary(h2s_da_model_10cv)$n, summary(h2s_da_model_10cv)$np)
+  bt_adj_r2_test <- adj_r2(bt_r2_test, summary(h2s_da_model_10cv)$n, summary(h2s_da_model_10cv)$np)
   
   obs_10cv_disaster <- append(obs_10cv_disaster, test %>% pull(H2S_daily_avg))
   pred_10cv_disaster <- append(pred_10cv_disaster, predictions)
+  
   adj_r2_disaster <- append(adj_r2_disaster, summary(h2s_da_model_10cv)$r.sq)
+  bt_adj_r2_disaster <- c(bt_adj_r2_disaster, 
+                              adj_r2(R2(exp(predict(h2s_da_model_10cv, newdata = train)), train$H2S_daily_avg),
+                              summary(h2s_da_model_10cv)$n, summary(h2s_da_model_10cv)$np))
   adj_r2_test_disaster <- append(adj_r2_test_disaster, adj_r2_test)
-  rmse_disaster <- append(rmse_disaster, RMSE(predictions, test$H2S_daily_avg))
+  bt_adj_r2_test_disaster <- c(bt_adj_r2_test_disaster, bt_adj_r2_test)
+  rmse_disaster <- append(rmse_disaster, RMSE(predictions, log(test$H2S_daily_avg)))
   btrmse_disaster <- append(btrmse_disaster, RMSE(exp(predictions), test$H2S_daily_avg))
 }
 
 result_10cv <- rbind(result_10cv, tibble(Model = 'Disaster Only Log Transform',
-                               '10CV AVG Train R-Sq' = mean(adj_r2_disaster),
-                               '10CV AVG Test R-Sq' = mean(adj_r2_test_disaster),
-                               'Test RMSE' = mean(rmse_disaster),
-                               'B-T Test RMSE' = mean(btrmse_disaster)))
+                               'Train R-Sq' = mean(adj_r2_disaster),
+                                         'BT Train R-Sq' = mean(bt_adj_r2_disaster),
+                                         'Test R-Sq' = mean(adj_r2_test_disaster),
+                                         'BT Test R-Sq' = mean(bt_adj_r2_test_disaster),
+                                         'Test RMSE' = mean(rmse_disaster),
+                                         'B-T Test RMSE' = mean(btrmse_disaster)))
 
 logh2s_10cv_ovp_plot_dis_only <- ggplot(tibble(obs = obs_10cv_disaster, pred = exp(pred_10cv_disaster)),
                              aes(x = pred, y = obs)) +
@@ -507,6 +531,8 @@ obs_10cv_excl_dis <- c()
 pred_10cv_excl_dis <- c()
 adj_r2_excl_dis <- c()
 adj_r2_test_excl_dis <- c()
+bt_adj_r2_excl_dis <- c()
+bt_adj_r2_test_excl_dis <- c()
 rmse_excl_dis <- c()
 btrmse_excl_dis <- c()
 
@@ -528,23 +554,32 @@ for (fold in seq(1, 10)) {
                         I(1/dist_dc^2) + avg_temp + avg_hum + precip, 
                           data = train)
 
-  predictions <- predict(h2s_da_model_10cv, newdata = test)
-  r2_test <- R2(test$H2S_daily_avg, exp(predictions))
+  predictions <- predict(h2s_da_model_10cv, newdata = test) 
+  r2_test <- R2(log(test$H2S_daily_avg), predictions)
+  bt_r2_test <- R2(test$H2S_daily_avg, exp(predictions))
   adj_r2_test <- adj_r2(r2_test, summary(h2s_da_model_10cv)$n, summary(h2s_da_model_10cv)$np)
+  bt_adj_r2_test <- adj_r2(bt_r2_test, summary(h2s_da_model_10cv)$n, summary(h2s_da_model_10cv)$np)
   
   obs_10cv_excl_dis <- append(obs_10cv_excl_dis, test %>% pull(H2S_daily_avg))
   pred_10cv_excl_dis <- append(pred_10cv_excl_dis, predictions)
+  
   adj_r2_excl_dis <- append(adj_r2_excl_dis, summary(h2s_da_model_10cv)$r.sq)
+  bt_adj_r2_excl_dis <- c(bt_adj_r2_excl_dis, 
+                              adj_r2(R2(exp(predict(h2s_da_model_10cv, newdata = train)), train$H2S_daily_avg),
+                              summary(h2s_da_model_10cv)$n, summary(h2s_da_model_10cv)$np))
   adj_r2_test_excl_dis <- append(adj_r2_test_excl_dis, adj_r2_test)
-  rmse_excl_dis <- append(rmse_excl_dis, RMSE(predictions, test$H2S_daily_avg))
+  bt_adj_r2_test_excl_dis <- c(bt_adj_r2_test_excl_dis, bt_adj_r2_test)
+  rmse_excl_dis <- append(rmse_excl_dis, RMSE(predictions, log(test$H2S_daily_avg)))
   btrmse_excl_dis <- append(btrmse_excl_dis, RMSE(exp(predictions), test$H2S_daily_avg))
 }
 
 result_10cv <- rbind(result_10cv, tibble(Model = 'Exclude Disaster Log Transform',
-                               '10CV AVG Train R-Sq' = mean(adj_r2_excl_dis),
-                               '10CV AVG Test R-Sq' = mean(adj_r2_test_excl_dis),
-                               'Test RMSE' = mean(rmse_excl_dis),
-                               'B-T Test RMSE' = mean(btrmse_excl_dis)))
+                                         'Train R-Sq' = mean(adj_r2_excl_dis),
+                                         'BT Train R-Sq' = mean(bt_adj_r2_excl_dis),
+                                         'Test R-Sq' = mean(adj_r2_test_excl_dis),
+                                         'BT Test R-Sq' = mean(bt_adj_r2_test_excl_dis),
+                                         'Test RMSE' = mean(rmse_excl_dis),
+                                         'B-T Test RMSE' = mean(btrmse_excl_dis)))
 
 logh2s_10cv_ovp_plot_excl_dis <- ggplot(tibble(obs = obs_10cv_excl_dis, pred = exp(pred_10cv_excl_dis)),
                              aes(x = pred, y = obs)) +
@@ -567,6 +602,8 @@ obs_10cv_disaster_ind <- c()
 pred_10cv_disaster_ind <- c()
 adj_r2_disaster_ind <- c()
 adj_r2_test_disaster_ind <- c()
+bt_adj_r2_disaster_ind <- c()
+bt_adj_r2_test_disaster_ind <- c()
 rmse_disaster_ind <- c()
 btrmse_disaster_ind <- c()
 
@@ -590,23 +627,32 @@ for (fold in seq(1, 10)) {
                         I(1/dist_dc^2) + avg_temp + avg_hum + precip + disaster, 
                           data = train)
 
-  predictions <- predict(h2s_da_model_10cv, newdata = test)
-  r2_test <- R2(test$H2S_daily_avg, exp(predictions))
+  predictions <- predict(h2s_da_model_10cv, newdata = test) 
+  r2_test <- R2(log(test$H2S_daily_avg), predictions)
+  bt_r2_test <- R2(log(test$H2S_daily_avg), exp(predictions))
   adj_r2_test <- adj_r2(r2_test, summary(h2s_da_model_10cv)$n, summary(h2s_da_model_10cv)$np)
+  bt_adj_r2_test <- adj_r2(bt_r2_test, summary(h2s_da_model_10cv)$n, summary(h2s_da_model_10cv)$np)
   
   obs_10cv_disaster_ind <- append(obs_10cv_disaster_ind, test %>% pull(H2S_daily_avg))
   pred_10cv_disaster_ind <- append(pred_10cv_disaster_ind, predictions)
+  
   adj_r2_disaster_ind <- append(adj_r2_disaster_ind, summary(h2s_da_model_10cv)$r.sq)
+  bt_adj_r2_disaster_ind <- c(bt_adj_r2_disaster_ind, 
+                              adj_r2(R2(exp(predict(h2s_da_model_10cv, newdata = train)), train$H2S_daily_avg),
+                              summary(h2s_da_model_10cv)$n, summary(h2s_da_model_10cv)$np))
   adj_r2_test_disaster_ind <- append(adj_r2_test_disaster_ind, adj_r2_test)
-  rmse_disaster_ind <- append(rmse_disaster_ind, RMSE(predictions, test$H2S_daily_avg))
+  bt_adj_r2_test_disaster_ind <- c(bt_adj_r2_test_disaster_ind, bt_adj_r2_test)
+  rmse_disaster_ind <- append(rmse_disaster_ind, RMSE(predictions, log(log(test$H2S_daily_avg))))
   btrmse_disaster_ind <- append(btrmse_disaster_ind, RMSE(exp(predictions), test$H2S_daily_avg))
 }
 
 result_10cv <- rbind(result_10cv, tibble(Model = 'Everything w. Disaster Indicator Log Transform',
-                               '10CV AVG Train R-Sq' = mean(adj_r2_disaster_ind),
-                               '10CV AVG Test R-Sq' = mean(adj_r2_test_disaster_ind),
-                               'Test RMSE' = mean(rmse_disaster_ind),
-                               'B-T Test RMSE' = mean(btrmse_disaster_ind)))
+                               'Train R-Sq' = mean(adj_r2_disaster_ind),
+                                         'BT Train R-Sq' = mean(bt_adj_r2_disaster_ind),
+                                         'Test R-Sq' = mean(adj_r2_test_disaster_ind),
+                                         'BT Test R-Sq' = mean(bt_adj_r2_test_disaster_ind),
+                                         'Test RMSE' = mean(rmse_disaster_ind),
+                                         'B-T Test RMSE' = mean(btrmse_disaster_ind)))
 
 logh2s_10cv_ovp_plot_dis_ind <- ggplot(tibble(obs = obs_10cv_disaster_ind, pred = exp(pred_10cv_disaster_ind)),
                              aes(x = pred, y = obs)) +
@@ -629,6 +675,8 @@ obs_10cv_everything <- c()
 pred_10cv_everything <- c()
 adj_r2_everything <- c()
 adj_r2_test_everything <- c()
+bt_adj_r2_everything <- c()
+bt_adj_r2_test_everything <- c()
 rmse_everything <- c()
 btrmse_everything <- c()
 
@@ -650,23 +698,32 @@ for (fold in seq(1, 10)) {
                         I(1/dist_dc^2) + avg_temp + avg_hum + precip, 
                           data = train)
 
-  predictions <- predict(h2s_da_model_10cv, newdata = test)
-  r2_test <- R2(test$H2S_daily_avg, exp(predictions))
+  predictions <- predict(h2s_da_model_10cv, newdata = test) 
+  r2_test <- R2(log(test$H2S_daily_avg), predictions)
+  bt_r2_test <- R2(test$H2S_daily_avg, exp(predictions))
   adj_r2_test <- adj_r2(r2_test, summary(h2s_da_model_10cv)$n, summary(h2s_da_model_10cv)$np)
+  bt_adj_r2_test <- adj_r2(bt_r2_test, summary(h2s_da_model_10cv)$n, summary(h2s_da_model_10cv)$np)
   
   obs_10cv_everything <- append(obs_10cv_everything, test %>% pull(H2S_daily_avg))
   pred_10cv_everything <- append(pred_10cv_everything, predictions)
+  
   adj_r2_everything <- append(adj_r2_everything, summary(h2s_da_model_10cv)$r.sq)
+  bt_adj_r2_everything <- c(bt_adj_r2_everything, 
+                              adj_r2(R2(exp(predict(h2s_da_model_10cv, newdata = train)), train$H2S_daily_avg),
+                              summary(h2s_da_model_10cv)$n, summary(h2s_da_model_10cv)$np))
   adj_r2_test_everything <- append(adj_r2_test_everything, adj_r2_test)
-  rmse_everything <- append(rmse_everything, RMSE(predictions, test$H2S_daily_avg))
+  bt_adj_r2_test_everything <- c(bt_adj_r2_test_everything, bt_adj_r2_test)
+  rmse_everything <- append(rmse_everything, RMSE(predictions, log(test$H2S_daily_avg)))
   btrmse_everything <- append(btrmse_everything, RMSE(exp(predictions), test$H2S_daily_avg))
 }
 
 result_10cv <- rbind(result_10cv, tibble(Model = 'Everything w.o Disaster Indicator Log Transform',
-                               '10CV AVG Train R-Sq' = mean(adj_r2_everything),
-                               '10CV AVG Test R-Sq' = mean(adj_r2_test_everything),
-                               'Test RMSE' = mean(rmse_everything),
-                               'B-T Test RMSE' = mean(btrmse_everything)))
+                               'Train R-Sq' = mean(adj_r2_everything),
+                                         'BT Train R-Sq' = mean(bt_adj_r2_everything),
+                                         'Test R-Sq' = mean(adj_r2_test_everything),
+                                         'BT Test R-Sq' = mean(bt_adj_r2_test_everything),
+                                         'Test RMSE' = mean(rmse_everything),
+                                         'B-T Test RMSE' = mean(btrmse_everything)))
 
 logh2s_10cv_ovp_plot_full <- ggplot(tibble(obs = obs_10cv_everything, pred = exp(pred_10cv_everything)),
                              aes(x = pred, y = obs)) +
@@ -1225,6 +1282,76 @@ xgb_result <- rbind(xgb_result,
                            'XGB BT RMSE' = test_rmse_bt))
 ```
 
+### 80/20 Split
+```{r}
+set.seed(123)
+everything_80train <- daily_full %>% 
+  select(all_of(predictors)) %>% 
+  mutate(disaster = if_else(year == '2021' & month %in% c('10', '11', '12'), 1, 0)) %>% 
+  filter(complete.cases(.)) %>%
+  slice_sample(prop = 0.8) 
+
+everything_20test <- anti_join(daily_full %>% 
+                               select(all_of(predictors)) %>% 
+                               mutate(disaster = if_else(year == '2021' & month %in% c('10', '11', '12'), 1, 0)) %>% 
+                               filter(complete.cases(.)),
+                             everything_train)
+
+test <- everything_20test  %>% 
+  mutate(H2S_daily_avg = log(H2S_daily_avg))
+
+test <- fastDummies::dummy_cols(test %>%
+                                  select(-c(day)) %>%
+                                  mutate(MinDist = 1/(MinDist^2),
+                                         dist_wrp = 1/(dist_wrp^2)),
+                                remove_selected_columns = TRUE)
+```
+
+```{r}
+fit.xgb_da_log_h2s_dis_ind_8020 <- readRDS('rfiles/fit.xgb_da_log_h2s_dis_ind_8020.rds')
+```
+
+```{r}
+getTrainPerf(fit.xgb_da_log_h2s_dis_ind_8020)
+```
+
+```{r}
+fit.xgb_da_log_h2s_dis_ind_8020$finalModel
+```
+
+### Fold Performance
+```{r}
+# Out-of-bag statistics
+# Here, we compute the R2 and RMSE for each fold and take the average
+fold_stat <- fit.xgb_da_log_h2s_dis_ind_8020$pred %>% group_by(Resample) %>% 
+  summarise(R2 = R2(pred, obs), RMSE = RMSE(pred, obs),
+            R2_BT = R2(exp(pred), exp(obs)), RMSE_BT = RMSE(exp(pred), exp(obs)))
+test_r2 <- mean(fold_stat$R2)
+test_r2_bt <- mean(fold_stat$R2_BT)
+test_rmse <- mean(fold_stat$RMSE)
+test_rmse_bt <- mean(fold_stat$RMSE_BT)
+```
+
+```{r}
+test_pred <- predict(fit.xgb_da_log_h2s_dis_ind_8020, newdata = test)
+test_20_r2 <- R2(test_pred, test$H2S_daily_avg)
+test_20_r2_bt <- R2(exp(test_pred), exp(test$H2S_daily_avg))
+test_20_rmse <- RMSE(test_pred, test$H2S_daily_avg)
+test_20_rmse_bt <- RMSE(exp(test_pred), exp(test$H2S_daily_avg))
+```
+
+```{r}
+result_8020 <- tibble(Model = 'Everything w. Disaster Indicator Log Transform',
+                      'OOB R2' = test_r2,
+                      'OOB BT R2' = test_r2_bt,
+                      'OOB RMSE' = test_rmse,
+                      'OOB BT RMSE' = test_rmse_bt,
+                      '20% Test R2' = test_20_r2,
+                      '20% Test BT R2' = test_20_r2_bt,
+                      '20% Test RMSE' = test_20_rmse,
+                      '20% Test BT RMSE' = test_20_rmse_bt)
+```
+
 ## Everything w.o Disaster Indicator
 ```{r}
 train <- everything %>% 
@@ -1344,6 +1471,53 @@ xgb_result <- rbind(xgb_result,
                            'XGB BT RMSE' = test_rmse_bt))
 ```
 
+### 80/20 Split
+```{r}
+fit.xgb_da_log_h2s_full_8020 <- readRDS('rfiles/fit.xgb_da_log_h2s_full_8020.rds')
+```
+
+```{r}
+getTrainPerf(fit.xgb_da_log_h2s_full_8020)
+```
+
+```{r}
+fit.xgb_da_log_h2s_full_8020$finalModel
+```
+
+### Fold Performance
+```{r}
+# Out-of-bag statistics
+# Here, we compute the R2 and RMSE for each fold and take the average
+fold_stat <- fit.xgb_da_log_h2s_full_8020$pred %>% group_by(Resample) %>% 
+  summarise(R2 = R2(pred, obs), RMSE = RMSE(pred, obs),
+            R2_BT = R2(exp(pred), exp(obs)), RMSE_BT = RMSE(exp(pred), exp(obs)))
+test_r2 <- mean(fold_stat$R2)
+test_r2_bt <- mean(fold_stat$R2_BT)
+test_rmse <- mean(fold_stat$RMSE)
+test_rmse_bt <- mean(fold_stat$RMSE_BT)
+```
+
+```{r}
+test_pred <- predict(fit.xgb_da_log_h2s_full_8020, newdata = test)
+test_20_r2 <- R2(test_pred, test$H2S_daily_avg)
+test_20_r2_bt <- R2(exp(test_pred), exp(test$H2S_daily_avg))
+test_20_rmse <- RMSE(test_pred, test$H2S_daily_avg)
+test_20_rmse_bt <- RMSE(exp(test_pred), exp(test$H2S_daily_avg))
+```
+
+```{r}
+result_8020 <- rbind(result_8020, 
+                     tibble(Model = 'Everything w.o Disaster Indicator Log Transform',
+                      'OOB R2' = test_r2,
+                      'OOB BT R2' = test_r2_bt,
+                      'OOB RMSE' = test_rmse,
+                      'OOB BT RMSE' = test_rmse_bt,
+                      '20% Test R2' = test_20_r2,
+                      '20% Test BT R2' = test_20_r2_bt,
+                      '20% Test RMSE' = test_20_rmse,
+                      '20% Test BT RMSE' = test_20_rmse_bt))
+```
+
 # Result Comparison
 # Comparison
 ```{r}
@@ -1365,6 +1539,16 @@ writeLines(log_model_perf_latex, 'figures/log_model_perf.tex')
 
 knitr::kable(log_model_perf_table, digits = 3, format = 'html')
 ```
+
+```{r}
+# 80/20 split results
+log_8020_model_perf_table <- tibble(Model = c('Everything w. Disaster Indicator Log Transform',
+                                              'Everything w.o Disaster Indicator Log Transform')) %>% 
+  left_join(rbind(xgb_result)) %>%
+  left_join(result_8020)
+knitr::kable(log_8020_model_perf_table, digits = 2)
+```
+
 
 ```{r}
 # Gam Models

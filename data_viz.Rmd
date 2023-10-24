@@ -192,14 +192,15 @@ ref_loc <- daily_full %>%
 # also load in dominguez channel
 st_read('shapefiles/DominguezChannel_Carson.shp')
 d_channel <- read_sf('shapefiles/DominguezChannel_Carson.shp', layer = 'DominguezChannel_Carson')
+d_channel <- d_channel %>% st_zm()
 
 basemap <- leaflet() %>%
               addProviderTiles(providers$MtbMap) %>%
-              addProviderTiles(providers$Stamen.TerrainBackground,
+              addProviderTiles(providers$Stadia.StamenTerrainBackground,
                                options = providerTileOptions(opacity = 0.9)) %>%
-              addProviderTiles(providers$Stamen.TonerLines,
+              addProviderTiles(providers$Stadia.StamenTonerLines,
                 options = providerTileOptions(opacity = 0.25)) %>%
-              addProviderTiles(providers$Stamen.TonerLabels) %>%
+              addProviderTiles(providers$Stadia.StamenTonerLabels) %>%
               addCircleMarkers(data = monitor_loc, 
                          lng=~monitor_lon, lat=~monitor_lat, 
                          fillOpacity = 0.85, radius = 4,
@@ -209,7 +210,8 @@ basemap <- leaflet() %>%
                          lng=~Longitude, lat=~Latitude, 
                          fillOpacity = 0.95, radius = 6,
                          fillColor = , weight = 1, stroke = T, col = '#8B0000',
-                         label = ~refinery)
+                         label = ~refinery) %>%
+              addPolylines(data = d_channel, opacity = 0.8, weight = 5)
 
 
 basemap
