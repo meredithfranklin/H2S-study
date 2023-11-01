@@ -398,13 +398,23 @@ gc()
 
 # Well production data
 ```{r}
-well_prod <- read_csv('data/LA Well August2023 Well Monthly Production.CSV', show_col_types = FALSE)
-well_info <- read_csv('data/LA Well August2023 Well Headers.CSV', show_col_types = FALSE)
+well_prod <- read_csv('data/LA_well_prod_Oct2023 Well Monthly Production.CSV', show_col_types = FALSE)
+full_well_info <- read_csv('data/well_active_inactive_prod_since_2000.CSV', show_col_types = FALSE)
+active_well_info <- read_csv('data/LA_well_prod_Oct2023 Well Headers.CSV', show_col_types = FALSE)
 ```
 
 ```{r}
+inactive_well_info <- anti_join(full_well_info, active_well_info, join_by(API14)) %>%
+  rename(lon = `Surface Hole Longitude (WGS84)`,
+         lat = `Surface Hole Latitude (WGS84)`) %>%
+  select(`API14`, lon, lat) %>%
+  distinct() %>%
+  st_as_sf(coords = c('lon', 'lat')) %>% 
+  st_set_crs(4326) %>%
+  st_transform(CRS_UTM) 
+
 well_prod <- well_prod %>%
-  left_join(well_info, join_by(`API/UWI` == API14))
+  left_join(active_well_info, join_by(`API/UWI` == API14)) 
 
 well_prod <- well_prod %>%
   select(`API/UWI`, `Monthly Production Date`, `Monthly Oil`, `Monthly Gas`, 
@@ -415,7 +425,7 @@ well_prod <- well_prod %>%
          lat = `Surface Hole Latitude (WGS84)`)
 
 # project distinct well locations to UTM
-well_location <- well_prod %>%
+active_well_location <- well_prod %>%
   select(`API/UWI`, lon, lat) %>%
   distinct() %>%
   st_as_sf(coords = c('lon', 'lat')) %>% 
@@ -423,63 +433,78 @@ well_location <- well_prod %>%
   st_transform(CRS_UTM) 
 
 # distance to closest monitor for each well
-monitor_well <- well_location %>%
-  mutate(dist_to_closest_monitor = apply(st_distance(monitors, well_location), 2, min),
-         `1km` = dist_to_closest_monitor<=1000,
-         `2p5km` = dist_to_closest_monitor<=2500,
-         `5km` = dist_to_closest_monitor<=5000)
+monitor_active_wells <- tibble()
+for (i in 1:nrow(monitors)){
+  monitor_well_api <- drop_units(st_distance(monitors[i, ], active_well_location))
+  monitor_well_api <- active_well_location[which(monitor_well_api <= 2000), ] %>% st_drop_geometry()
+  monitor_active_wells <- rbind(monitor_active_wells, 
+                                tibble(Monitor = monitors[i, 1]$Monitor, 
+                                       API14 = monitor_well_api$`API/UWI`))
+}
 
-# monitor_wells <- list()
-# for (i in 1:nrow(monitors)){
-#   monitor_well_api <- drop_units(st_distance(monitors[i, ], well_location))
-#   monitor_well_api <- well_location[which(monitor_well_api <= 1000), ] %>% st_drop_geometry()
-#   monitor_wells <- append(monitor_wells, list(monitor_well_api))
-# }
-# 
-# monitor_well <- st_distance(monitors, well_location)
+monitor_well_prod <- monitor_active_wells %>% 
+  left_join(well_prod, join_by(API14 == `API/UWI`)) %>%
+  group_by(Monitor, `Monthly Production Date`) %>%
+  summarise(active_2km = n(),
+            monthly_oil_2km = sum(`Monthly Oil`, na.rm = TRUE),
+            monthly_gas_2km = sum(`Monthly Gas`, na.rm = TRUE)) %>%
+  mutate(yearmonth = format(`Monthly Production Date`, '%Y-%m')) %>%
+  select(-`Monthly Production Date`)
 
-well_prod <- well_prod %>%
-  left_join(monitor_well %>% select(-geometry), join_by(`API/UWI`))
+full_data <- full_data %>%
+  left_join(monitor_well_prod, join_by(Monitor, yearmonth)) %>%
+  mutate(active_2km = coalesce(active_2km, 0),
+            monthly_oil_2km = coalesce(monthly_oil_2km, 0),
+            monthly_gas_2km = coalesce(monthly_gas_2km, 0))
+
+monitor_inactive_wells <- tibble()
+for (i in 1:nrow(monitors)){
+  monitor_well_api <- drop_units(st_distance(monitors[i, ], inactive_well_info))
+  monitor_well_api <- inactive_well_info[which(monitor_well_api <= 2000), ] %>% st_drop_geometry()
+  monitor_inactive_wells <- rbind(monitor_inactive_wells, 
+                                  tibble(Monitor = monitors[i, 1]$Monitor, 
+                                         inactive_2km = nrow(monitor_well_api)))
+}
+
+full_data <- full_data %>%
+  left_join(monitor_inactive_wells, join_by(Monitor))
 ```
 
 ```{r}
 # get monthly production data at different distance levels (monitor to well)
-prod_data <- list(
-    well_prod %>% 
-      filter(`1km` == TRUE) %>% 
-      group_by(`Monthly Production Date`) %>% 
-      summarise(active_1km = n(),
-                monthly_oil_1km = sum(`Monthly Oil`, na.rm = TRUE),
-                monthly_gas_1km = sum(`Monthly Gas`, na.rm = TRUE),
-                monthly_water_1km = sum(`Monthly Water`, na.rm = TRUE),
-                monthly_boe_1km = sum(`Monthly BOE`, na.rm = TRUE))
-    ,
-    well_prod %>% 
-      filter(`2p5km` == TRUE) %>% 
-      group_by(`Monthly Production Date`) %>% 
-      summarise(active_2p5km = n(),
-            monthly_oil_2p5km = sum(`Monthly Oil`, na.rm = TRUE),
-            monthly_gas_2p5km = sum(`Monthly Gas`, na.rm = TRUE),
-            monthly_water_2p5km = sum(`Monthly Water`, na.rm = TRUE),
-            monthly_boe_2p5km = sum(`Monthly BOE`, na.rm = TRUE))
-    ,
-    well_prod %>% 
-      filter(`5km` == TRUE) %>% 
-      group_by(`Monthly Production Date`) %>% 
-      summarise(active_5km = n(),
-            monthly_oil_5km = sum(`Monthly Oil`, na.rm = TRUE),
-            monthly_gas_5km = sum(`Monthly Gas`, na.rm = TRUE),
-            monthly_water_5km = sum(`Monthly Water`, na.rm = TRUE),
-            monthly_boe_5km = sum(`Monthly BOE`, na.rm = TRUE))
-  ) %>%
-  reduce(inner_join, by = 'Monthly Production Date') %>%
-  mutate(yearmonth = format(`Monthly Production Date`, '%Y-%m'))
-
-full_data <- full_data %>%
-  left_join(prod_data, join_by(yearmonth))
-
-remove(monitor_well, well_info, prod_data, well_info, well_location, well_prod)
-gc()
+# prod_data <- list(
+#     well_prod %>% 
+#       filter(`1km` == TRUE) %>% 
+#       group_by(`Monthly Production Date`) %>% 
+#       summarise(active_1km = n(),
+#                 monthly_oil_1km = sum(`Monthly Oil`, na.rm = TRUE),
+#                 monthly_gas_1km = sum(`Monthly Gas`, na.rm = TRUE),
+#                 monthly_water_1km = sum(`Monthly Water`, na.rm = TRUE),
+#                 monthly_boe_1km = sum(`Monthly BOE`, na.rm = TRUE))
+#     ,
+#     well_prod %>% 
+#       filter(`2p5km` == TRUE) %>% 
+#       group_by(`Monthly Production Date`) %>% 
+#       summarise(active_2p5km = n(),
+#             monthly_oil_2p5km = sum(`Monthly Oil`, na.rm = TRUE),
+#             monthly_gas_2p5km = sum(`Monthly Gas`, na.rm = TRUE),
+#             monthly_water_2p5km = sum(`Monthly Water`, na.rm = TRUE),
+#             monthly_boe_2p5km = sum(`Monthly BOE`, na.rm = TRUE))
+#     ,
+#     well_prod %>% 
+#       filter(`5km` == TRUE) %>% 
+#       group_by(`Monthly Production Date`) %>% 
+#       summarise(active_5km = n(),
+#             monthly_oil_5km = sum(`Monthly Oil`, na.rm = TRUE),
+#             monthly_gas_5km = sum(`Monthly Gas`, na.rm = TRUE),
+#             monthly_water_5km = sum(`Monthly Water`, na.rm = TRUE),
+#             monthly_boe_5km = sum(`Monthly BOE`, na.rm = TRUE))
+#   ) %>%
+#   reduce(inner_join, by = 'Monthly Production Date') %>%
+#   mutate(yearmonth = format(`Monthly Production Date`, '%Y-%m'))
+# 
+# full_data <- full_data %>%
+#   left_join(prod_data, join_by(yearmonth))
 ```
 
 ```{r}
@@ -487,9 +512,7 @@ gc()
 full_data <- full_data  %>%
   select(-c('Date.Time', 'MDL', 'Unit', 'Averaging.Hour', 'Join_Count', 'siteId', 'unitName', 
             'qcName', 'opName', 'windSpeed_Unit', 'windDirection_Unit', 'opCode', 'Source',
-            'Monthly Production Date', 'active_2p5km', 'monthly_oil_2p5km', 'monthly_gas_2p5km',
-            'monthly_water_2p5km', 'monthly_boe_2p5km', 'active_5km', 'monthly_oil_5km', 
-            'monthly_gas_5km', 'monthly_water_5km', 'monthly_boe_5km'))
+            'DaylightSavings', 'QC.Code', 'wd_QCcode', 'ws_QCcode'))
 ```
 
 # Downwind Indicator wrp Refinery
@@ -533,7 +556,7 @@ daily_full <- full_data %>%
   select(H2S_daily_max, H2S_daily_avg, H2S_monthly_average, ws, wd, latitude, 
          longitude, mon_utm_x, mon_utm_y, Monitor, MinDist, 
          Converted_Angle, Refinery, year, month, day, weekday, 
-         active_1km, monthly_oil_1km, monthly_gas_1km, 
+         active_2km, monthly_oil_2km, monthly_gas_2km, inactive_2km,
          dist_wrp, capacity, wrp_angle, dist_dc, dist_213,
          avg_temp, avg_hum, precip) %>%
   group_by(Monitor, day) %>%
@@ -582,8 +605,8 @@ monitors <- cbind(monitors, extract(elevation, monitors_coord)) %>%
 
 # Load in EVI data
 ```{r}
+#evi <- raster('shapefiles/MOD13Q1.061__250m_16_days_EVI_doy2023145_aid0001.tif')
 evi <- raster('shapefiles/MOD13Q1.006__250m_16_days_EVI_doy2022177_aid0001.tif')
-
 monitors <- cbind(monitors, extract(evi, monitors_coord) * 0.0001) %>%
   as.data.frame() %>%
   rename(EVI = 3)
@@ -704,7 +727,7 @@ saveRDS(daily_full, 'data/daily_full.rds')
 ```{r}
 remove(la_county, la_county_present, la_county_trans, monitor_odor, monitor_zip,
        monitor_zip_graph, monitors, monitor_coord, odor, odor_graph, odor_graph_b,
-       pnts_sf, pnts_trans, elevation, evi, monitors_coord)
+       pnts_sf, pnts_trans, elevation, evi)
 gc()
 ```
 

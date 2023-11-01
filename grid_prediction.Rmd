@@ -18,6 +18,7 @@ library(mgcv)
 library(raster)
 library(caret)
 library(leaflet)
+library(htmlwidgets)
 select <- dplyr::select
 ```
 
@@ -70,7 +71,7 @@ mon_location$county <- apply(st_intersects(la_county_trans, mon_location, sparse
 la_county_present <- la_county_trans[la_county_trans$ZIPCODE %in% unique(mon_location$county), ]
 # Add some more
 la_county_full <- rbind(la_county_present, 
-                           la_county_trans[la_county_trans$ZIPCODE %in% c(90278, 90260, 90501, 90505, 90710, 90746, 90248, 90806, 90807, 90247, 90710, 90502, 90717, 90250, 90249, 90506, 90747, 90755, 90731, 90732, 90275, 90274, 90802, 90277, 90254, 90261), ])
+                           la_county_trans[la_county_trans$ZIPCODE %in% c(90278, 90260, 90501, 90505, 90710, 90746, 90248, 90806, 90807, 90247, 90710, 90502, 90717, 90250, 90249, 90506, 90747, 90755, 90731, 90732, 90802, 90277, 90254, 90261), ])
 monitor_zip_graph <- ggplot() +
   geom_sf(data = la_county_full, aes(fill = ZIPCODE)) +
   geom_sf(data = mon_location)
@@ -116,6 +117,15 @@ For now, try the model without meteorological data
 
 ```{r}
 # Without meteorological data XGBoost results
+fit.xgb_da_log_h2s_sincefeb2022_no_met <- readRDS('rfiles/fit.xgb_da_log_h2s_sincefeb2022_no_met.rds')
+fit.xgb_da_log_h2s_sincefeb2022_no_met$pred %>% group_by(Resample) %>% 
+     summarise(R2 = R2(pred, obs), RMSE = RMSE(pred, obs),
+               R2_BT = R2(exp(pred), exp(obs)), RMSE_BT = RMSE(exp(pred), exp(obs))) %>% 
+  summarise(R2 = mean(R2), RMSE = mean(RMSE), R2_BT = mean(R2_BT), RMSE_BT = mean(RMSE_BT))
+```
+
+```{r}
+# Without meteorological data XGBoost results
 fit.xgb_da_log_h2s_dis_ind_no_met <- readRDS('rfiles/fit.xgb_da_log_h2s_dis_ind_no_met.rds')
 fit.xgb_da_log_h2s_dis_ind_no_met$pred %>% group_by(Resample) %>% 
      summarise(R2 = R2(pred, obs), RMSE = RMSE(pred, obs),
@@ -134,39 +144,39 @@ fit.xgb_da_log_h2s_full_no_met$pred %>% group_by(Resample) %>%
 
 ```{r}
 predictors_no_met <- c('H2S_daily_avg', 'month', 'year', 'weekday',
-                'dist_wrp', 'MinDist', 'mon_utm_x', 'mon_utm_y', 'day', 
-                'monthly_oil_1km', 'monthly_gas_1km', 'active_1km','elevation', 
-                'EVI', 'num_odor_complaints', 'dist_dc', 'capacity') 
+                'dist_wrp', 'MinDist', 'mon_utm_x', 'mon_utm_y', 'day',
+                'monthly_oil_2km', 'monthly_gas_2km', 'active_2km', 'inactive_2km','elevation',
+                'EVI', 'num_odor_complaints', 'dist_dc', 'capacity')
 
 # get train data set for daily average H2S
-daily_avg_train_sincefeb2022 <- daily_full[complete.cases(daily_full),] %>% 
+daily_avg_train_sincefeb2022 <- daily_full[complete.cases(daily_full),] %>%
   filter(day > '2022-01-31') %>%
   select(all_of(predictors_no_met))
 
-logh2s_da_sincefeb2022_withoutmeteoro <- gam(I(log(H2S_daily_avg))~s(as.numeric(month),bs='cc') + weekday + 
+logh2s_da_sincefeb2022_withoutmeteoro <- gam(I(log(H2S_daily_avg))~s(as.numeric(month),bs='cc') + weekday +
                                                I(1/dist_wrp^2) + I(1/MinDist^2) +
-                         s(I(mon_utm_x/10^3), I(mon_utm_y/10^3), bs='tp', k = 10) + 
+                         s(I(mon_utm_x/10^3), I(mon_utm_y/10^3), bs='tp', k = 10) +
                          te(I(mon_utm_x/10^3), I(mon_utm_y/10^3), as.numeric(day),
                             k = c(10,10), d = c(2,1), bs = c('tp','cc')) +
-                         monthly_oil_1km + monthly_gas_1km + active_1km + 
+                         monthly_oil_2km + monthly_gas_2km + active_2km + inactive_2km +
                          elevation + EVI + num_odor_complaints +
-                         capacity + dist_dc, 
+                         capacity + dist_dc,
                       data = daily_avg_train_sincefeb2022)
 
 summary(logh2s_da_sincefeb2022_withoutmeteoro)
 
-disaster <- daily_full %>% 
-  filter(year == '2021', month %in% c('10', '11', '12')) %>% 
-  select(all_of(predictors_no_met)) %>% 
+disaster <- daily_full %>%
+  filter(year == '2021', month %in% c('10', '11', '12')) %>%
+  select(all_of(predictors_no_met)) %>%
   filter(complete.cases(.))
 
 logh2s_da_dis_withoutmeteoro <- gam(I(log(H2S_daily_avg))~month + weekday + I(1/dist_wrp^2) + I(1/MinDist^2) +
-                         s(I(mon_utm_x/10^3), I(mon_utm_y/10^3), bs='tp', k = 10) + 
+                         s(I(mon_utm_x/10^3), I(mon_utm_y/10^3), bs='tp', k = 10) +
                          te(I(mon_utm_x/10^3), I(mon_utm_y/10^3), as.numeric(day),
                             k = c(10,10), d = c(2,1), bs = c('tp','cc')) +
-                         monthly_oil_1km + monthly_gas_1km + active_1km + 
+                         monthly_oil_2km + monthly_gas_2km + active_2km + inactive_2km +
                           elevation + EVI + num_odor_complaints +
-                         capacity + dist_dc, 
+                         capacity + dist_dc,
                       data = disaster)
 
 summary(logh2s_da_dis_withoutmeteoro)
@@ -178,7 +188,7 @@ la_wrp <- read_sf('shapefiles/LA_WRP.shp', layer = 'LA_WRP')
 la_wrp <- st_transform(la_wrp, CRS_UTM)
 
 get_dist_wrp <- function(location) {
-  return(tibble(dist_wrp = apply(st_distance(location, la_wrp), 1, min), 
+  return(tibble(dist_wrp = apply(st_distance(location, la_wrp), 1, min),
                 capacity = la_wrp$cpcty_m[st_nearest_feature(location, la_wrp)]))
 }
 
@@ -200,58 +210,75 @@ get_dist_ref <- function(location) {
 }
 
 # Get production data
-well_prod <- read_csv('data/LA Well August2023 Well Monthly Production.CSV', show_col_types = FALSE)
-well_info <- read_csv('data/LA Well August2023 Well Headers.CSV', show_col_types = FALSE)
+well_prod <- read_csv('data/LA_well_prod_Oct2023 Well Monthly Production.CSV', show_col_types = FALSE)
+full_well_info <- read_csv('data/well_active_inactive_prod_since_2000.CSV', show_col_types = FALSE)
+active_well_info <- read_csv('data/LA_well_prod_Oct2023 Well Headers.CSV', show_col_types = FALSE)
+
+inactive_well_info <- anti_join(full_well_info, active_well_info, join_by(API14)) %>%
+  rename(lon = `Surface Hole Longitude (WGS84)`,
+         lat = `Surface Hole Latitude (WGS84)`) %>%
+  select(`API14`, lon, lat) %>%
+  distinct() %>%
+  st_as_sf(coords = c('lon', 'lat')) %>%
+  st_set_crs(4326) %>%
+  st_transform(CRS_UTM)
 
 well_prod <- well_prod %>%
-  left_join(well_info, join_by(`API/UWI` == API14))
+  left_join(active_well_info, join_by(`API/UWI` == API14))
 
 well_prod <- well_prod %>%
-  select(`API/UWI`, `Monthly Production Date`, `Monthly Oil`, `Monthly Gas`, 
-         `Monthly Water`, `Monthly BOE`, Days, `Operator Company Name.x`, 
-         `Production Type.x`, `Well Status.x`, `Drill Type`, 
+  select(`API/UWI`, `Monthly Production Date`, `Monthly Oil`, `Monthly Gas`,
+         `Monthly Water`, `Monthly BOE`, Days, `Operator Company Name.x`,
+         `Production Type.x`, `Well Status.x`, `Drill Type`,
          `Surface Hole Latitude (WGS84)`, `Surface Hole Longitude (WGS84)`) %>%
   rename(lon = `Surface Hole Longitude (WGS84)`,
          lat = `Surface Hole Latitude (WGS84)`)
 
 # project distinct well locations to UTM
-well_location <- well_prod %>%
+active_well_location <- well_prod %>%
   select(`API/UWI`, lon, lat) %>%
   distinct() %>%
-  st_as_sf(coords = c('lon', 'lat')) %>% 
+  st_as_sf(coords = c('lon', 'lat')) %>%
   st_set_crs(4326) %>%
-  st_transform(CRS_UTM) 
+  st_transform(CRS_UTM)
 
 get_well_prod <- function(location, disaster) {
-  # get the wells within 1km to location
+  # get the wells within 2km to location
   location_well <- well_location %>%
    mutate(dist_to_loc = apply(st_distance(location, well_location), 2, min)) %>%
-   filter(dist_to_loc <= 1000)
-  
+   filter(dist_to_loc <= 2000)
+
   loc_well_prod <- well_prod %>%
      right_join(location_well %>% select(-geometry), join_by(`API/UWI`))
-  
+
   if (disaster == 1) {
     loc_well_prod <- loc_well_prod %>%
       filter(`Monthly Production Date` == '2021-10-01') %>%
       group_by(`Monthly Production Date`) %>%
-      summarise(active_1km = n(),
-                monthly_oil_1km = sum(`Monthly Oil`, na.rm = TRUE),
-                monthly_gas_1km = sum(`Monthly Gas`, na.rm = TRUE))
+      summarise(active_2km = n(),
+                monthly_oil_2km = sum(`Monthly Oil`, na.rm = TRUE),
+                monthly_gas_2km = sum(`Monthly Gas`, na.rm = TRUE))
   } else {
     loc_well_prod <- loc_well_prod %>%
       filter(`Monthly Production Date` == '2022-10-01') %>%
       group_by(`Monthly Production Date`) %>%
-      summarise(active_1km = n(),
-                monthly_oil_1km = sum(`Monthly Oil`, na.rm = TRUE),
-                monthly_gas_1km = sum(`Monthly Gas`, na.rm = TRUE))
+      summarise(active_2km = n(),
+                monthly_oil_2km = sum(`Monthly Oil`, na.rm = TRUE),
+                monthly_gas_2km = sum(`Monthly Gas`, na.rm = TRUE))
   }
   if (nrow(loc_well_prod)  == 0) {
-    return(tibble(active_1km = 0, 
-                  monthly_oil_1km = 0,
-                  monthly_gas_1km = 0))
+    return(tibble(active_2km = 0,
+                  monthly_oil_2km = 0,
+                  monthly_gas_2km = 0))
   }
   return(loc_well_prod)
+}
+
+get_well_inactive <- function(location) {
+  # get inactive wells within 2km
+  inactive_well_api <- drop_units(st_distance(location, inactive_well_info))
+  inactive_well_api <- inactive_well_info[which(inactive_well_api <= 2000), ] %>% st_drop_geometry()
+  return(nrow(inactive_well_api))
 }
 
 # Get elevation
@@ -262,7 +289,7 @@ get_elevation <- function(location_ll) {
 }
 
 # Get EVI
-evi <- raster('shapefiles/MOD13Q1.006__250m_16_days_EVI_doy2022177_aid0001.tif')
+evi <- raster('shapefiles/MOD13Q1.061__250m_16_days_EVI_doy2023145_aid0001.tif')
 
 get_evi <- function(location_ll){
   return(extract(evi, location_ll) * 0.0001)
@@ -272,8 +299,8 @@ get_evi <- function(location_ll){
 odor <- read_csv('data/SCAQMD_odorcomplaints_2018_2022.csv')
 
 get_zipcode <- function(location) {
-  return(apply(st_intersects(la_county_trans, location, sparse = FALSE), 2, 
-               function(col) { 
+  return(apply(st_intersects(la_county_trans, location, sparse = FALSE), 2,
+               function(col) {
                   la_county_trans[which(col), ]$ZIPCODE
                }))
 }
@@ -281,7 +308,7 @@ get_zipcode <- function(location) {
 get_odor <- function(location, disaster) {
   zipcode <- get_zipcode(location)
   odor <- odor[odor$zip == zipcode, ]
-  
+
   if (disaster == 1) {
     return(odor %>% filter(between(date, as.Date('2021-10-01'), as.Date('2021-10-31'))))
   } else {
@@ -298,36 +325,37 @@ d_channel <- st_transform(d_channel, CRS_UTM) # convert to UTM crs
 
 
 # # prepare disaster period data
-# grd_data_disaster <- grd_df %>% 
+# grd_data_disaster <- grd_df %>%
 #   mutate(mon_utm_x = x,
 #          mon_utm_y = y,
 #          sf_loc = get_sf_loc(mon_utm_x, mon_utm_y),
 #          ll_loc = get_ll_loc(mon_utm_x, mon_utm_y)) %>%
-#   mutate(month = '10', 
-#          year = as.integer(2021), 
-#          dist_wrp = get_dist_wrp(sf_loc)$dist_wrp, 
+#   mutate(month = '10',
+#          year = as.integer(2021),
+#          dist_wrp = get_dist_wrp(sf_loc)$dist_wrp,
 #          MinDist = get_dist_ref(sf_loc),
-#          elevation = get_elevation(ll_loc), 
-#          EVI = get_evi(ll_loc), 
+#          elevation = get_elevation(ll_loc),
+#          EVI = get_evi(ll_loc),
 #          capacity = get_dist_wrp(sf_loc)$capacity,
 #          dist_dc = apply(st_distance(sf_loc, d_channel), 1, min))
 # 
 # grd_data_disaster <- grd_data_disaster %>%
 #   rowwise() %>%
-#   mutate(well_prod_data = get_well_prod(sf_loc, 1)) %>%
+#   mutate(well_prod_data = get_well_prod(sf_loc, 1),
+#          inactive_2km = get_well_inactive(sf_loc)) %>%
 #   ungroup()
 # 
 # grd_data_disaster <- grd_data_disaster %>%
-#   mutate(active_1km = well_prod_data$active_1km,
-#          monthly_oil_1km = well_prod_data$monthly_oil_1km,
-#          monthly_gas_1km = well_prod_data$monthly_gas_1km) %>%
+#   mutate(active_2km = well_prod_data$active_2km,
+#          monthly_oil_2km = well_prod_data$monthly_oil_2km,
+#          monthly_gas_2km = well_prod_data$monthly_gas_2km) %>%
 #   select(-well_prod_data)
 # 
-# odor_data <- tibble(mon_utm_x = double(), mon_utm_y = double(), date = date(), 
+# odor_data <- tibble(mon_utm_x = double(), mon_utm_y = double(), date = date(),
 #                     num_odor_complaint = double())
 # for (i in 1:nrow(grd_data_disaster)){
 #   sf_loc <- get_sf_loc(grd_data_disaster$mon_utm_x[i], grd_data_disaster$mon_utm_y[i])
-#   odor_data <- rbind(odor_data, 
+#   odor_data <- rbind(odor_data,
 #                      tibble(mon_utm_x = grd_data_disaster$mon_utm_x[i],
 #                             mon_utm_y = grd_data_disaster$mon_utm_y[i]) %>%
 #                        cross_join(get_odor(sf_loc, 1)))
@@ -340,7 +368,7 @@ d_channel <- st_transform(d_channel, CRS_UTM) # convert to UTM crs
 #   cross_join(disaster_dates)
 # 
 # grd_data_disaster <- grd_data_disaster %>%
-#   left_join(odor_data %>% select(mon_utm_x, mon_utm_y, date, num_odor_complaints), 
+#   left_join(odor_data %>% select(mon_utm_x, mon_utm_y, date, num_odor_complaints),
 #             join_by(mon_utm_x, mon_utm_y, day == date))
 # 
 # grd_data_disaster <- grd_data_disaster %>%
@@ -350,11 +378,9 @@ d_channel <- st_transform(d_channel, CRS_UTM) # convert to UTM crs
 #   st_drop_geometry() %>%
 #   select(-c(x, y, values, sf_loc, ll_loc))
 # 
-# saveRDS(grd_data_disaster, 'rfiles/grd_data_disaster.rds')
-
-####### REMOVE LATER
 # grd_data_disaster$EVI <- coalesce(grd_data_disaster$EVI, mean(grd_data_disaster$EVI, na.rm=TRUE))
-########
+# 
+# saveRDS(grd_data_disaster, 'rfiles/grd_data_disaster.rds')
 
 grd_data_disaster <- readRDS('rfiles/grd_data_disaster.rds')
 
@@ -484,7 +510,7 @@ saveWidget(dis_full_pred, file="figures/dis_full_pred.html")
 
 # Normal Period Grid Prediction
 ```{r}
-# # prepare normal period data
+# prepare normal period data
 # grd_data_normal <- grd_df %>%
 #   mutate(mon_utm_x = x,
 #          mon_utm_y = y,
@@ -501,13 +527,14 @@ saveWidget(dis_full_pred, file="figures/dis_full_pred.html")
 # 
 # grd_data_normal <- grd_data_normal %>%
 #   rowwise() %>%
-#   mutate(well_prod_data = get_well_prod(sf_loc, 0)) %>%
+#   mutate(well_prod_data = get_well_prod(sf_loc, 0),
+#          inactive_2km = get_well_inactive(sf_loc)) %>%
 #   ungroup()
 # 
 # grd_data_normal <- grd_data_normal %>%
-#   mutate(active_1km = well_prod_data$active_1km,
-#          monthly_oil_1km = well_prod_data$monthly_oil_1km,
-#          monthly_gas_1km = well_prod_data$monthly_gas_1km) %>%
+#   mutate(active_2km = well_prod_data$active_2km,
+#          monthly_oil_2km = well_prod_data$monthly_oil_2km,
+#          monthly_gas_2km = well_prod_data$monthly_gas_2km) %>%
 #   select(-well_prod_data)
 # 
 # odor_data <- tibble(mon_utm_x = double(), mon_utm_y = double(), date = date(),
@@ -537,13 +564,34 @@ saveWidget(dis_full_pred, file="figures/dis_full_pred.html")
 #   st_drop_geometry() %>%
 #   select(-c(x, y, values, sf_loc, ll_loc))
 # 
-# saveRDS(grd_data_normal, 'rfiles/grd_data_normal.rds')
-# 
-# ####### REMOVE LATER
 # grd_data_normal$EVI <- coalesce(grd_data_normal$EVI, mean(grd_data_normal$EVI, na.rm=TRUE))
-# ########
+# 
+# saveRDS(grd_data_normal, 'rfiles/grd_data_normal.rds')
 
 grd_data_normal <- readRDS('rfiles/grd_data_normal.rds')
+
+grd_data_sincefeb2022_mat <- fastDummies::dummy_cols(grd_data_normal %>%
+                                   select(-c(day)) %>%
+                                   mutate(disaster = 0,
+                                          MinDist = 1/(MinDist^2),
+                                          dist_wrp = 1/(dist_wrp^2),
+                                          year = as.character(year)),
+                                 remove_selected_columns = TRUE)
+
+grd_data_sincefeb2022_mat <- grd_data_sincefeb2022_mat %>% 
+  mutate(month_01 = as.integer(0),
+         month_02 = as.integer(0),
+         month_03 = as.integer(0),
+         month_04 = as.integer(0),
+         month_05 = as.integer(0),
+         month_06 = as.integer(0),
+         month_07 = as.integer(0),
+         month_08 = as.integer(0),
+         month_09 = as.integer(0),
+         month_11 = as.integer(0),
+         month_12 = as.integer(0),
+         year_2023 = as.integer(0),
+         )
 
 grd_data_dis_ind_mat <- fastDummies::dummy_cols(grd_data_normal %>%
                                    select(-c(day)) %>%
@@ -596,12 +644,14 @@ grd_data_full_mat <- grd_data_full_mat %>%
 
 grd_result_normal <- grd_data_normal %>%
   mutate(gam_pred = predict(logh2s_da_dis_withoutmeteoro, newdata = grd_data_normal),
+         xgb_sincefeb2022_predict = predict(fit.xgb_da_log_h2s_sincefeb2022_no_met, newdata = grd_data_sincefeb2022_mat),
          xgb_dis_ind_predict = predict(fit.xgb_da_log_h2s_dis_ind_no_met, newdata = grd_data_dis_ind_mat),
          xgb_full_predict = predict(fit.xgb_da_log_h2s_full_no_met, newdata = grd_data_full_mat))
 
 grd_result_normal <- grd_result_normal %>%
   group_by(mon_utm_x, mon_utm_y, month) %>%
   summarise(h2s_monthly_avg_gam = mean(exp(gam_pred)),
+            h2s_monthly_avg_sincefeb2022_xgb = mean(exp(xgb_sincefeb2022_predict)),
             h2s_monthly_avg_di_xgb = mean(exp(xgb_dis_ind_predict)),
             h2s_monthly_avg_full_xgb = mean(exp(xgb_full_predict)))
 
@@ -616,14 +666,39 @@ grd_normal <- grd_result_normal %>%
                  y = unlist(map(geometry,2)))
 
 
+raster_2022_xgb <- rasterFromXYZ(grd_normal %>% select(x, y, h2s_monthly_avg_sincefeb2022_xgb) %>% st_drop_geometry() %>% as.data.frame())
+crs(raster_2022_xgb) <- CRS_UTM
+
+# Combine three palettes for better visual
+ramp1 <- colorRampPalette(colors = c("blue", "green"), space = "Lab")(50)
+ramp2 <- colorRampPalette(colors = c("green", "yellow"), space = "Lab")(100)
+ramp <- c(ramp1, ramp2)
+
+pal <- colorNumeric(palette = ramp, domain = raster_2022_xgb@data@values, na.color = "transparent")
+
+#previewColors(colorNumeric(palette = ramp, domain = NULL), values = 0:6300)
+
+# Everything with Disaster Indicator XGBoost
+norm_2022_pred <- leaflet() %>% addTiles() %>% 
+                  addRasterImage(raster_2022_xgb, 
+                                 colors = pal, 
+                                 opacity = .8) %>%
+                  addLegend(pal = pal, 
+                            values = raster_2022_xgb@data@values, 
+                            title = "Monthly Average H2S")
+
+norm_2022_pred
+saveWidget(norm_2022_pred, file="figures/norm_2022_pred.html")
+```
+
+```{r}
 raster_di_xgb <- rasterFromXYZ(grd_normal %>% select(x, y, h2s_monthly_avg_di_xgb) %>% st_drop_geometry() %>% as.data.frame())
 crs(raster_di_xgb) <- CRS_UTM
 
 # Combine three palettes for better visual
 ramp1 <- colorRampPalette(colors = c("blue", "green"), space = "Lab")(50)
 ramp2 <- colorRampPalette(colors = c("green", "yellow"), space = "Lab")(100)
-ramp3 <- colorRampPalette(colors = c("yellow", "red"), space = "Lab")(6150)
-ramp <- c(ramp1, ramp2, ramp3)
+ramp <- c(ramp1, ramp2)
 
 pal <- colorNumeric(palette = ramp, domain = raster_di_xgb@data@values, na.color = "transparent")
 
@@ -647,10 +722,9 @@ raster_full_xgb <- rasterFromXYZ(grd_normal %>% select(x, y, h2s_monthly_avg_ful
 crs(raster_full_xgb) <- CRS_UTM
 
 # Combine three palettes for better visual
-ramp1 <- colorRampPalette(colors = c("blue", "green"), space = "Lab")(3)
-ramp2 <- colorRampPalette(colors = c("green", "yellow"), space = "Lab")(12)
-ramp3 <- colorRampPalette(colors = c("yellow", "red"), space = "Lab")(64)
-ramp <- c(ramp1, ramp2, ramp3)
+ramp1 <- colorRampPalette(colors = c("blue", "green"), space = "Lab")(50)
+ramp2 <- colorRampPalette(colors = c("green", "yellow"), space = "Lab")(100)
+ramp <- c(ramp1, ramp2)
 
 pal <- colorNumeric(palette = ramp, domain = raster_full_xgb@data@values, na.color = "transparent")
 
@@ -678,7 +752,7 @@ saveWidget(norm_full_pred, file="figures/norm_full_pred.html")
 #                          s(I(mon_utm_x/10^3), I(mon_utm_y/10^3), bs='tp', k = 10) + 
 #                         te(I(mon_utm_x/10^3), I(mon_utm_y/10^3), as.numeric(day),
 #                            k=c(10,10),d=c(2,1),bs=c('tp','cc')) +
-#                          monthly_oil_1km + monthly_gas_1km + active_1km + 
+#                          monthly_oil_2km + monthly_gas_2km + active_2km + 
 #                         daily_downwind_wrp + elevation + EVI + num_odor_complaints +
 #                         I(1/dist_dc^2) + avg_temp + avg_hum + precip, 
 #                       data = daily_avg_train_sincefeb2022)
@@ -688,7 +762,7 @@ saveWidget(norm_full_pred, file="figures/norm_full_pred.html")
 #                          s(I(mon_utm_x/10^3), I(mon_utm_y/10^3), bs='tp', k = 10) + 
 #                          te(I(mon_utm_x/10^3), I(mon_utm_y/10^3), as.numeric(day),
 #                             k = c(10,10), d = c(2,1), bs = c('tp','cc')) +
-#                          monthly_oil_1km + monthly_gas_1km + active_1km + 
+#                          monthly_oil_2km + monthly_gas_2km + active_2km + 
 #                          daily_downwind_wrp + elevation + EVI + num_odor_complaints +
 #                          capacity + dist_dc + avg_temp + avg_hum + precip, 
 #                       data = disaster)

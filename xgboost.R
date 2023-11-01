@@ -13,18 +13,19 @@ daily_full <- readRDS('data/daily_full.rds') %>%
 
 predictors <- c('H2S_daily_avg', 'month', 'year', 'weekday', 'wd_avg', 'ws_avg', 
                 'daily_downwind_ref', 'dist_wrp', 'MinDist',
-                'mon_utm_x', 'mon_utm_y', 'day', 'monthly_oil_1km', 'monthly_gas_1km', 
-                'active_1km', 'daily_downwind_wrp', 'elevation', 'EVI', 'num_odor_complaints',
+                'mon_utm_x', 'mon_utm_y', 'day', 'monthly_oil_2km', 'monthly_gas_2km', 
+                'active_2km', 'inactive_2km', 'daily_downwind_wrp', 'elevation', 'EVI', 'num_odor_complaints',
                 'dist_dc', 'capacity', 'avg_temp', 'avg_hum', 'precip') 
 
 predictors_no_met <- c('H2S_daily_avg', 'month', 'year', 'weekday', 'dist_wrp', 'MinDist',
-                'mon_utm_x', 'mon_utm_y', 'day', 'monthly_oil_1km', 'monthly_gas_1km', 
-                'active_1km', 'elevation', 'EVI', 'num_odor_complaints',
+                'mon_utm_x', 'mon_utm_y', 'day', 'monthly_oil_2km', 'monthly_gas_2km', 
+                'active_2km', 'inactive_2km', 'elevation', 'EVI', 'num_odor_complaints',
                 'dist_dc', 'capacity') 
 
 # Since Feb 2022
-train <- daily_full[complete.cases(daily_full),] %>%
-  filter(day >= '2022-02-01')
+train <- daily_full %>%
+  filter(day >= '2022-01-31') %>%
+  filter(complete.cases(.))
 
 train <- fastDummies::dummy_cols(train %>%
                                    select(-c(Refinery, Monitor, day, H2S_daily_max, H2S_monthly_average,
@@ -155,16 +156,11 @@ fit.xgb_da_full <- train(H2S_daily_avg~.,
 saveRDS(fit.xgb_da_full, 'rfiles/fit.xgb_da_full.rds')
 
 # Box Cox
-predictors <- c('H2S_daily_avg', 'month', 'year', 'weekday', 'wd_avg', 'ws_avg', 
-                'daily_downwind_ref', 'dist_wrp', 'MinDist',
-                'mon_utm_x', 'mon_utm_y', 'day', 'monthly_oil_1km', 'monthly_gas_1km', 
-                'active_1km', 'daily_downwind_wrp', 'elevation', 'EVI', 'num_odor_complaints',
-                'dist_dc', 'capacity', 'avg_temp', 'avg_hum', 'precip') 
-
 # Since Feb 2022
-daily_avg_train_sincefeb2022 <- daily_full[complete.cases(daily_full),] %>% 
-  filter(day >= '2022-02-01') %>%
-  select(all_of(predictors))
+daily_avg_train_sincefeb2022 <- daily_full %>% 
+  filter(day >= '2022-01-31') %>%
+  select(all_of(predictors)) %>%
+  filter(complete.cases(.))
 
 train <- daily_avg_train_sincefeb2022 %>% 
   mutate(H2S_daily_avg = log(H2S_daily_avg))
@@ -285,7 +281,7 @@ everything_20test <- anti_join(daily_full %>%
                                select(all_of(predictors)) %>% 
                                mutate(disaster = if_else(year == '2021' & month %in% c('10', '11', '12'), 1, 0)) %>% 
                                filter(complete.cases(.)),
-                             everything_train)
+                               everything_80train)
 
 train <- everything_80train %>% 
   mutate(H2S_daily_avg = log(H2S_daily_avg))
@@ -342,7 +338,29 @@ fit.xgb_da_log_h2s_full_8020 <- train(H2S_daily_avg~.,
                                  tuneLength = 10, importance=TRUE, verbosity = 0, verbose=FALSE)
 saveRDS(fit.xgb_da_log_h2s_full_8020, 'rfiles/fit.xgb_da_log_h2s_full_8020.rds')
 
+# Since Feb 2022 without meteorological
+train <- daily_full %>%
+  select(all_of(predictors_no_met)) %>%
+  filter(day >= '2022-01-31') %>%
+  mutate(H2S_daily_avg = log(H2S_daily_avg)) %>%
+  filter(complete.cases(.)) 
+
+train <- fastDummies::dummy_cols(train %>%
+                                   select(-c(day)) %>%
+                                   mutate(MinDist = 1/(MinDist^2),
+                                          dist_wrp = 1/(dist_wrp^2)),
+                                 remove_selected_columns = TRUE)
+
+fit.xgb_da_log_h2s_sincefeb2022_no_met <- train(H2S_daily_avg~.,
+                                           method = 'xgbTree',
+                                           data = train,
+                                           trControl=control,
+                                           tuneGrid = tune_grid,
+                                           tuneLength = 10, importance=TRUE, verbosity = 0, verbose=FALSE)
+saveRDS(fit.xgb_da_log_h2s_sincefeb2022_no_met, 'rfiles/fit.xgb_da_log_h2s_sincefeb2022_no_met.rds')
+
 # Everything Models without meteorological
+
 # Everything w. Disaster Indicator
 everything_no_met <- daily_full %>% 
   select(all_of(predictors_no_met)) %>% 

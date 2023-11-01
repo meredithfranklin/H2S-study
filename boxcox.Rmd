@@ -34,8 +34,8 @@ daily_full <- readRDS('data/daily_full.rds')
 ```{r}
 predictors <- c('H2S_daily_avg', 'month', 'year', 'weekday', 'wd_avg', 'ws_avg', 
                 'daily_downwind_ref', 'dist_wrp', 'MinDist',
-                'mon_utm_x', 'mon_utm_y', 'day', 'monthly_oil_1km', 'monthly_gas_1km', 
-                'active_1km', 'daily_downwind_wrp', 'elevation', 'EVI', 'num_odor_complaints',
+                'mon_utm_x', 'mon_utm_y', 'day', 'monthly_oil_2km', 'monthly_gas_2km', 
+                'active_2km', 'inactive_2km', 'daily_downwind_wrp', 'elevation', 'EVI', 'num_odor_complaints',
                 'dist_dc', 'capacity', 'avg_temp', 'avg_hum', 'precip') 
 
 # get train data set for daily average H2S
@@ -64,7 +64,7 @@ h2s_da_model_f <- gam(H2S_daily_avg~s(as.numeric(month),bs='cc') + year + weekda
                          s(I(mon_utm_x/10^3), I(mon_utm_y/10^3), bs='tp', k = 10) + 
                         te(I(mon_utm_x/10^3), I(mon_utm_y/10^3), as.numeric(day),
                            k=c(10,10),d=c(2,1),bs=c('tp','cc')) +
-                         monthly_oil_1km + monthly_gas_1km + active_1km + 
+                         monthly_oil_2km + monthly_gas_2km + active_2km + inactive_2km + 
                         daily_downwind_wrp + elevation + EVI + num_odor_complaints +
                         I(1/dist_dc^2) + avg_temp + avg_hum + precip, 
                       data = daily_avg_train_sincefeb2022)
@@ -200,7 +200,7 @@ logh2s_da_sincefeb2022 <- gam(I(log(H2S_daily_avg))~s(as.numeric(month),bs='cc')
                          s(I(mon_utm_x/10^3), I(mon_utm_y/10^3), bs='tp', k = 10) + 
                         te(I(mon_utm_x/10^3), I(mon_utm_y/10^3), as.numeric(day),
                            k=c(10,10),d=c(2,1),bs=c('tp','cc')) +
-                         monthly_oil_1km + monthly_gas_1km + active_1km + 
+                         monthly_oil_2km + monthly_gas_2km + active_2km + inactive_2km + 
                         daily_downwind_wrp + elevation + EVI + num_odor_complaints +
                         I(1/dist_dc^2) + avg_temp + avg_hum + precip, 
                       data = daily_avg_train_sincefeb2022)
@@ -279,7 +279,7 @@ logh2s_da_dis <- gam(I(log(H2S_daily_avg))~month + weekday +
                          s(I(mon_utm_x/10^3), I(mon_utm_y/10^3), bs='tp', k = 10) + 
                          te(I(mon_utm_x/10^3), I(mon_utm_y/10^3), as.numeric(day),
                             k = c(10,10), d = c(2,1), bs = c('tp','cc')) +
-                         monthly_oil_1km + monthly_gas_1km + active_1km + 
+                         monthly_oil_2km + monthly_gas_2km + active_2km + inactive_2km + 
                          daily_downwind_wrp + elevation + EVI + num_odor_complaints +
                          capacity + dist_dc + avg_temp + avg_hum + precip, 
                       data = disaster)
@@ -307,7 +307,7 @@ logh2s_da_excl_dis <- gam(I(log(H2S_daily_avg))~s(as.numeric(month),bs='cc') + y
                          s(I(mon_utm_x/10^3), I(mon_utm_y/10^3), bs='tp', k = 10) + 
                          te(I(mon_utm_x/10^3), I(mon_utm_y/10^3), as.numeric(day),
                             k = c(10,10), d = c(2,1), bs = c('tp','cc')) +
-                         monthly_oil_1km + monthly_gas_1km + active_1km + 
+                         monthly_oil_2km + monthly_gas_2km + active_2km + inactive_2km + 
                          daily_downwind_wrp + elevation + EVI + num_odor_complaints +
                          capacity + dist_dc + avg_temp + avg_hum + precip, 
                       data = excl_disaster)
@@ -334,7 +334,7 @@ logh2s_da_full_dis_ind <- gam(I(log(H2S_daily_avg))~s(as.numeric(month),bs='cc')
                          s(I(mon_utm_x/10^3), I(mon_utm_y/10^3), bs='tp', k = 10) + 
                          te(I(mon_utm_x/10^3), I(mon_utm_y/10^3), as.numeric(day),
                             k = c(10,10), d = c(2,1), bs = c('tp','cc')) +
-                         monthly_oil_1km + monthly_gas_1km + active_1km + 
+                         monthly_oil_2km + monthly_gas_2km + active_2km + inactive_2km + 
                          daily_downwind_wrp + elevation + EVI + num_odor_complaints +
                          capacity + dist_dc + avg_temp + avg_hum + precip + disaster, 
                       data = everything)
@@ -349,7 +349,7 @@ logh2s_da_full <- gam(I(log(H2S_daily_avg))~s(as.numeric(month),bs='cc') + year 
                          s(I(mon_utm_x/10^3), I(mon_utm_y/10^3), bs='tp', k = 10) + 
                          te(I(mon_utm_x/10^3), I(mon_utm_y/10^3), as.numeric(day),
                             k = c(10,10), d = c(2,1), bs = c('tp','cc')) +
-                         monthly_oil_1km + monthly_gas_1km + active_1km + 
+                         monthly_oil_2km + monthly_gas_2km + active_2km + inactive_2km + 
                          daily_downwind_wrp + elevation + EVI + num_odor_complaints +
                          capacity + dist_dc + avg_temp + avg_hum + precip, 
                       data = everything)
@@ -405,7 +405,7 @@ for (fold in seq(1, 10)) {
                          s(I(mon_utm_x/10^3), I(mon_utm_y/10^3), bs='tp', k = 10) + 
                         te(I(mon_utm_x/10^3), I(mon_utm_y/10^3), as.numeric(day),
                            k=c(10,10),d=c(2,1),bs=c('tp','cc')) +
-                         monthly_oil_1km + monthly_gas_1km + active_1km + 
+                         monthly_oil_2km + monthly_gas_2km + active_2km + inactive_2km + 
                         daily_downwind_wrp + elevation + EVI + num_odor_complaints +
                         I(1/dist_dc^2) + avg_temp + avg_hum + precip, 
                           data = train)
@@ -420,11 +420,11 @@ for (fold in seq(1, 10)) {
   pred_10cv_sincefeb2022 <- append(pred_10cv_sincefeb2022, predictions)
   
   adj_r2_sincefeb2022 <- append(adj_r2_sincefeb2022, summary(h2s_da_model_10cv)$r.sq)
-  bt_adj_r2_sincefeb2022 <- c(bt_adj_r2_sincefeb2022, 
+  bt_adj_r2_sincefeb2022 <- append(bt_adj_r2_sincefeb2022, 
                               adj_r2(R2(exp(predict(h2s_da_model_10cv, newdata = train)), train$H2S_daily_avg),
                               summary(h2s_da_model_10cv)$n, summary(h2s_da_model_10cv)$np))
   adj_r2_test_sincefeb2022 <- append(adj_r2_test_sincefeb2022, adj_r2_test)
-  bt_adj_r2_test_sincefeb2022 <- c(bt_adj_r2_test_sincefeb2022, bt_adj_r2_test)
+  bt_adj_r2_test_sincefeb2022 <- append(bt_adj_r2_test_sincefeb2022, bt_adj_r2_test)
   rmse_sincefeb2022 <- append(rmse_sincefeb2022, RMSE(predictions, log(test$H2S_daily_avg)))
   btrmse_sincefeb2022 <- append(btrmse_sincefeb2022, RMSE(exp(predictions), test$H2S_daily_avg))
 }
@@ -478,7 +478,7 @@ for (fold in seq(1, 10)) {
                          s(I(mon_utm_x/10^3), I(mon_utm_y/10^3), bs='tp', k = 10) + 
                          te(I(mon_utm_x/10^3), I(mon_utm_y/10^3), as.numeric(day),
                             k = c(10,10), d = c(2,1), bs = c('tp','cc')) +
-                         monthly_oil_1km + monthly_gas_1km + active_1km + 
+                         monthly_oil_2km + monthly_gas_2km + active_2km + inactive_2km + 
                          daily_downwind_wrp + elevation + EVI + num_odor_complaints +
                          capacity + dist_dc + avg_temp + avg_hum + precip, 
                           data = train)
@@ -493,11 +493,11 @@ for (fold in seq(1, 10)) {
   pred_10cv_disaster <- append(pred_10cv_disaster, predictions)
   
   adj_r2_disaster <- append(adj_r2_disaster, summary(h2s_da_model_10cv)$r.sq)
-  bt_adj_r2_disaster <- c(bt_adj_r2_disaster, 
+  bt_adj_r2_disaster <- append(bt_adj_r2_disaster, 
                               adj_r2(R2(exp(predict(h2s_da_model_10cv, newdata = train)), train$H2S_daily_avg),
                               summary(h2s_da_model_10cv)$n, summary(h2s_da_model_10cv)$np))
   adj_r2_test_disaster <- append(adj_r2_test_disaster, adj_r2_test)
-  bt_adj_r2_test_disaster <- c(bt_adj_r2_test_disaster, bt_adj_r2_test)
+  bt_adj_r2_test_disaster <- append(bt_adj_r2_test_disaster, bt_adj_r2_test)
   rmse_disaster <- append(rmse_disaster, RMSE(predictions, log(test$H2S_daily_avg)))
   btrmse_disaster <- append(btrmse_disaster, RMSE(exp(predictions), test$H2S_daily_avg))
 }
@@ -549,7 +549,7 @@ for (fold in seq(1, 10)) {
                          s(I(mon_utm_x/10^3), I(mon_utm_y/10^3), bs='tp', k = 10) + 
                         te(I(mon_utm_x/10^3), I(mon_utm_y/10^3), as.numeric(day),
                            k=c(10,10),d=c(2,1),bs=c('tp','cc')) +
-                         monthly_oil_1km + monthly_gas_1km + active_1km + 
+                         monthly_oil_2km + monthly_gas_2km + active_2km + inactive_2km + 
                         daily_downwind_wrp + elevation + EVI + num_odor_complaints +
                         I(1/dist_dc^2) + avg_temp + avg_hum + precip, 
                           data = train)
@@ -564,7 +564,7 @@ for (fold in seq(1, 10)) {
   pred_10cv_excl_dis <- append(pred_10cv_excl_dis, predictions)
   
   adj_r2_excl_dis <- append(adj_r2_excl_dis, summary(h2s_da_model_10cv)$r.sq)
-  bt_adj_r2_excl_dis <- c(bt_adj_r2_excl_dis, 
+  bt_adj_r2_excl_dis <- append(bt_adj_r2_excl_dis, 
                               adj_r2(R2(exp(predict(h2s_da_model_10cv, newdata = train)), train$H2S_daily_avg),
                               summary(h2s_da_model_10cv)$n, summary(h2s_da_model_10cv)$np))
   adj_r2_test_excl_dis <- append(adj_r2_test_excl_dis, adj_r2_test)
@@ -622,7 +622,7 @@ for (fold in seq(1, 10)) {
                          s(I(mon_utm_x/10^3), I(mon_utm_y/10^3), bs='tp', k = 10) + 
                         te(I(mon_utm_x/10^3), I(mon_utm_y/10^3), as.numeric(day),
                            k=c(10,10),d=c(2,1),bs=c('tp','cc')) +
-                         monthly_oil_1km + monthly_gas_1km + active_1km + 
+                         monthly_oil_2km + monthly_gas_2km + active_2km + inactive_2km + 
                         daily_downwind_wrp + elevation + EVI + num_odor_complaints +
                         I(1/dist_dc^2) + avg_temp + avg_hum + precip + disaster, 
                           data = train)
@@ -637,12 +637,12 @@ for (fold in seq(1, 10)) {
   pred_10cv_disaster_ind <- append(pred_10cv_disaster_ind, predictions)
   
   adj_r2_disaster_ind <- append(adj_r2_disaster_ind, summary(h2s_da_model_10cv)$r.sq)
-  bt_adj_r2_disaster_ind <- c(bt_adj_r2_disaster_ind, 
+  bt_adj_r2_disaster_ind <- append(bt_adj_r2_disaster_ind, 
                               adj_r2(R2(exp(predict(h2s_da_model_10cv, newdata = train)), train$H2S_daily_avg),
                               summary(h2s_da_model_10cv)$n, summary(h2s_da_model_10cv)$np))
   adj_r2_test_disaster_ind <- append(adj_r2_test_disaster_ind, adj_r2_test)
-  bt_adj_r2_test_disaster_ind <- c(bt_adj_r2_test_disaster_ind, bt_adj_r2_test)
-  rmse_disaster_ind <- append(rmse_disaster_ind, RMSE(predictions, log(log(test$H2S_daily_avg))))
+  bt_adj_r2_test_disaster_ind <- append(bt_adj_r2_test_disaster_ind, bt_adj_r2_test)
+  rmse_disaster_ind <- append(rmse_disaster_ind, RMSE(predictions, log(test$H2S_daily_avg)))
   btrmse_disaster_ind <- append(btrmse_disaster_ind, RMSE(exp(predictions), test$H2S_daily_avg))
 }
 
@@ -693,7 +693,7 @@ for (fold in seq(1, 10)) {
                          s(I(mon_utm_x/10^3), I(mon_utm_y/10^3), bs='tp', k = 10) + 
                         te(I(mon_utm_x/10^3), I(mon_utm_y/10^3), as.numeric(day),
                            k=c(10,10),d=c(2,1),bs=c('tp','cc')) +
-                         monthly_oil_1km + monthly_gas_1km + active_1km + 
+                         monthly_oil_2km + monthly_gas_2km + active_2km + inactive_2km + 
                         daily_downwind_wrp + elevation + EVI + num_odor_complaints +
                         I(1/dist_dc^2) + avg_temp + avg_hum + precip, 
                           data = train)
@@ -708,11 +708,11 @@ for (fold in seq(1, 10)) {
   pred_10cv_everything <- append(pred_10cv_everything, predictions)
   
   adj_r2_everything <- append(adj_r2_everything, summary(h2s_da_model_10cv)$r.sq)
-  bt_adj_r2_everything <- c(bt_adj_r2_everything, 
+  bt_adj_r2_everything <- append(bt_adj_r2_everything, 
                               adj_r2(R2(exp(predict(h2s_da_model_10cv, newdata = train)), train$H2S_daily_avg),
                               summary(h2s_da_model_10cv)$n, summary(h2s_da_model_10cv)$np))
   adj_r2_test_everything <- append(adj_r2_test_everything, adj_r2_test)
-  bt_adj_r2_test_everything <- c(bt_adj_r2_test_everything, bt_adj_r2_test)
+  bt_adj_r2_test_everything <- append(bt_adj_r2_test_everything, bt_adj_r2_test)
   rmse_everything <- append(rmse_everything, RMSE(predictions, log(test$H2S_daily_avg)))
   btrmse_everything <- append(btrmse_everything, RMSE(exp(predictions), test$H2S_daily_avg))
 }
@@ -808,9 +808,10 @@ fit.xgb_da_log_h2s_sincefeb2022$finalModel
 ```{r}
 names <- c("Longitude" = "mon_utm_x", "Latitude" = "mon_utm_y",
         "Distance to Refinery" = "MinDist", "Angle to Refinery" = "Converted_Angle",
-        "Active Wells within 1km" = "active_1km", 
-        "Monthly Oil Production 1km" = "monthly_oil_1km",
-        "Monthly Gas Production 1km" = "monthly_gas_1km",
+        "Active Wells within 2km" = "active_2km", 
+        "Inactive Wells within 2km" = "inactive_2km", 
+        "Monthly Oil Production 2km" = "monthly_oil_2km",
+        "Monthly Gas Production 2km" = "monthly_gas_2km",
         "Distance to WRP" = "dist_wrp",
         "WRP Capacity" = "dist_wrp",
         "Angle to WRP" = "wrp_angle",
@@ -845,7 +846,11 @@ names <- c("Longitude" = "mon_utm_x", "Latitude" = "mon_utm_y",
         "Thursday" = "weekday_Thu",
         "Friday" = "weekday_Fri",
         "Saturday" = "weekday_Sat",
-        "Sunday" = "weekday_Sun")
+        "Sunday" = "weekday_Sun",
+        "2020" = "year_2020",
+        "2021" = "year_2021",
+        "2022" = "year_2022",
+        "2023" = "year_2023")
 
 imp<-varImp(fit.xgb_da_log_h2s_sincefeb2022,scale=FALSE)
 
@@ -1295,7 +1300,7 @@ everything_20test <- anti_join(daily_full %>%
                                select(all_of(predictors)) %>% 
                                mutate(disaster = if_else(year == '2021' & month %in% c('10', '11', '12'), 1, 0)) %>% 
                                filter(complete.cases(.)),
-                             everything_train)
+                             everything_80train)
 
 test <- everything_20test  %>% 
   mutate(H2S_daily_avg = log(H2S_daily_avg))
