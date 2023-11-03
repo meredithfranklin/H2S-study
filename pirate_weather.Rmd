@@ -1,0 +1,60 @@
+---
+title: "Pirate Bay Weather"
+author: "Jerry Wu"
+date: "2023-11-01"
+output: html_document
+editor_options: 
+  chunk_output_type: inline
+---
+
+```{r setup, include=FALSE}
+library(tidyverse)
+library(httr)
+library(jsonlite)
+```
+
+```{r}
+api <- 'elLCtlloSD9HKH2KghuMEZDEHNBmwPkl'
+```
+
+```{r}
+# get dates for disaser and normal periods
+dates <- seq(as.POSIXct('2021-10-01', tz = 'America/Los_Angeles'), as.POSIXct('2021-10-31', tz = 'America/Los_Angeles'),"days")
+disaster_dates <- tibble(day = dates, unix = as.numeric(dates))
+
+dates <- seq(as.POSIXct('2022-10-01', tz = 'America/Los_Angeles'), as.POSIXct('2022-10-31', tz = 'America/Los_Angeles'),"days")
+normal_dates <- tibble(day = dates, unix = as.numeric(dates))
+```
+
+```{r}
+# get grid points
+grd_data <- readRDS('rfiles/grd_data_disaster.rds')
+grd_data <- grd_data %>%
+  select(mon_utm_x, mon_utm_y) %>%
+  distinct() %>%
+  mutate(x = mon_utm_x, y = mon_utm_y) %>%
+  st_as_sf(coords = c('x', 'y')) %>%
+  st_set_crs("+proj=utm +zone=11 ellps=WGS84") %>%
+  st_transform("+proj=longlat +datum=WGS84") %>%
+  mutate(lon = sf::st_coordinates(.)[,1],
+         lat = sf::st_coordinates(.)[,2]) %>%
+  st_drop_geometry()
+
+point_date <- rbind(disaster_dates, normal_dates) %>%
+  cross_join(grd_data)
+```
+
+```{r}
+# Sample request
+start_time <- Sys.time()
+get_url <- paste0('https://timemachine.pirateweather.net/forecast/', api,'/', point_date$lat[1], ',', point_date$lon[1], ',', point_date$unix[1])
+res = GET(get_url)
+end_time <- Sys.time()
+end_time - start_time
+data = fromJSON(rawToChar(res$content))
+names(data)
+```
+```{r}
+data$daily
+```
+

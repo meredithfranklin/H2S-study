@@ -456,8 +456,8 @@ grd <- grd_result_disaster %>%
                  y = unlist(map(geometry,2)))
 
 
-raster_di_xgb <- rasterFromXYZ(grd %>% select(x, y, h2s_monthly_avg_di_xgb) %>% st_drop_geometry() %>% as.data.frame())
-crs(raster_di_xgb) <- CRS_UTM
+raster_di_dis_xgb <- rasterFromXYZ(grd %>% select(x, y, h2s_monthly_avg_di_xgb) %>% st_drop_geometry() %>% as.data.frame())
+crs(raster_di_dis_xgb) <- CRS_UTM
 
 # Combine three palettes for better visual
 ramp1 <- colorRampPalette(colors = c("blue", "green"), space = "Lab")(50)
@@ -465,17 +465,17 @@ ramp2 <- colorRampPalette(colors = c("green", "yellow"), space = "Lab")(100)
 ramp3 <- colorRampPalette(colors = c("yellow", "red"), space = "Lab")(6150)
 ramp <- c(ramp1, ramp2, ramp3)
 
-pal <- colorNumeric(palette = ramp, domain = raster_di_xgb@data@values, na.color = "transparent")
+pal <- colorNumeric(palette = ramp, domain = raster_di_dis_xgb@data@values, na.color = "transparent")
 
 #previewColors(colorNumeric(palette = ramp, domain = NULL), values = 0:6300)
 
 # Everything with Disaster Indicator XGBoost
 dis_di_pred <- leaflet() %>% addTiles() %>% 
-                  addRasterImage(raster_di_xgb, 
+                  addRasterImage(raster_di_dis_xgb, 
                                  colors = pal, 
                                  opacity = .8) %>%
                   addLegend(pal = pal, 
-                            values = raster_di_xgb@data@values, 
+                            values = raster_di_dis_xgb@data@values, 
                             title = "Monthly Average H2S")
 
 dis_di_pred
@@ -483,8 +483,8 @@ saveWidget(dis_di_pred, file="figures/dis_di_pred.html")
 ```
 
 ```{r}
-raster_full_xgb <- rasterFromXYZ(grd %>% select(x, y, h2s_monthly_avg_full_xgb) %>% st_drop_geometry() %>% as.data.frame())
-crs(raster_full_xgb) <- CRS_UTM
+raster_full_dis_xgb <- rasterFromXYZ(grd %>% select(x, y, h2s_monthly_avg_full_xgb) %>% st_drop_geometry() %>% as.data.frame())
+crs(raster_full_dis_xgb) <- CRS_UTM
 
 # Combine three palettes for better visual
 ramp1 <- colorRampPalette(colors = c("blue", "green"), space = "Lab")(3)
@@ -492,15 +492,15 @@ ramp2 <- colorRampPalette(colors = c("green", "yellow"), space = "Lab")(12)
 ramp3 <- colorRampPalette(colors = c("yellow", "red"), space = "Lab")(64)
 ramp <- c(ramp1, ramp2, ramp3)
 
-pal <- colorNumeric(palette = ramp, domain = raster_full_xgb@data@values, na.color = "transparent")
+pal <- colorNumeric(palette = ramp, domain = raster_full_dis_xgb@data@values, na.color = "transparent")
 
 #previewColors(colorNumeric(palette = ramp, domain = NULL), values = 0:6300)
 dis_full_pred <- leaflet() %>% addTiles() %>% 
-                    addRasterImage(raster_full_xgb, 
+                    addRasterImage(raster_full_dis_xgb, 
                                    colors = pal, 
                                    opacity = .8) %>%
                     addLegend(pal = pal, 
-                              values = raster_full_xgb@data@values, 
+                              values = raster_full_dis_xgb@data@values, 
                               title = "Monthly Average H2S")
 
 dis_full_pred
@@ -692,25 +692,25 @@ saveWidget(norm_2022_pred, file="figures/norm_2022_pred.html")
 ```
 
 ```{r}
-raster_di_xgb <- rasterFromXYZ(grd_normal %>% select(x, y, h2s_monthly_avg_di_xgb) %>% st_drop_geometry() %>% as.data.frame())
-crs(raster_di_xgb) <- CRS_UTM
+raster_di_norm_xgb <- rasterFromXYZ(grd_normal %>% select(x, y, h2s_monthly_avg_di_xgb) %>% st_drop_geometry() %>% as.data.frame())
+crs(raster_di_norm_xgb) <- CRS_UTM
 
 # Combine three palettes for better visual
 ramp1 <- colorRampPalette(colors = c("blue", "green"), space = "Lab")(50)
 ramp2 <- colorRampPalette(colors = c("green", "yellow"), space = "Lab")(100)
 ramp <- c(ramp1, ramp2)
 
-pal <- colorNumeric(palette = ramp, domain = raster_di_xgb@data@values, na.color = "transparent")
+pal <- colorNumeric(palette = ramp, domain = raster_di_norm_xgb@data@values, na.color = "transparent")
 
 #previewColors(colorNumeric(palette = ramp, domain = NULL), values = 0:6300)
 
 # Everything with Disaster Indicator XGBoost
 norm_di_pred <- leaflet() %>% addTiles() %>% 
-                  addRasterImage(raster_di_xgb, 
+                  addRasterImage(raster_di_norm_xgb, 
                                  colors = pal, 
                                  opacity = .8) %>%
                   addLegend(pal = pal, 
-                            values = raster_di_xgb@data@values, 
+                            values = raster_di_norm_xgb@data@values, 
                             title = "Monthly Average H2S")
 
 norm_di_pred
@@ -718,23 +718,23 @@ saveWidget(norm_di_pred, file="figures/norm_di_pred.html")
 ```
 
 ```{r}
-raster_full_xgb <- rasterFromXYZ(grd_normal %>% select(x, y, h2s_monthly_avg_full_xgb) %>% st_drop_geometry() %>% as.data.frame())
-crs(raster_full_xgb) <- CRS_UTM
+raster_full_norm_xgb <- rasterFromXYZ(grd_normal %>% select(x, y, h2s_monthly_avg_full_xgb) %>% st_drop_geometry() %>% as.data.frame())
+crs(raster_full_norm_xgb) <- CRS_UTM
 
 # Combine three palettes for better visual
 ramp1 <- colorRampPalette(colors = c("blue", "green"), space = "Lab")(50)
 ramp2 <- colorRampPalette(colors = c("green", "yellow"), space = "Lab")(100)
 ramp <- c(ramp1, ramp2)
 
-pal <- colorNumeric(palette = ramp, domain = raster_full_xgb@data@values, na.color = "transparent")
+pal <- colorNumeric(palette = ramp, domain = raster_full_norm_xgb@data@values, na.color = "transparent")
 
 #previewColors(colorNumeric(palette = ramp, domain = NULL), values = 0:6300)
 norm_full_pred <- leaflet() %>% addTiles() %>% 
-                    addRasterImage(raster_full_xgb, 
+                    addRasterImage(raster_full_norm_xgb, 
                                    colors = pal, 
                                    opacity = .8) %>%
                     addLegend(pal = pal, 
-                              values = raster_full_xgb@data@values, 
+                              values = raster_full_norm_xgb@data@values, 
                               title = "Monthly Average H2S")
 
 norm_full_pred
