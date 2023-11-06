@@ -1622,7 +1622,7 @@ display: none;
 
 <h1 class="title toc-ignore">Data Modelling</h1>
 <h4 class="author">Jerry Wu</h4>
-<h4 class="date">7/18/2023</h4>
+<h4 class="date">11/6/2023</h4>
 
 </div>
 
@@ -3154,6 +3154,512 @@ West HS
 </tr>
 </tbody>
 </table>
+<pre class="r"><code># Try only the october for the prediction map
+disaster_oct_stat &lt;- daily_full %&gt;%
+  filter(year == &#39;2021&#39;, month == &#39;10&#39;) %&gt;%
+  group_by(Monitor) %&gt;%
+  summarise(&#39;Daily observations&#39; = n(),
+            &#39;Max Daily Max&#39; = max(H2S_daily_max, na.rm=T),
+            &#39;Max Daily Average&#39; = max(H2S_daily_avg, na.rm=T),
+            &#39;Avg Daily Max&#39; = mean(H2S_daily_max, na.rm=T),
+            &#39;Avg Daily Average&#39; = mean(H2S_daily_avg, na.rm=T),
+            &#39;Average Wind Speed&#39; = mean(ws_avg, na.rm=T),
+            &#39;Average Wind Direction&#39; = as.numeric(mean(circular(wd_avg, 
+                                                                units = &#39;degrees&#39;), 
+                                                       na.rm=T)),
+            &#39;Average daily odor complaints within county&#39; = mean(num_odor_complaints, na.rm=T),
+            &#39;Active wells 2km&#39; = mean(active_2km, na.rm=T)) %&gt;%
+  mutate(&#39;Average Wind Direction&#39; = if_else(`Average Wind Direction` &lt; 0, 
+                                            `Average Wind Direction`+360, 
+                                            `Average Wind Direction`))
+
+knitr::kable(disaster_oct_stat, digits = 2, format = &#39;html&#39;)</code></pre>
+<table>
+<thead>
+<tr>
+<th style="text-align:left;">
+Monitor
+</th>
+<th style="text-align:right;">
+Daily observations
+</th>
+<th style="text-align:right;">
+Max Daily Max
+</th>
+<th style="text-align:right;">
+Max Daily Average
+</th>
+<th style="text-align:right;">
+Avg Daily Max
+</th>
+<th style="text-align:right;">
+Avg Daily Average
+</th>
+<th style="text-align:right;">
+Average Wind Speed
+</th>
+<th style="text-align:right;">
+Average Wind Direction
+</th>
+<th style="text-align:right;">
+Average daily odor complaints within county
+</th>
+<th style="text-align:right;">
+Active wells 2km
+</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align:left;">
+213th &amp; Chico
+</td>
+<td style="text-align:right;">
+10
+</td>
+<td style="text-align:right;">
+3817.24
+</td>
+<td style="text-align:right;">
+431.49
+</td>
+<td style="text-align:right;">
+2057.67
+</td>
+<td style="text-align:right;">
+227.93
+</td>
+<td style="text-align:right;">
+3.50
+</td>
+<td style="text-align:right;">
+264.06
+</td>
+<td style="text-align:right;">
+39.10
+</td>
+<td style="text-align:right;">
+0
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Elm Ave
+</td>
+<td style="text-align:right;">
+31
+</td>
+<td style="text-align:right;">
+63.50
+</td>
+<td style="text-align:right;">
+8.15
+</td>
+<td style="text-align:right;">
+18.37
+</td>
+<td style="text-align:right;">
+2.37
+</td>
+<td style="text-align:right;">
+4.12
+</td>
+<td style="text-align:right;">
+235.53
+</td>
+<td style="text-align:right;">
+1.42
+</td>
+<td style="text-align:right;">
+2
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+First Methodist
+</td>
+<td style="text-align:right;">
+31
+</td>
+<td style="text-align:right;">
+149.47
+</td>
+<td style="text-align:right;">
+14.11
+</td>
+<td style="text-align:right;">
+25.88
+</td>
+<td style="text-align:right;">
+3.25
+</td>
+<td style="text-align:right;">
+2.67
+</td>
+<td style="text-align:right;">
+288.59
+</td>
+<td style="text-align:right;">
+4.65
+</td>
+<td style="text-align:right;">
+29
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+G Street
+</td>
+<td style="text-align:right;">
+31
+</td>
+<td style="text-align:right;">
+47.27
+</td>
+<td style="text-align:right;">
+6.61
+</td>
+<td style="text-align:right;">
+14.01
+</td>
+<td style="text-align:right;">
+2.41
+</td>
+<td style="text-align:right;">
+3.64
+</td>
+<td style="text-align:right;">
+323.75
+</td>
+<td style="text-align:right;">
+4.65
+</td>
+<td style="text-align:right;">
+17
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Guenser Park
+</td>
+<td style="text-align:right;">
+31
+</td>
+<td style="text-align:right;">
+211.67
+</td>
+<td style="text-align:right;">
+14.48
+</td>
+<td style="text-align:right;">
+37.77
+</td>
+<td style="text-align:right;">
+3.12
+</td>
+<td style="text-align:right;">
+3.88
+</td>
+<td style="text-align:right;">
+263.18
+</td>
+<td style="text-align:right;">
+1.32
+</td>
+<td style="text-align:right;">
+0
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Harbor Park
+</td>
+<td style="text-align:right;">
+31
+</td>
+<td style="text-align:right;">
+75.93
+</td>
+<td style="text-align:right;">
+9.46
+</td>
+<td style="text-align:right;">
+20.66
+</td>
+<td style="text-align:right;">
+2.63
+</td>
+<td style="text-align:right;">
+2.29
+</td>
+<td style="text-align:right;">
+301.72
+</td>
+<td style="text-align:right;">
+1.23
+</td>
+<td style="text-align:right;">
+40
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Hudson
+</td>
+<td style="text-align:right;">
+31
+</td>
+<td style="text-align:right;">
+192.64
+</td>
+<td style="text-align:right;">
+19.45
+</td>
+<td style="text-align:right;">
+39.27
+</td>
+<td style="text-align:right;">
+5.95
+</td>
+<td style="text-align:right;">
+2.71
+</td>
+<td style="text-align:right;">
+346.71
+</td>
+<td style="text-align:right;">
+1.77
+</td>
+<td style="text-align:right;">
+2
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Inner Port
+</td>
+<td style="text-align:right;">
+31
+</td>
+<td style="text-align:right;">
+136.50
+</td>
+<td style="text-align:right;">
+12.21
+</td>
+<td style="text-align:right;">
+22.60
+</td>
+<td style="text-align:right;">
+3.79
+</td>
+<td style="text-align:right;">
+3.87
+</td>
+<td style="text-align:right;">
+325.23
+</td>
+<td style="text-align:right;">
+0.26
+</td>
+<td style="text-align:right;">
+87
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Judson
+</td>
+<td style="text-align:right;">
+31
+</td>
+<td style="text-align:right;">
+742.25
+</td>
+<td style="text-align:right;">
+69.08
+</td>
+<td style="text-align:right;">
+167.25
+</td>
+<td style="text-align:right;">
+17.18
+</td>
+<td style="text-align:right;">
+2.91
+</td>
+<td style="text-align:right;">
+290.90
+</td>
+<td style="text-align:right;">
+79.10
+</td>
+<td style="text-align:right;">
+0
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Manhattan
+</td>
+<td style="text-align:right;">
+31
+</td>
+<td style="text-align:right;">
+25.45
+</td>
+<td style="text-align:right;">
+4.06
+</td>
+<td style="text-align:right;">
+5.47
+</td>
+<td style="text-align:right;">
+1.77
+</td>
+<td style="text-align:right;">
+2.86
+</td>
+<td style="text-align:right;">
+224.35
+</td>
+<td style="text-align:right;">
+0.29
+</td>
+<td style="text-align:right;">
+0
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+North HS
+</td>
+<td style="text-align:right;">
+31
+</td>
+<td style="text-align:right;">
+98.50
+</td>
+<td style="text-align:right;">
+7.88
+</td>
+<td style="text-align:right;">
+16.83
+</td>
+<td style="text-align:right;">
+2.02
+</td>
+<td style="text-align:right;">
+4.11
+</td>
+<td style="text-align:right;">
+236.18
+</td>
+<td style="text-align:right;">
+1.32
+</td>
+<td style="text-align:right;">
+0
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+St. Anthony
+</td>
+<td style="text-align:right;">
+31
+</td>
+<td style="text-align:right;">
+20.21
+</td>
+<td style="text-align:right;">
+2.41
+</td>
+<td style="text-align:right;">
+3.89
+</td>
+<td style="text-align:right;">
+0.73
+</td>
+<td style="text-align:right;">
+6.95
+</td>
+<td style="text-align:right;">
+277.66
+</td>
+<td style="text-align:right;">
+6.39
+</td>
+<td style="text-align:right;">
+3
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+St. Luke
+</td>
+<td style="text-align:right;">
+31
+</td>
+<td style="text-align:right;">
+119.72
+</td>
+<td style="text-align:right;">
+12.26
+</td>
+<td style="text-align:right;">
+22.38
+</td>
+<td style="text-align:right;">
+4.30
+</td>
+<td style="text-align:right;">
+3.11
+</td>
+<td style="text-align:right;">
+335.09
+</td>
+<td style="text-align:right;">
+1.77
+</td>
+<td style="text-align:right;">
+3
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+West HS
+</td>
+<td style="text-align:right;">
+31
+</td>
+<td style="text-align:right;">
+41.50
+</td>
+<td style="text-align:right;">
+4.87
+</td>
+<td style="text-align:right;">
+7.56
+</td>
+<td style="text-align:right;">
+1.06
+</td>
+<td style="text-align:right;">
+4.12
+</td>
+<td style="text-align:right;">
+235.49
+</td>
+<td style="text-align:right;">
+1.42
+</td>
+<td style="text-align:right;">
+3
+</td>
+</tr>
+</tbody>
+</table>
 </div>
 <div id="normal-period-jan-2020--may-2023-excluding-disaster" class="section level2">
 <h2>Normal Period (Jan 2020- May 2023) excluding disaster</h2>
@@ -3694,20 +4200,398 @@ West HS
 </tr>
 </tbody>
 </table>
+<pre class="r"><code># Try only the Oct 2022
+normal_oct_stat &lt;- daily_full %&gt;%
+  filter(year == &#39;2022&#39; &amp; month == &#39;10&#39;) %&gt;%
+  group_by(Monitor) %&gt;%
+  summarise(&#39;Daily observations&#39; = n(),
+            &#39;Max Daily Max&#39; = max(H2S_daily_max, na.rm=T),
+            &#39;Max Daily Average&#39; = max(H2S_daily_avg, na.rm=T),
+            &#39;Avg Daily Max&#39; = mean(H2S_daily_max, na.rm=T),
+            &#39;Avg Daily Average&#39; = mean(H2S_daily_avg, na.rm=T),
+            &#39;Average Wind Speed&#39; = mean(ws_avg, na.rm=T),
+            &#39;Average Wind Direction&#39; = as.numeric(mean(circular(wd_avg, 
+                                                                units = &#39;degrees&#39;), 
+                                                       na.rm=T)),
+            &#39;Average daily odor complaints within county&#39; = mean(num_odor_complaints, na.rm=T),
+            &#39;Active wells 2km&#39; = mean(active_2km, na.rm=T)) %&gt;%
+  mutate(&#39;Average Wind Direction&#39; = if_else(`Average Wind Direction` &lt; 0, 
+                                            `Average Wind Direction`+360, 
+                                            `Average Wind Direction`))
+
+knitr::kable(normal_oct_stat, digits = 2, format = &#39;html&#39;)</code></pre>
+<table>
+<thead>
+<tr>
+<th style="text-align:left;">
+Monitor
+</th>
+<th style="text-align:right;">
+Daily observations
+</th>
+<th style="text-align:right;">
+Max Daily Max
+</th>
+<th style="text-align:right;">
+Max Daily Average
+</th>
+<th style="text-align:right;">
+Avg Daily Max
+</th>
+<th style="text-align:right;">
+Avg Daily Average
+</th>
+<th style="text-align:right;">
+Average Wind Speed
+</th>
+<th style="text-align:right;">
+Average Wind Direction
+</th>
+<th style="text-align:right;">
+Average daily odor complaints within county
+</th>
+<th style="text-align:right;">
+Active wells 2km
+</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align:left;">
+First Methodist
+</td>
+<td style="text-align:right;">
+31
+</td>
+<td style="text-align:right;">
+8.42
+</td>
+<td style="text-align:right;">
+2.09
+</td>
+<td style="text-align:right;">
+2.60
+</td>
+<td style="text-align:right;">
+0.73
+</td>
+<td style="text-align:right;">
+2.66
+</td>
+<td style="text-align:right;">
+275.99
+</td>
+<td style="text-align:right;">
+0.13
+</td>
+<td style="text-align:right;">
+30
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+G Street
+</td>
+<td style="text-align:right;">
+31
+</td>
+<td style="text-align:right;">
+11.77
+</td>
+<td style="text-align:right;">
+1.73
+</td>
+<td style="text-align:right;">
+4.07
+</td>
+<td style="text-align:right;">
+1.00
+</td>
+<td style="text-align:right;">
+3.50
+</td>
+<td style="text-align:right;">
+331.32
+</td>
+<td style="text-align:right;">
+0.13
+</td>
+<td style="text-align:right;">
+20
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Guenser Park
+</td>
+<td style="text-align:right;">
+31
+</td>
+<td style="text-align:right;">
+6.50
+</td>
+<td style="text-align:right;">
+2.02
+</td>
+<td style="text-align:right;">
+2.59
+</td>
+<td style="text-align:right;">
+1.23
+</td>
+<td style="text-align:right;">
+3.14
+</td>
+<td style="text-align:right;">
+266.04
+</td>
+<td style="text-align:right;">
+0.00
+</td>
+<td style="text-align:right;">
+0
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Harbor Park
+</td>
+<td style="text-align:right;">
+31
+</td>
+<td style="text-align:right;">
+7.04
+</td>
+<td style="text-align:right;">
+0.90
+</td>
+<td style="text-align:right;">
+2.25
+</td>
+<td style="text-align:right;">
+0.42
+</td>
+<td style="text-align:right;">
+2.27
+</td>
+<td style="text-align:right;">
+291.81
+</td>
+<td style="text-align:right;">
+0.13
+</td>
+<td style="text-align:right;">
+45
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Hudson
+</td>
+<td style="text-align:right;">
+31
+</td>
+<td style="text-align:right;">
+13.34
+</td>
+<td style="text-align:right;">
+2.12
+</td>
+<td style="text-align:right;">
+3.18
+</td>
+<td style="text-align:right;">
+1.20
+</td>
+<td style="text-align:right;">
+2.72
+</td>
+<td style="text-align:right;">
+57.82
+</td>
+<td style="text-align:right;">
+0.32
+</td>
+<td style="text-align:right;">
+3
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Inner Port
+</td>
+<td style="text-align:right;">
+31
+</td>
+<td style="text-align:right;">
+52.63
+</td>
+<td style="text-align:right;">
+2.07
+</td>
+<td style="text-align:right;">
+6.95
+</td>
+<td style="text-align:right;">
+0.80
+</td>
+<td style="text-align:right;">
+3.02
+</td>
+<td style="text-align:right;">
+161.12
+</td>
+<td style="text-align:right;">
+0.00
+</td>
+<td style="text-align:right;">
+80
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Judson
+</td>
+<td style="text-align:right;">
+31
+</td>
+<td style="text-align:right;">
+2.97
+</td>
+<td style="text-align:right;">
+0.63
+</td>
+<td style="text-align:right;">
+0.77
+</td>
+<td style="text-align:right;">
+0.25
+</td>
+<td style="text-align:right;">
+2.59
+</td>
+<td style="text-align:right;">
+284.61
+</td>
+<td style="text-align:right;">
+0.58
+</td>
+<td style="text-align:right;">
+0
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Manhattan
+</td>
+<td style="text-align:right;">
+31
+</td>
+<td style="text-align:right;">
+1.95
+</td>
+<td style="text-align:right;">
+0.89
+</td>
+<td style="text-align:right;">
+0.96
+</td>
+<td style="text-align:right;">
+0.46
+</td>
+<td style="text-align:right;">
+2.72
+</td>
+<td style="text-align:right;">
+228.92
+</td>
+<td style="text-align:right;">
+0.00
+</td>
+<td style="text-align:right;">
+0
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+St. Anthony
+</td>
+<td style="text-align:right;">
+31
+</td>
+<td style="text-align:right;">
+4.24
+</td>
+<td style="text-align:right;">
+1.54
+</td>
+<td style="text-align:right;">
+2.12
+</td>
+<td style="text-align:right;">
+0.98
+</td>
+<td style="text-align:right;">
+6.55
+</td>
+<td style="text-align:right;">
+272.16
+</td>
+<td style="text-align:right;">
+7.06
+</td>
+<td style="text-align:right;">
+3
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+St. Luke
+</td>
+<td style="text-align:right;">
+31
+</td>
+<td style="text-align:right;">
+6.40
+</td>
+<td style="text-align:right;">
+1.64
+</td>
+<td style="text-align:right;">
+2.01
+</td>
+<td style="text-align:right;">
+0.51
+</td>
+<td style="text-align:right;">
+2.78
+</td>
+<td style="text-align:right;">
+8.03
+</td>
+<td style="text-align:right;">
+0.32
+</td>
+<td style="text-align:right;">
+5
+</td>
+</tr>
+</tbody>
+</table>
 </div>
 <div id="table-1-monitor-statistics" class="section level2">
 <h2>Table 1: Monitor statistics</h2>
 <pre class="r"><code>table1 &lt;- base_monitor_stat %&gt;%
   select(-c(`Angle to Refinery`, `Angle to WRP`, `Capacity of Nearest WRP`)) %&gt;%
   left_join(disaster_stat %&gt;% 
-              select(Monitor, `Max Daily Average`) %&gt;% 
-              rename(`Disaster Max Daily Average` = `Max Daily Average`), 
+              select(Monitor, `Avg Daily Average`) %&gt;% 
+              rename(`Disaster Avg Daily Average` = `Avg Daily Average`), 
             join_by(Monitor)) %&gt;%
   left_join(normal_stat %&gt;% 
-              select(Monitor, `Max Daily Average`) %&gt;%
-              rename(`Normal Max Daily Average` = `Max Daily Average`), 
+              select(Monitor, `Avg Daily Average`) %&gt;%
+              rename(`Normal Avg Daily Average` = `Avg Daily Average`), 
             join_by(Monitor)) %&gt;%
-  relocate(Monitor, `Closest Refinery`, `Normal Max Daily Average`, `Disaster Max Daily Average`)
+  relocate(Monitor, `Closest Refinery`, `Normal Avg Daily Average`, `Disaster Avg Daily Average`)
 
 table1_kable &lt;- knitr::kable(table1, format = &#39;latex&#39;, digits = 2)
 writeLines(table1_kable, &#39;figures/table1.tex&#39;)
@@ -3723,10 +4607,10 @@ Monitor
 Closest Refinery
 </th>
 <th style="text-align:right;">
-Normal Max Daily Average
+Normal Avg Daily Average
 </th>
 <th style="text-align:right;">
-Disaster Max Daily Average
+Disaster Avg Daily Average
 </th>
 <th style="text-align:right;">
 Distance to Nearest Refinery (m)
@@ -3754,10 +4638,10 @@ Enhanced Vegetation Index
 Marathon Carson
 </td>
 <td style="text-align:right;">
-3.92
+3.12
 </td>
 <td style="text-align:right;">
-431.49
+38.66
 </td>
 <td style="text-align:right;">
 2873
@@ -3783,7 +4667,7 @@ El Segundo
 Chevron El Segundo
 </td>
 <td style="text-align:right;">
-3.67
+0.57
 </td>
 <td style="text-align:right;">
 NA
@@ -3812,10 +4696,10 @@ Elm Ave
 Torrance
 </td>
 <td style="text-align:right;">
-3.20
+0.98
 </td>
 <td style="text-align:right;">
-8.15
+1.34
 </td>
 <td style="text-align:right;">
 1716
@@ -3841,10 +4725,10 @@ First Methodist
 Phillips 66
 </td>
 <td style="text-align:right;">
-4.18
+0.83
 </td>
 <td style="text-align:right;">
-14.11
+1.74
 </td>
 <td style="text-align:right;">
 2119
@@ -3870,10 +4754,10 @@ G Street
 Phillips 66
 </td>
 <td style="text-align:right;">
-18.66
+0.91
 </td>
 <td style="text-align:right;">
-6.61
+1.75
 </td>
 <td style="text-align:right;">
 759
@@ -3899,10 +4783,10 @@ Guenser Park
 Torrance
 </td>
 <td style="text-align:right;">
-2.66
+0.73
 </td>
 <td style="text-align:right;">
-14.48
+1.63
 </td>
 <td style="text-align:right;">
 2542
@@ -3928,10 +4812,10 @@ Harbor Park
 Phillips 66
 </td>
 <td style="text-align:right;">
-2.67
+0.48
 </td>
 <td style="text-align:right;">
-9.46
+1.21
 </td>
 <td style="text-align:right;">
 1479
@@ -3957,10 +4841,10 @@ Hudson
 Marathon Wilmington
 </td>
 <td style="text-align:right;">
-9.46
+1.14
 </td>
 <td style="text-align:right;">
-19.45
+3.36
 </td>
 <td style="text-align:right;">
 1308
@@ -3986,10 +4870,10 @@ Inner Port
 Valero
 </td>
 <td style="text-align:right;">
-5.39
+0.85
 </td>
 <td style="text-align:right;">
-12.21
+3.18
 </td>
 <td style="text-align:right;">
 1988
@@ -4015,10 +4899,10 @@ Judson
 Marathon Carson
 </td>
 <td style="text-align:right;">
-3.63
+0.71
 </td>
 <td style="text-align:right;">
-69.08
+6.86
 </td>
 <td style="text-align:right;">
 2792
@@ -4044,10 +4928,10 @@ Manhattan
 Chevron El Segundo
 </td>
 <td style="text-align:right;">
-1.58
+0.53
 </td>
 <td style="text-align:right;">
-4.06
+1.51
 </td>
 <td style="text-align:right;">
 2275
@@ -4073,10 +4957,10 @@ North HS
 Torrance
 </td>
 <td style="text-align:right;">
-2.71
+1.04
 </td>
 <td style="text-align:right;">
-7.88
+1.15
 </td>
 <td style="text-align:right;">
 1371
@@ -4102,10 +4986,10 @@ St. Anthony
 Chevron El Segundo
 </td>
 <td style="text-align:right;">
-3.43
+0.59
 </td>
 <td style="text-align:right;">
-2.41
+0.69
 </td>
 <td style="text-align:right;">
 1035
@@ -4131,10 +5015,10 @@ St. Luke
 Marathon Carson
 </td>
 <td style="text-align:right;">
-3.43
+0.75
 </td>
 <td style="text-align:right;">
-12.26
+2.46
 </td>
 <td style="text-align:right;">
 2714
@@ -4160,10 +5044,10 @@ West HS
 Torrance
 </td>
 <td style="text-align:right;">
-3.01
+0.60
 </td>
 <td style="text-align:right;">
-4.87
+0.74
 </td>
 <td style="text-align:right;">
 3593

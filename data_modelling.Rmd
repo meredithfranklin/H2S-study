@@ -1,7 +1,7 @@
 ---
 title: "Data Modelling"
 author: "Jerry Wu"
-date: "7/18/2023"
+date: "11/6/2023"
 output:
   html_document:
     df_print: paged
@@ -106,6 +106,29 @@ disaster_stat <- daily_full %>%
 knitr::kable(disaster_stat, digits = 2, format = 'html')
 ```
 
+```{r}
+# Try only the october for the prediction map
+disaster_oct_stat <- daily_full %>%
+  filter(year == '2021', month == '10') %>%
+  group_by(Monitor) %>%
+  summarise('Daily observations' = n(),
+            'Max Daily Max' = max(H2S_daily_max, na.rm=T),
+            'Max Daily Average' = max(H2S_daily_avg, na.rm=T),
+            'Avg Daily Max' = mean(H2S_daily_max, na.rm=T),
+            'Avg Daily Average' = mean(H2S_daily_avg, na.rm=T),
+            'Average Wind Speed' = mean(ws_avg, na.rm=T),
+            'Average Wind Direction' = as.numeric(mean(circular(wd_avg, 
+                                                                units = 'degrees'), 
+                                                       na.rm=T)),
+            'Average daily odor complaints within county' = mean(num_odor_complaints, na.rm=T),
+            'Active wells 2km' = mean(active_2km, na.rm=T)) %>%
+  mutate('Average Wind Direction' = if_else(`Average Wind Direction` < 0, 
+                                            `Average Wind Direction`+360, 
+                                            `Average Wind Direction`))
+
+knitr::kable(disaster_oct_stat, digits = 2, format = 'html')
+```
+
 ## Normal Period (Jan 2020- May 2023) excluding disaster
 ```{r}
 normal_stat <- daily_full %>%
@@ -129,19 +152,42 @@ normal_stat <- daily_full %>%
 knitr::kable(normal_stat, digits = 2, format = 'html')
 ```
 
+```{r}
+# Try only the Oct 2022
+normal_oct_stat <- daily_full %>%
+  filter(year == '2022' & month == '10') %>%
+  group_by(Monitor) %>%
+  summarise('Daily observations' = n(),
+            'Max Daily Max' = max(H2S_daily_max, na.rm=T),
+            'Max Daily Average' = max(H2S_daily_avg, na.rm=T),
+            'Avg Daily Max' = mean(H2S_daily_max, na.rm=T),
+            'Avg Daily Average' = mean(H2S_daily_avg, na.rm=T),
+            'Average Wind Speed' = mean(ws_avg, na.rm=T),
+            'Average Wind Direction' = as.numeric(mean(circular(wd_avg, 
+                                                                units = 'degrees'), 
+                                                       na.rm=T)),
+            'Average daily odor complaints within county' = mean(num_odor_complaints, na.rm=T),
+            'Active wells 2km' = mean(active_2km, na.rm=T)) %>%
+  mutate('Average Wind Direction' = if_else(`Average Wind Direction` < 0, 
+                                            `Average Wind Direction`+360, 
+                                            `Average Wind Direction`))
+
+knitr::kable(normal_oct_stat, digits = 2, format = 'html')
+```
+
 ## Table 1: Monitor statistics
 ```{r}
 table1 <- base_monitor_stat %>%
   select(-c(`Angle to Refinery`, `Angle to WRP`, `Capacity of Nearest WRP`)) %>%
   left_join(disaster_stat %>% 
-              select(Monitor, `Max Daily Average`) %>% 
-              rename(`Disaster Max Daily Average` = `Max Daily Average`), 
+              select(Monitor, `Avg Daily Average`) %>% 
+              rename(`Disaster Avg Daily Average` = `Avg Daily Average`), 
             join_by(Monitor)) %>%
   left_join(normal_stat %>% 
-              select(Monitor, `Max Daily Average`) %>%
-              rename(`Normal Max Daily Average` = `Max Daily Average`), 
+              select(Monitor, `Avg Daily Average`) %>%
+              rename(`Normal Avg Daily Average` = `Avg Daily Average`), 
             join_by(Monitor)) %>%
-  relocate(Monitor, `Closest Refinery`, `Normal Max Daily Average`, `Disaster Max Daily Average`)
+  relocate(Monitor, `Closest Refinery`, `Normal Avg Daily Average`, `Disaster Avg Daily Average`)
 
 table1_kable <- knitr::kable(table1, format = 'latex', digits = 2)
 writeLines(table1_kable, 'figures/table1.tex')

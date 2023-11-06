@@ -455,17 +455,30 @@ grd <- grd_result_disaster %>%
           mutate(x = unlist(map(geometry,1)),
                  y = unlist(map(geometry,2)))
 
+monitor_loc <- mon_location %>%
+  st_transform("+proj=longlat +datum=WGS84") %>%
+  mutate(x = sf::st_coordinates(.)[,1],
+         y = sf::st_coordinates(.)[,2])
+
 
 raster_di_dis_xgb <- rasterFromXYZ(grd %>% select(x, y, h2s_monthly_avg_di_xgb) %>% st_drop_geometry() %>% as.data.frame())
 crs(raster_di_dis_xgb) <- CRS_UTM
 
 # Combine three palettes for better visual
-ramp1 <- colorRampPalette(colors = c("blue", "green"), space = "Lab")(50)
-ramp2 <- colorRampPalette(colors = c("green", "yellow"), space = "Lab")(100)
-ramp3 <- colorRampPalette(colors = c("yellow", "red"), space = "Lab")(6150)
+ramp1 <- colorRampPalette(colors = c("blue", "green"), space = "Lab")(250)
+ramp2 <- colorRampPalette(colors = c("green", "yellow"), space = "Lab")(550)
+ramp3 <- colorRampPalette(colors = c("yellow", "red"), space = "Lab")(44150)
 ramp <- c(ramp1, ramp2, ramp3)
 
-pal <- colorNumeric(palette = ramp, domain = raster_di_dis_xgb@data@values, na.color = "transparent")
+pal <- colorNumeric(palette = ramp, domain = c(0.5, 450), na.color = "transparent")
+
+# Make palette for legend
+ramp1 <- colorRampPalette(colors = c("blue", "green"), space = "Lab")(6)
+ramp2 <- colorRampPalette(colors = c("green", "yellow"), space = "Lab")(4)
+ramp3 <- colorRampPalette(colors = c("yellow", "red"), space = "Lab")(2)
+ramp <- c(ramp1, ramp2, ramp3)
+
+pal_legend <- colorNumeric(palette = ramp, domain = c(0, 12))
 
 #previewColors(colorNumeric(palette = ramp, domain = NULL), values = 0:6300)
 
@@ -474,12 +487,19 @@ dis_di_pred <- leaflet() %>% addTiles() %>%
                   addRasterImage(raster_di_dis_xgb, 
                                  colors = pal, 
                                  opacity = .8) %>%
-                  addLegend(pal = pal, 
-                            values = raster_di_dis_xgb@data@values, 
-                            title = "Monthly Average H2S")
+                  addLegend(pal = pal_legend, 
+                            values = c(0, 12), 
+                            title = "Monthly Average H2S",
+                            opacity = 1) %>%
+                  addCircleMarkers(data = monitor_loc, 
+                         lng=~x, lat=~y, 
+                         fillOpacity = 0.85, radius = 4,
+                         fillColor = 'black', weight = 1, stroke = F,
+                         label = ~Monitor)
 
 dis_di_pred
 saveWidget(dis_di_pred, file="figures/dis_di_pred.html")
+writeRaster(raster_di_dis_xgb, file = 'rfiles/raster_di_dis_xgb.tif')
 ```
 
 ```{r}
@@ -697,12 +717,10 @@ crs(raster_di_norm_xgb) <- CRS_UTM
 
 # Combine three palettes for better visual
 ramp1 <- colorRampPalette(colors = c("blue", "green"), space = "Lab")(50)
-ramp2 <- colorRampPalette(colors = c("green", "yellow"), space = "Lab")(100)
+ramp2 <- colorRampPalette(colors = c("green", "yellow"), space = "Lab")(150)
 ramp <- c(ramp1, ramp2)
 
 pal <- colorNumeric(palette = ramp, domain = raster_di_norm_xgb@data@values, na.color = "transparent")
-
-#previewColors(colorNumeric(palette = ramp, domain = NULL), values = 0:6300)
 
 # Everything with Disaster Indicator XGBoost
 norm_di_pred <- leaflet() %>% addTiles() %>% 
@@ -711,10 +729,16 @@ norm_di_pred <- leaflet() %>% addTiles() %>%
                                  opacity = .8) %>%
                   addLegend(pal = pal, 
                             values = raster_di_norm_xgb@data@values, 
-                            title = "Monthly Average H2S")
+                            title = "Monthly Average H2S") %>%
+                  addCircleMarkers(data = monitor_loc, 
+                         lng=~x, lat=~y, 
+                         fillOpacity = 0.85, radius = 4,
+                         fillColor = 'black', weight = 1, stroke = F,
+                         label = ~Monitor)
 
 norm_di_pred
 saveWidget(norm_di_pred, file="figures/norm_di_pred.html")
+writeRaster(raster_di_norm_xgb, file = 'rfiles/raster_di_norm_xgb.tif')
 ```
 
 ```{r}
