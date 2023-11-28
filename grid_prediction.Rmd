@@ -19,6 +19,8 @@ library(raster)
 library(caret)
 library(leaflet)
 library(htmlwidgets)
+library(fontawesome) 
+library(units)
 select <- dplyr::select
 ```
 
@@ -244,8 +246,8 @@ active_well_location <- well_prod %>%
 
 get_well_prod <- function(location, disaster) {
   # get the wells within 2km to location
-  location_well <- well_location %>%
-   mutate(dist_to_loc = apply(st_distance(location, well_location), 2, min)) %>%
+  location_well <- active_well_location %>%
+   mutate(dist_to_loc = apply(st_distance(location, active_well_location), 2, min)) %>%
    filter(dist_to_loc <= 2000)
 
   loc_well_prod <- well_prod %>%
@@ -285,14 +287,36 @@ get_well_inactive <- function(location) {
 elevation <- raster('shapefiles/N33W119.hgt')
 
 get_elevation <- function(location_ll) {
-  return(extract(elevation, location_ll))
+  return(raster::extract(elevation, location_ll))
 }
 
 # Get EVI
 evi <- raster('shapefiles/MOD13Q1.061__250m_16_days_EVI_doy2023145_aid0001.tif')
 
-get_evi <- function(location_ll){
-  return(extract(evi, location_ll) * 0.0001)
+evi <- projectRaster(evi, crs = CRS_UTM)
+# fill NA pixels
+dist <- distance(evi)  
+
+direct <- direction(evi, from=FALSE)
+
+evi_na <- is.na(evi) 
+
+na_x <- init(evi_na, 'x')
+na_y <- init(evi_na, 'y')
+
+co_x <- na_x + dist * sin(direct)
+co_y <- na_y + dist * cos(direct)
+
+co <- cbind(co_x[], co_y[]) 
+
+NAVals <- raster::extract(evi, co, method='simple') 
+evi_NAVals <- evi # initiate new raster
+evi_NAVals[] <- NAVals # store values in raster
+
+evi_filled <- cover(x=evi, y= evi_NAVals)
+
+get_evi <- function(location){
+  return(raster::extract(evi_filled, location) * 0.0001)
 }
 
 # Get Number of Odor Complaints
@@ -335,7 +359,7 @@ d_channel <- st_transform(d_channel, CRS_UTM) # convert to UTM crs
 #          dist_wrp = get_dist_wrp(sf_loc)$dist_wrp,
 #          MinDist = get_dist_ref(sf_loc),
 #          elevation = get_elevation(ll_loc),
-#          EVI = get_evi(ll_loc),
+#          EVI = get_evi(sf_loc),
 #          capacity = get_dist_wrp(sf_loc)$capacity,
 #          dist_dc = apply(st_distance(sf_loc, d_channel), 1, min))
 # 
@@ -378,7 +402,6 @@ d_channel <- st_transform(d_channel, CRS_UTM) # convert to UTM crs
 #   st_drop_geometry() %>%
 #   select(-c(x, y, values, sf_loc, ll_loc))
 # 
-# grd_data_disaster$EVI <- coalesce(grd_data_disaster$EVI, mean(grd_data_disaster$EVI, na.rm=TRUE))
 # 
 # saveRDS(grd_data_disaster, 'rfiles/grd_data_disaster.rds')
 
@@ -446,6 +469,35 @@ grd_result_disaster <- grd_result_disaster %>%
 
 ```
 
+## Well Prod In Region
+```{r}
+wells_in_region <- st_contains(st_union(la_county_full), active_well_location)
+wells_in_region <- active_well_location[wells_in_region[[1]], 'API/UWI']
+
+top_10_disaster <- well_prod %>%
+  right_join(wells_in_region) %>%
+  filter(`Monthly Production Date` == '2021-10-01') %>%
+  arrange(desc(`Monthly Oil` + `Monthly Gas`)) %>%
+  head(10) %>%
+  left_join(active_well_location)
+
+top_10_norm <- well_prod %>%
+  right_join(wells_in_region) %>%
+  filter(`Monthly Production Date` == '2022-10-01') %>%
+  arrange(desc(`Monthly Oil` + `Monthly Gas`)) %>%
+  head(10) %>%
+  left_join(active_well_location)
+```
+
+## WRP In Region
+```{r}
+wrp_in_region <- la_wrp[c(1, 11, 12, 13, 14, 17),]
+
+wrp_in_region <- wrp_in_region %>%
+  st_transform("+proj=longlat +datum=WGS84") %>%
+  mutate(x = sf::st_coordinates(.)[,1],
+         y = sf::st_coordinates(.)[,2])
+```
 
 ## Plot Grid
 ```{r}
@@ -482,6 +534,11 @@ pal_legend <- colorNumeric(palette = ramp, domain = c(0, 12))
 
 #previewColors(colorNumeric(palette = ramp, domain = NULL), values = 0:6300)
 
+mon_icon <- makeIcon("figures/caret-up-solid.svg", 24, 24)
+well_icon <- makeIcon("figures/oil-well-solid.svg", 24, 24)
+oil_factory_icon <- makeIcon("figures/industry-solid_yellow.svg", 24, 24)
+wrp_factory_icon <- makeIcon("figures/industry-solid_blue.svg", 24, 24)
+
 # Everything with Disaster Indicator XGBoost
 dis_di_pred <- leaflet() %>% addTiles() %>% 
                   addRasterImage(raster_di_dis_xgb, 
@@ -491,15 +548,19 @@ dis_di_pred <- leaflet() %>% addTiles() %>%
                             values = c(0, 12), 
                             title = "Monthly Average H2S",
                             opacity = 1) %>%
-                  addCircleMarkers(data = monitor_loc, 
-                         lng=~x, lat=~y, 
-                         fillOpacity = 0.85, radius = 4,
-                         fillColor = 'black', weight = 1, stroke = F,
-                         label = ~Monitor)
+                  addMarkers(data = monitor_loc, icon = mon_icon,
+                         lng=~x, lat=~y, label = ~Monitor) %>%
+                  addMarkers(data = top_10_disaster, icon = well_icon,
+                         lng=~lon, lat=~lat,label = ~`API/UWI`) %>%
+                  addMarkers(data = wrp_in_region, icon = wrp_factory_icon,
+                         lng=~x, lat=~y, label = ~`CWP_NAM`) %>%
+                  addMarkers(data = refineries, icon = oil_factory_icon,
+                         lng=~Longitude, lat=~Latitude, label = ~`refinery`)
+                  
 
 dis_di_pred
 saveWidget(dis_di_pred, file="figures/dis_di_pred.html")
-writeRaster(raster_di_dis_xgb, file = 'rfiles/raster_di_dis_xgb.tif')
+writeRaster(raster_di_dis_xgb, file = 'rfiles/raster_di_dis_xgb.tif', overwrite=TRUE)
 ```
 
 ```{r}
@@ -530,7 +591,7 @@ saveWidget(dis_full_pred, file="figures/dis_full_pred.html")
 
 # Normal Period Grid Prediction
 ```{r}
-# prepare normal period data
+# # prepare normal period data
 # grd_data_normal <- grd_df %>%
 #   mutate(mon_utm_x = x,
 #          mon_utm_y = y,
@@ -541,7 +602,7 @@ saveWidget(dis_full_pred, file="figures/dis_full_pred.html")
 #          dist_wrp = get_dist_wrp(sf_loc)$dist_wrp,
 #          MinDist = get_dist_ref(sf_loc),
 #          elevation = get_elevation(ll_loc),
-#          EVI = get_evi(ll_loc),
+#          EVI = get_evi(sf_loc),
 #          capacity = get_dist_wrp(sf_loc)$capacity,
 #          dist_dc = apply(st_distance(sf_loc, d_channel), 1, min))
 # 
@@ -583,8 +644,6 @@ saveWidget(dis_full_pred, file="figures/dis_full_pred.html")
 # grd_data_normal <- grd_data_normal %>%
 #   st_drop_geometry() %>%
 #   select(-c(x, y, values, sf_loc, ll_loc))
-# 
-# grd_data_normal$EVI <- coalesce(grd_data_normal$EVI, mean(grd_data_normal$EVI, na.rm=TRUE))
 # 
 # saveRDS(grd_data_normal, 'rfiles/grd_data_normal.rds')
 
@@ -730,15 +789,18 @@ norm_di_pred <- leaflet() %>% addTiles() %>%
                   addLegend(pal = pal, 
                             values = raster_di_norm_xgb@data@values, 
                             title = "Monthly Average H2S") %>%
-                  addCircleMarkers(data = monitor_loc, 
-                         lng=~x, lat=~y, 
-                         fillOpacity = 0.85, radius = 4,
-                         fillColor = 'black', weight = 1, stroke = F,
-                         label = ~Monitor)
+                  addMarkers(data = monitor_loc, icon = mon_icon,
+                         lng=~x, lat=~y, label = ~ Monitor) %>%
+                  addMarkers(data = top_10_norm, icon = well_icon,
+                         lng=~lon, lat=~lat,label = ~`API/UWI`) %>%
+                  addMarkers(data = wrp_in_region, icon = wrp_factory_icon,
+                         lng=~x, lat=~y, label = ~`CWP_NAM`) %>%
+                  addMarkers(data = refineries, icon = oil_factory_icon,
+                         lng=~Longitude, lat=~Latitude, label = ~`refinery`)
 
 norm_di_pred
 saveWidget(norm_di_pred, file="figures/norm_di_pred.html")
-writeRaster(raster_di_norm_xgb, file = 'rfiles/raster_di_norm_xgb.tif')
+writeRaster(raster_di_norm_xgb, file = 'rfiles/raster_di_norm_xgb.tif', overwrite=TRUE)
 ```
 
 ```{r}

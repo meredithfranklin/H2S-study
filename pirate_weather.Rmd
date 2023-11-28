@@ -11,6 +11,7 @@ editor_options:
 library(tidyverse)
 library(httr)
 library(jsonlite)
+library(sf)
 ```
 
 ```{r}
@@ -47,7 +48,8 @@ point_date <- rbind(disaster_dates, normal_dates) %>%
 ```{r}
 # Sample request
 start_time <- Sys.time()
-get_url <- paste0('https://timemachine.pirateweather.net/forecast/', api,'/', point_date$lat[1], ',', point_date$lon[1], ',', point_date$unix[1])
+get_url <- sprintf('https://timemachine.pirateweather.net/forecast/%s/%s,%s,%s?exclude=minutely,hourly',
+                   api, point_date$lat[1], point_date$lon[1], point_date$unix[1])
 res = GET(get_url)
 end_time <- Sys.time()
 end_time - start_time
@@ -55,6 +57,9 @@ data = fromJSON(rawToChar(res$content))
 names(data)
 ```
 ```{r}
-data$daily
+data$currently
 ```
 
+```{r}
+data$daily$data
+```
