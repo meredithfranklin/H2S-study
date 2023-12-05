@@ -56,10 +56,19 @@ end_time - start_time
 data = fromJSON(rawToChar(res$content))
 names(data)
 ```
+
 ```{r}
 data$currently
 ```
 
 ```{r}
 data$daily$data
+```
+
+```{r}
+result <- tibble(date = data$daily$data$time,
+                 avg_temp = mean(data$daily$data$temperatureHigh, data$daily$data$temperatureLow),
+                 wd = data$daily$data$windBearing,
+                 ws = data$daily$data$windSpeed,
+                 precip = data$daily$data$precipAccumulation)
 ```

@@ -212,9 +212,9 @@ get_dist_ref <- function(location) {
 }
 
 # Get production data
-well_prod <- read_csv('data/LA_well_prod_Oct2023 Well Monthly Production.CSV', show_col_types = FALSE)
+well_prod <- read_csv('data/LA well prod Dec2023 Well Monthly Production.CSV', show_col_types = FALSE)
 full_well_info <- read_csv('data/well_active_inactive_prod_since_2000.CSV', show_col_types = FALSE)
-active_well_info <- read_csv('data/LA_well_prod_Oct2023 Well Headers.CSV', show_col_types = FALSE)
+active_well_info <- read_csv('data/LA well prod Dec2023 Well Headers.CSV', show_col_types = FALSE)
 
 inactive_well_info <- anti_join(full_well_info, active_well_info, join_by(API14)) %>%
   rename(lon = `Surface Hole Longitude (WGS84)`,

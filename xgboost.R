@@ -22,6 +22,12 @@ predictors_no_met <- c('H2S_daily_avg', 'month', 'year', 'weekday', 'dist_wrp', 
                 'active_2km', 'inactive_2km', 'elevation', 'EVI', 'num_odor_complaints',
                 'dist_dc', 'capacity') 
 
+predictors_no_hum <- c('H2S_daily_avg', 'month', 'year', 'weekday', 'wd_avg', 'ws_avg', 
+                       'daily_downwind_ref', 'dist_wrp', 'MinDist',
+                       'mon_utm_x', 'mon_utm_y', 'day', 'monthly_oil_2km', 'monthly_gas_2km', 
+                       'active_2km', 'inactive_2km', 'daily_downwind_wrp', 'elevation', 'EVI', 'num_odor_complaints',
+                       'dist_dc', 'capacity', 'avg_temp', 'precip') 
+
 # Since Feb 2022
 train <- daily_full %>%
   filter(day >= '2022-01-31') %>%
@@ -403,8 +409,12 @@ fit.xgb_da_log_h2s_dis_ind_no_met <- train(H2S_daily_avg~.,
 saveRDS(fit.xgb_da_log_h2s_dis_ind_no_met, 'rfiles/fit.xgb_da_log_h2s_dis_ind_no_met.rds')
 
 # Everything w.o Disaster Indicator
+everything_no_met <- daily_full %>% 
+  select(all_of(predictors_no_met)) %>% 
+  mutate(disaster = if_else(year == '2021' & month %in% c('10', '11', '12'), 1, 0)) %>% 
+  filter(complete.cases(.)) 
+
 train <- everything_no_met %>% 
-  select(-disaster) %>%
   mutate(H2S_daily_avg = log(H2S_daily_avg))
 
 train <- fastDummies::dummy_cols(train %>%
@@ -413,6 +423,16 @@ train <- fastDummies::dummy_cols(train %>%
                                           dist_wrp = 1/(dist_wrp^2)),
                                  remove_selected_columns = TRUE)
 
+# 10 Fold for Everything models
+set.seed(90)
+folds_1 <- createFolds(which(train$disaster == 1), k = 10)
+folds_0 <- createFolds(which(train$disaster == 0), k = 10)
+folds <- list()
+for (i in 1:10){
+  folds <- append(folds, list(c(which(train$disaster == 1)[folds_1[[i]]], 
+                                which(train$disaster == 0)[folds_0[[i]]])))
+}
+
 fit.xgb_da_log_h2s_full_no_met <- train(H2S_daily_avg~.,
                                  method = 'xgbTree',
                                  data = train,
@@ -420,3 +440,44 @@ fit.xgb_da_log_h2s_full_no_met <- train(H2S_daily_avg~.,
                                  tuneGrid = tune_grid,
                                  tuneLength = 10, importance=TRUE, verbosity = 0, verbose=FALSE)
 saveRDS(fit.xgb_da_log_h2s_full_no_met, 'rfiles/fit.xgb_da_log_h2s_full_no_met.rds')
+
+# Without humidity
+# Everything w. Disaster Indicator
+everything_no_hum <- daily_full %>% 
+  select(all_of(predictors_no_hum)) %>% 
+  mutate(disaster = if_else(year == '2021' & month %in% c('10', '11', '12'), 1, 0)) %>% 
+  filter(complete.cases(.)) 
+
+train <- everything_no_hum %>% 
+  mutate(H2S_daily_avg = log(H2S_daily_avg))
+
+train <- fastDummies::dummy_cols(train %>%
+                                   select(-c(day)) %>%
+                                   mutate(MinDist = 1/(MinDist^2),
+                                          dist_wrp = 1/(dist_wrp^2)),
+                                 remove_selected_columns = TRUE)
+
+set.seed(90)
+folds_1 <- createFolds(which(train$disaster == 1), k = 10)
+folds_0 <- createFolds(which(train$disaster == 0), k = 10)
+folds <- list()
+for (i in 1:10){
+  folds <- append(folds, list(c(which(train$disaster == 1)[folds_1[[i]]], 
+                                which(train$disaster == 0)[folds_0[[i]]])))
+}
+
+# Separate trainControl for everything models, stratified sampling folds
+control_everything_no_hum <- trainControl(method="cv", 
+                                   number=10,
+                                   indexOut = folds,
+                                   verboseIter=TRUE, 
+                                   search='grid',
+                                   savePredictions = 'final')
+
+fit.xgb_da_log_h2s_dis_ind_no_hum <- train(H2S_daily_avg~.,
+                                    method = 'xgbTree',
+                                    data = train,
+                                    trControl=control_everything_no_hum,
+                                    tuneGrid = tune_grid,
+                                    tuneLength = 10, importance=TRUE, verbosity = 0, verbose=FALSE)
+saveRDS(fit.xgb_da_log_h2s_dis_ind_no_hum, 'rfiles/fit.xgb_da_log_h2s_dis_ind_no_hum.rds')
