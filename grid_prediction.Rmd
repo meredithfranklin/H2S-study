@@ -320,7 +320,7 @@ get_evi <- function(location){
 }
 
 # Get Number of Odor Complaints
-odor <- read_csv('data/SCAQMD_odorcomplaints_2018_2022.csv')
+odor <- read_csv('data/odorcomplaintdata_2018_2023.csv')
 
 get_zipcode <- function(location) {
   return(apply(st_intersects(la_county_trans, location, sparse = FALSE), 2,
@@ -604,61 +604,61 @@ saveWidget(dis_full_pred, file="figures/dis_full_pred.html")
 
 # Normal Period Grid Prediction
 ```{r}
-# # prepare normal period data
-# grd_data_normal <- grd_df %>%
-#   mutate(mon_utm_x = x,
-#          mon_utm_y = y,
-#          sf_loc = get_sf_loc(mon_utm_x, mon_utm_y),
-#          ll_loc = get_ll_loc(mon_utm_x, mon_utm_y)) %>%
-#   mutate(month = '10',
-#          year = as.integer(2022),
-#          dist_wrp = get_dist_wrp(sf_loc)$dist_wrp,
-#          MinDist = get_dist_ref(sf_loc),
-#          elevation = get_elevation(ll_loc),
-#          EVI = get_evi(sf_loc),
-#          capacity = get_dist_wrp(sf_loc)$capacity,
-#          dist_dc = apply(st_distance(sf_loc, d_channel), 1, min))
-# 
-# grd_data_normal <- grd_data_normal %>%
-#   rowwise() %>%
-#   mutate(well_prod_data = get_well_prod(sf_loc, 0),
-#          inactive_2km = get_well_inactive(sf_loc)) %>%
-#   ungroup()
-# 
-# grd_data_normal <- grd_data_normal %>%
-#   mutate(active_2km = well_prod_data$active_2km,
-#          monthly_oil_2km = well_prod_data$monthly_oil_2km,
-#          monthly_gas_2km = well_prod_data$monthly_gas_2km) %>%
-#   select(-well_prod_data)
-# 
-# odor_data <- tibble(mon_utm_x = double(), mon_utm_y = double(), date = date(),
-#                     num_odor_complaint = double())
-# for (i in 1:nrow(grd_data_normal)){
-#   sf_loc <- get_sf_loc(grd_data_normal$mon_utm_x[i], grd_data_normal$mon_utm_y[i])
-#   odor_data <- rbind(odor_data,
-#                      tibble(mon_utm_x = grd_data_normal$mon_utm_x[i],
-#                             mon_utm_y = grd_data_normal$mon_utm_y[i]) %>%
-#                        cross_join(get_odor(sf_loc, 0)))
-# }
-# 
-# normal_dates <- tibble(day = seq(as.Date('2022-10-01'), as.Date('2022-10-31'),"days")) %>%
-#                   mutate(weekday = relevel(factor(wday(day, label=TRUE), ordered = FALSE), ref = "Sun"))
-# 
-# grd_data_normal <- grd_data_normal %>%
-#   cross_join(normal_dates)
-# 
-# grd_data_normal <- grd_data_normal %>%
-#   left_join(odor_data %>% select(mon_utm_x, mon_utm_y, date, num_odor_complaints),
-#             join_by(mon_utm_x, mon_utm_y, day == date))
-# 
-# grd_data_normal <- grd_data_normal %>%
-#   mutate(num_odor_complaints = coalesce(num_odor_complaints, 0))
-# 
-# grd_data_normal <- grd_data_normal %>%
-#   st_drop_geometry() %>%
-#   select(-c(x, y, values, sf_loc, ll_loc))
-# 
-# saveRDS(grd_data_normal, 'rfiles/grd_data_normal.rds')
+# prepare normal period data
+grd_data_normal <- grd_df %>%
+  mutate(mon_utm_x = x,
+         mon_utm_y = y,
+         sf_loc = get_sf_loc(mon_utm_x, mon_utm_y),
+         ll_loc = get_ll_loc(mon_utm_x, mon_utm_y)) %>%
+  mutate(month = '10',
+         year = as.integer(2022),
+         dist_wrp = get_dist_wrp(sf_loc)$dist_wrp,
+         MinDist = get_dist_ref(sf_loc),
+         elevation = get_elevation(ll_loc),
+         EVI = get_evi(sf_loc),
+         capacity = get_dist_wrp(sf_loc)$capacity,
+         dist_dc = apply(st_distance(sf_loc, d_channel), 1, min))
+
+grd_data_normal <- grd_data_normal %>%
+  rowwise() %>%
+  mutate(well_prod_data = get_well_prod(sf_loc, 0),
+         inactive_2km = get_well_inactive(sf_loc)) %>%
+  ungroup()
+
+grd_data_normal <- grd_data_normal %>%
+  mutate(active_2km = well_prod_data$active_2km,
+         monthly_oil_2km = well_prod_data$monthly_oil_2km,
+         monthly_gas_2km = well_prod_data$monthly_gas_2km) %>%
+  select(-well_prod_data)
+
+odor_data <- tibble(mon_utm_x = double(), mon_utm_y = double(), date = date(),
+                    num_odor_complaint = double())
+for (i in 1:nrow(grd_data_normal)){
+  sf_loc <- get_sf_loc(grd_data_normal$mon_utm_x[i], grd_data_normal$mon_utm_y[i])
+  odor_data <- rbind(odor_data,
+                     tibble(mon_utm_x = grd_data_normal$mon_utm_x[i],
+                            mon_utm_y = grd_data_normal$mon_utm_y[i]) %>%
+                       cross_join(get_odor(sf_loc, 0)))
+}
+
+normal_dates <- tibble(day = seq(as.Date('2022-10-01'), as.Date('2022-10-31'),"days")) %>%
+                  mutate(weekday = relevel(factor(wday(day, label=TRUE), ordered = FALSE), ref = "Sun"))
+
+grd_data_normal <- grd_data_normal %>%
+  cross_join(normal_dates)
+
+grd_data_normal <- grd_data_normal %>%
+  left_join(odor_data %>% select(mon_utm_x, mon_utm_y, date, num_odor_complaints),
+            join_by(mon_utm_x, mon_utm_y, day == date))
+
+grd_data_normal <- grd_data_normal %>%
+  mutate(num_odor_complaints = coalesce(num_odor_complaints, 0))
+
+grd_data_normal <- grd_data_normal %>%
+  st_drop_geometry() %>%
+  select(-c(x, y, values, sf_loc, ll_loc))
+
+saveRDS(grd_data_normal, 'rfiles/grd_data_normal.rds')
 
 grd_data_normal <- readRDS('rfiles/grd_data_normal.rds')
 
