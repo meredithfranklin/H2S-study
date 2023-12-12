@@ -1,7 +1,7 @@
 ---
 title: "Prediction Grid"
 author: "Jerry Wu"
-date: "2023-10-16"
+date: "2023-12-12"
 output: html_document
 editor_options: 
   chunk_output_type: inline
@@ -481,11 +481,21 @@ top_10_disaster <- well_prod %>%
   head(10) %>%
   left_join(active_well_location)
 
+all_wells_disaster <- well_prod %>%
+  right_join(wells_in_region) %>%
+  filter(`Monthly Production Date` == '2021-10-01') %>%
+  left_join(active_well_location)
+
 top_10_norm <- well_prod %>%
   right_join(wells_in_region) %>%
   filter(`Monthly Production Date` == '2022-10-01') %>%
   arrange(desc(`Monthly Oil` + `Monthly Gas`)) %>%
   head(10) %>%
+  left_join(active_well_location)
+
+all_wells_norm <- well_prod %>%
+  right_join(wells_in_region) %>%
+  filter(`Monthly Production Date` == '2022-10-01') %>%
   left_join(active_well_location)
 ```
 
@@ -519,10 +529,10 @@ crs(raster_di_dis_xgb) <- CRS_UTM
 # Combine three palettes for better visual
 ramp1 <- colorRampPalette(colors = c("blue", "green"), space = "Lab")(250)
 ramp2 <- colorRampPalette(colors = c("green", "yellow"), space = "Lab")(550)
-ramp3 <- colorRampPalette(colors = c("yellow", "red"), space = "Lab")(44150)
+ramp3 <- colorRampPalette(colors = c("yellow", "red"), space = "Lab")(51250)
 ramp <- c(ramp1, ramp2, ramp3)
 
-pal <- colorNumeric(palette = ramp, domain = c(0.5, 450), na.color = "transparent")
+pal <- colorNumeric(palette = ramp, domain = c(0.5, 521), na.color = "transparent")
 
 # Make palette for legend
 ramp1 <- colorRampPalette(colors = c("blue", "green"), space = "Lab")(6)
@@ -550,8 +560,11 @@ dis_di_pred <- leaflet() %>% addTiles() %>%
                             opacity = 1) %>%
                   addMarkers(data = monitor_loc, icon = mon_icon,
                          lng=~x, lat=~y, label = ~Monitor) %>%
-                  addMarkers(data = top_10_disaster, icon = well_icon,
-                         lng=~lon, lat=~lat,label = ~`API/UWI`) %>%
+                  #addMarkers(data = top_10_disaster, icon = well_icon,
+                  #       lng=~lon, lat=~lat,label = ~`API/UWI`) %>%
+                  addCircleMarkers(data = all_wells_disaster, lng = ~lon, lat = ~lat,
+                                   fillColor = '#333333', radius = 4, fillOpacity = 0.8,
+                                   label = ~'API/UWI', color = '#888888', weight = 1) %>%
                   addMarkers(data = wrp_in_region, icon = wrp_factory_icon,
                          lng=~x, lat=~y, label = ~`CWP_NAM`) %>%
                   addMarkers(data = refineries, icon = oil_factory_icon,
@@ -776,7 +789,7 @@ crs(raster_di_norm_xgb) <- CRS_UTM
 
 # Combine three palettes for better visual
 ramp1 <- colorRampPalette(colors = c("blue", "green"), space = "Lab")(50)
-ramp2 <- colorRampPalette(colors = c("green", "yellow"), space = "Lab")(150)
+ramp2 <- colorRampPalette(colors = c("green", "yellow"), space = "Lab")(140)
 ramp <- c(ramp1, ramp2)
 
 pal <- colorNumeric(palette = ramp, domain = raster_di_norm_xgb@data@values, na.color = "transparent")
@@ -791,8 +804,11 @@ norm_di_pred <- leaflet() %>% addTiles() %>%
                             title = "Monthly Average H2S") %>%
                   addMarkers(data = monitor_loc, icon = mon_icon,
                          lng=~x, lat=~y, label = ~ Monitor) %>%
-                  addMarkers(data = top_10_norm, icon = well_icon,
-                         lng=~lon, lat=~lat,label = ~`API/UWI`) %>%
+                  #addMarkers(data = top_10_norm, icon = well_icon,
+                  #       lng=~lon, lat=~lat,label = ~`API/UWI`) %>%
+                  addCircleMarkers(data = all_wells_norm, lng = ~lon, lat = ~lat,
+                                   fillColor = '#333333', radius = 4, fillOpacity = 0.9,
+                                   label = ~'API/UWI', color = '#888888', weight = 1) %>%
                   addMarkers(data = wrp_in_region, icon = wrp_factory_icon,
                          lng=~x, lat=~y, label = ~`CWP_NAM`) %>%
                   addMarkers(data = refineries, icon = oil_factory_icon,

@@ -409,12 +409,8 @@ fit.xgb_da_log_h2s_dis_ind_no_met <- train(H2S_daily_avg~.,
 saveRDS(fit.xgb_da_log_h2s_dis_ind_no_met, 'rfiles/fit.xgb_da_log_h2s_dis_ind_no_met.rds')
 
 # Everything w.o Disaster Indicator
-everything_no_met <- daily_full %>% 
-  select(all_of(predictors_no_met)) %>% 
-  mutate(disaster = if_else(year == '2021' & month %in% c('10', '11', '12'), 1, 0)) %>% 
-  filter(complete.cases(.)) 
-
 train <- everything_no_met %>% 
+  select(-disaster) %>%
   mutate(H2S_daily_avg = log(H2S_daily_avg))
 
 train <- fastDummies::dummy_cols(train %>%
@@ -422,16 +418,6 @@ train <- fastDummies::dummy_cols(train %>%
                                    mutate(MinDist = 1/(MinDist^2),
                                           dist_wrp = 1/(dist_wrp^2)),
                                  remove_selected_columns = TRUE)
-
-# 10 Fold for Everything models
-set.seed(90)
-folds_1 <- createFolds(which(train$disaster == 1), k = 10)
-folds_0 <- createFolds(which(train$disaster == 0), k = 10)
-folds <- list()
-for (i in 1:10){
-  folds <- append(folds, list(c(which(train$disaster == 1)[folds_1[[i]]], 
-                                which(train$disaster == 0)[folds_0[[i]]])))
-}
 
 fit.xgb_da_log_h2s_full_no_met <- train(H2S_daily_avg~.,
                                  method = 'xgbTree',

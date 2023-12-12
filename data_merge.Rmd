@@ -1,7 +1,7 @@
 ---
 title: "Merge LA refinery data sets"
 author: "Jerry Wu"
-date: "7/18/2023"
+date: "12/12/2023"
 output:
   html_document:
     df_print: paged
@@ -623,7 +623,7 @@ daily_full <- daily_full %>%
 
 # Merge Odor Complaint data
 ```{r}
-odor <- read_csv('data/SCAQMD_odorcomplaints_2018_2022.csv')
+odor <- read_csv('data/odorcomplaintdata_2018_2023.csv')
 la_county <- read_sf('shapefiles/Zip_Codes_(LA_County)/Zip_Codes_(LA_County).shp')
 ```
 

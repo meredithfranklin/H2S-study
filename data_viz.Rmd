@@ -1,7 +1,7 @@
 ---
 title: "Data Visualizations"
 author: "Jerry Wu"
-date: "10/15/2023"
+date: "12/12/2023"
 output:
   html_document:
     df_print: paged
@@ -31,17 +31,21 @@ daily_full <- readRDS('data/daily_full.rds')
 # Monthly Production Data
 ```{r}
 prod_by_month <- full_data %>% 
-    select(yearmonth, active_1km, monthly_oil_1km, monthly_gas_1km, 
-           monthly_water_1km, monthly_boe_1km) %>%
+  select(Monitor, yearmonth, active_2km, monthly_oil_2km, monthly_gas_2km) %>%
   distinct() %>%
-  filter(yearmonth <= '2023-06')
+  filter(yearmonth <= '2023-10')
 
-coef <- median(1032*prod_by_month$monthly_gas_1km/10^9)/median(prod_by_month$monthly_oil_1km/10^6)
+prod_by_month_avg <- prod_by_month %>% 
+  group_by(yearmonth) %>%
+  summarise(avg_oil = mean(monthly_oil_2km),
+            avg_gas = mean(monthly_gas_2km))
 
-full_data %>%
+coef <- median(1032*prod_by_month_avg$avg_gas/10^9)/median(prod_by_month_avg$avg_oil/10^6)
+
+prod_by_month_avg %>%
   ggplot(aes(x = yearmonth, group = 1)) + 
-  geom_line(aes(y = monthly_oil_1km/10^6, color = 'Oil'), linewidth=1) + 
-  geom_line(aes(y = 1032*monthly_gas_1km/10^9/coef, color = 'Natural Gas'), linewidth=1) +
+  geom_line(aes(y = avg_oil/10^6, color = 'Oil'), linewidth=1) + 
+  geom_line(aes(y = 1032*avg_gas/10^9/coef, color = 'Natural Gas'), linewidth=1) +
   scale_y_continuous(
     name = "Monthly Oil in Million Barrels",
     sec.axis = sec_axis(~.*coef, name="Monthly Gas in Billion Cubic Feet")
@@ -51,9 +55,11 @@ full_data %>%
     axis.title.y.right = element_text(color = 'skyblue')
   ) +
   scale_color_manual(values = c("skyblue", "tomato")) +
-  scale_x_discrete(breaks = prod_by_month$yearmonth[seq(1, length(prod_by_month$yearmonth), by = 7)]) +
-  xlab("Date") + labs(colour="Production Type") +
-    theme_minimal() +
+  scale_x_discrete(breaks = sort(unique(prod_by_month_avg$yearmonth))[seq(1, length(sort(unique(prod_by_month_avg$yearmonth))), by = 6)]) +
+  xlab("Date") + 
+  labs(colour="Production Type", title = "Average Production within 2km radius of any monitor",
+       subtitle = '(Affected by monitor status)') +
+  theme_minimal() +
   theme(axis.text.x = element_text(angle = 45))
 ```
 
