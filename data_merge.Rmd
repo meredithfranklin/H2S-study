@@ -263,6 +263,22 @@ angles <- tibble(monitors$geometry, la_wrp$geometry[st_nearest_feature(monitors,
   set_units('degrees') %>% # convert to degrees
   drop_units()
 
+# angles <- tibble(locations$geometry, la_wrp$geometry[st_nearest_feature(locations, la_wrp)]) %>%
+#   pivot_longer(cols = everything()) %>% 
+#   pull(value) %>% # extract coordinates only
+#   st_transform(4326) %>% # convert to lat/lon for function below
+#   st_geod_azimuth() %>%
+#   set_units('degrees') %>% # convert to degrees
+#   drop_units()
+
+# angles <- tibble(locations$geometry, refineries$geometry[st_nearest_feature(locations, refineries)]) %>%
+#   pivot_longer(cols = everything()) %>%
+#   pull(value) %>% # extract coordinates only
+#   st_transform(4326) %>% # convert to lat/lon for function below
+#   st_geod_azimuth() %>%
+#   set_units('degrees') %>% # convert to degrees
+#   drop_units()
+
 angles <- angles[c(T, F)] # keep only odd index, valid pairs
 angles <- if_else(angles < 0, angles + 360, angles)
 

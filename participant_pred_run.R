@@ -1,16 +1,17 @@
 # Script to run prediction
 library(tidyverse)
 # Load in XGBoost model with disaster indicator
-fit.xgb_da_log_h2s_dis_ind_no_hum <- readRDS('rfiles/fit.xgb_da_log_h2s_dis_ind_no_hum.rds')
+fit.xgb_da_log_h2s_dis_ind_no_met <- readRDS('rfiles/fit.xgb_da_log_h2s_dis_ind_no_met.rds')
 
 # Load in data
-data_visit1 <- read_csv('data_visit1.csv')
-data_visit2 <- read_csv('data_visit2.csv')
+data_visit1 <- read_csv('data_visit1_no_weather.csv')
+#data_visit2 <- read_csv('data_visit2.csv')
 
 # format data
 data_visit1_mat <- data_visit1 %>% 
   mutate(year = year(date_prior),
-         month = month(date_prior)) %>%
+         month = month(date_prior),
+         weekday = relevel(factor(wday(data_visit1$exposure_date, label=TRUE), ordered = FALSE), ref = "Sun")) %>%
   mutate(month_01 = if_else(month == 1, as.integer(1), as.integer(0)),
          month_02 = if_else(month == 2, as.integer(1), as.integer(0)),
          month_03 = if_else(month == 3, as.integer(1), as.integer(0)),
@@ -27,18 +28,16 @@ data_visit1_mat <- data_visit1 %>%
          year_2021 = if_else(year == 2021, as.integer(1), as.integer(0)),
          year_2022 = if_else(year == 2022, as.integer(1), as.integer(0)),
          year_2023 = if_else(year == 2023, as.integer(1), as.integer(0))) %>%
-  mutate(year = toString(year)) %>%
   mutate(disaster = if_else(year == '2021' & month %in% c(10, 11, 12), 1, 0),
          MinDist = 1/(MinDist^2),
-         dist_wrp = 1/(dist_wrp^2)) %>%
+         dist_wrp = 1/(dist_wrp^2),
+         dist_dc = 1/(dist_dc^2)) %>%
   select(-month)
 
 
-data_visit1_mat <- fastDummies::dummy_cols(data_visit1 %>%
-                                             mutate(MinDist = 1/(MinDist^2),
-                                                    dist_wrp = 1/(dist_wrp^2)),
-                                                remove_selected_columns = TRUE)
+data_visit1_mat <- fastDummies::dummy_cols(data_visit1_mat,
+                                           remove_selected_columns = TRUE)
 
 # predict
 data_visit1_pred <- data_visit1 %>%
-  mutate(xgb_dis_ind_predict = predict(fit.xgb_da_log_h2s_dis_ind_no_hum, newdata = data_visit1_mat))
+  mutate(xgb_dis_ind_predict = predict(fit.xgb_da_log_h2s_dis_ind_no_met, newdata = data_visit1_mat))

@@ -15,7 +15,7 @@ library(sf)
 ```
 
 ```{r}
-api <- 'elLCtlloSD9HKH2KghuMEZDEHNBmwPkl'
+api <- '4Q7hFEmsDjk3orhrP46zKtmQ0BMGYw9s'
 ```
 
 ```{r}
@@ -70,5 +70,7 @@ result <- tibble(date = data$daily$data$time,
                  avg_temp = mean(data$daily$data$temperatureHigh, data$daily$data$temperatureLow),
                  wd = data$daily$data$windBearing,
                  ws = data$daily$data$windSpeed,
-                 precip = data$daily$data$precipAccumulation)
+                 precip = data$daily$data$precipAccumulation,
+                 dewpoint = data$daily$data$dewPoint) %>%
+  mutate(humidity = 100 * (exp((17.625 * (dewpoint - 32) * (5/9)) / (243.04 + (dewpoint - 32) * (5/9))) / exp((17.625 * (avg_temp - 32) * (5/9)) / (243.04 + (avg_temp - 32) * (5/9)))))
 ```

@@ -86,8 +86,49 @@ grd <- st_bbox(la_county_full) %>%
           st_as_stars(dx = 500) %>%
           st_crop(la_county_full)
 
-image(grd, text_values = TRUE, axes = TRUE)
+image(grd, axes = TRUE)
 ```
+
+```{r}
+# Get the grids for each zipcode separately
+grd_stars_500 <- list()
+grd_ind_500 <- tibble()
+for (i in 1:nrow(la_county_full)) {
+  grd_ind_temp <- st_bbox(la_county_full[i,]) %>%
+          st_as_stars(dx = 500) %>%
+          st_crop(la_county_full[i,])
+  grd_stars_500 <- append(grd_stars_500, list(grd_ind_temp))
+  grd_ind_500 <- rbind(grd_ind_500, 
+                   tibble(la_county_full[i, c('OBJECTID', 'ZIPCODE', 'geometry')], 
+                          cells = sum(grd_ind_temp$values == 0, na.rm=T)))
+}
+
+grd_stars_1000 <- list()
+grd_ind_1000 <- tibble()
+for (i in 1:nrow(la_county_full)) {
+  grd_ind_temp <- st_bbox(la_county_full[i,]) %>%
+          st_as_stars(dx = 1000) %>%
+          st_crop(la_county_full[i,])
+  grd_stars_1000 <- append(grd_stars_1000, list(grd_ind_temp))
+  grd_ind_1000 <- rbind(grd_ind_1000, 
+                   tibble(la_county_full[i, c('OBJECTID', 'ZIPCODE', 'geometry')], 
+                          cells = sum(grd_ind_temp$values == 0, na.rm=T)))
+}
+
+print(paste0('Number of fetches at 500m resolution: ', sum(grd_ind_500$cells) * 365 * 3))
+print(paste0('Number of fetches at 1000m resolution: ', sum(grd_ind_1000$cells)  * 365 * 3))
+
+print(paste0('Estimated fetch time at 500m resolution: ', round((sum(grd_ind_500$cells) * 30 * 365 * 3) / 3600, 1), ' hours'))
+print(paste0('Estimated fetch time at 1000m resolution: ', round((sum(grd_ind_1000$cells) * 30 * 365 * 3) / 3600, 1), ' hours'))
+```
+
+```{r}
+for (i in 1:length(grd_stars_1000)) {
+  print(image(grd_stars_1000[[i]], text_values  = T))
+}
+```
+
+
 
 ```{r}
 # Convert to a data frame so we can compute the prediction at each grid

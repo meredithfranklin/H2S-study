@@ -3,6 +3,7 @@ library(tidyverse)
 library(sf)
 library(raster)
 library(units)
+library(lubridate)
 select <- dplyr::select
 
 # carson_participant_data <- read_csv('carson_participant_clean.csv')
@@ -18,7 +19,7 @@ carson_participant_data <- tibble(X = c(-118.2514, -118.1929),
 
 # Set dates to POSIXct
 carson_participant_data$Visit1 <- as.POSIXct(carson_participant_data$Visit1, tz = 'America/Los_Angeles', format = '%m/%d/%y %H:%S')
-carson_participant_data$Visit2 <- as.POSIXct(carson_participant_data$Visit2, tz = 'America/Los_Angeles', format = '%m/%d/%y %H:%S')
+# carson_participant_data$Visit2 <- as.POSIXct(carson_participant_data$Visit2, tz = 'America/Los_Angeles', format = '%m/%d/%y %H:%S')
 # Convert CRS if needed
 CRS_UTM <- CRS("+proj=utm +zone=11 ellps=WGS84")
 
@@ -51,7 +52,7 @@ get_ll_loc <- function(utm_x, utm_y) {
 }
 
 # WRP Data
-la_wrp <- read_sf('shapefiles/LA_WRP.shp', layer = 'LA_WRP')
+la_wrp <- read_sf('LA_WRP.shp', layer = 'LA_WRP')
 
 # Convert both water treatment plants and monitor coordinates to UTM
 la_wrp <- st_transform(la_wrp, CRS_UTM)
@@ -62,8 +63,8 @@ get_dist_wrp <- function(location) {
 }
 
 # Get MinDist to Refinery
-st_read('shapefiles/Petroleum_Refinery.shp')
-refineries <- read_sf('shapefiles/Petroleum_Refinery.shp', layer = 'Petroleum_Refinery')
+#st_read('Petroleum_Refinery.shp')
+refineries <- read_sf('Petroleum_Refinery.shp', layer = 'Petroleum_Refinery')
 refineries <- refineries %>%
   select(Company, Site, Latitude, Longitude) %>%
   mutate(refinery = case_when(Site == 'Carson' ~ 'Marathon (Carson)',
@@ -79,9 +80,9 @@ get_dist_ref <- function(location) {
 }
 
 # Get production data
-well_prod <- read_csv('data/LA well prod Dec2023 Well Monthly Production.CSV', show_col_types = FALSE)
-full_well_info <- read_csv('data/well_active_inactive_prod_since_2000.CSV', show_col_types = FALSE)
-active_well_info <- read_csv('data/LA well prod Dec2023 Well Headers.CSV', show_col_types = FALSE)
+well_prod <- read_csv('LA well prod Dec2023 Well Monthly Production.CSV', show_col_types = FALSE)
+full_well_info <- read_csv('well_active_inactive_prod_since_2000.CSV', show_col_types = FALSE)
+active_well_info <- read_csv('LA well prod Dec2023 Well Headers.CSV', show_col_types = FALSE)
 
 inactive_well_info <- anti_join(full_well_info, active_well_info, join_by(API14)) %>%
   rename(lon = `Surface Hole Longitude (WGS84)`,
@@ -93,6 +94,7 @@ inactive_well_info <- anti_join(full_well_info, active_well_info, join_by(API14)
   st_transform(CRS_UTM)
 
 well_prod <- well_prod %>%
+  mutate('Monthly Production Date' = force_tz(`Monthly Production Date`, tz = 'America/Los_Angeles')) %>%
   left_join(active_well_info, join_by(`API/UWI` == API14))
 
 well_prod <- well_prod %>%
@@ -112,6 +114,7 @@ active_well_location <- well_prod %>%
   st_transform(CRS_UTM)
 
 get_well_prod <- function(location, date) {
+  # if date is later than a certain month, return NA
   if (date > max(well_prod$`Monthly Production Date`) + 31){
     return(tibble(active_2km = NA,
                   monthly_oil_2km = NA,
@@ -150,14 +153,14 @@ get_well_inactive <- function(location) {
 }
 
 # Get elevation
-elevation <- raster('shapefiles/N33W119.hgt')
+elevation <- raster('N33W119.hgt')
 
 get_elevation <- function(location_ll) {
   return(raster::extract(elevation, location_ll))
 }
 
 # Get EVI
-evi <- raster('shapefiles/MOD13Q1.061__250m_16_days_EVI_doy2023145_aid0001.tif')
+evi <- raster('MOD13Q1.061__250m_16_days_EVI_doy2023145_aid0001_2.tif')
 
 evi <- projectRaster(evi, crs = CRS_UTM)
 # fill NA pixels
@@ -179,16 +182,20 @@ NAVals <- raster::extract(evi, co, method='simple')
 evi_NAVals <- evi # initiate new raster
 evi_NAVals[] <- NAVals # store values in raster
 
-evi_filled <- cover(x=evi, y= evi_NAVals)
+evi_filled <- cover(x=evi, y = evi_NAVals)
+
+evi_filled <- projectRaster(evi_filled, crs = "+proj=longlat +datum=WGS84")
 
 get_evi <- function(location){
   return(raster::extract(evi_filled, location) * 0.0001)
 }
 
 # Get Number of Odor Complaints
-odor <- read_csv('data/SCAQMD_odorcomplaints_2018_2022.csv')
+odor <- read_csv('odorcomplaintdata_2018_2023.csv')
 
-la_county <- read_sf('shapefiles/Zip_Codes_(LA_County)/Zip_Codes_(LA_County).shp')
+odor$date <- force_tz(odor$date, tz = 'America/Los_Angeles')
+
+la_county <- read_sf('Zip_Codes_(LA_County).shp')
 
 la_county_trans <- st_transform(la_county, CRS_UTM)
 
@@ -212,8 +219,8 @@ get_odor <- function(zipcode, date_prior) {
 
 # Distance to Dominguez Channel
 # Read in the shape file, it already has a CRS
-st_read('shapefiles/DominguezChannel_Carson.shp')
-d_channel <- read_sf('shapefiles/DominguezChannel_Carson.shp', layer = 'DominguezChannel_Carson')
+st_read('DominguezChannel_Carson.shp')
+d_channel <- read_sf('DominguezChannel_Carson.shp', layer = 'DominguezChannel_Carson')
 d_channel <- st_transform(d_channel, CRS_UTM) # convert to UTM crs
 
 
@@ -221,7 +228,8 @@ d_channel <- st_transform(d_channel, CRS_UTM) # convert to UTM crs
 # Get the time-independent variables
 data_visit1 <- carson_participant_data %>%
   select(StudyID, Visit1, mon_utm_x, mon_utm_y, lon, lat) %>%
-  filter(!is.na(Visit1))
+  filter(!is.na(Visit1)) %>%
+  filter(!(lat > 33.99))
 
 data_visit1 <- data_visit1 %>%
   mutate(sf_loc = get_sf_loc(mon_utm_x, mon_utm_y),
@@ -229,7 +237,7 @@ data_visit1 <- data_visit1 %>%
   mutate(dist_wrp = get_dist_wrp(sf_loc)$dist_wrp,
          MinDist = get_dist_ref(sf_loc),
          elevation = get_elevation(ll_loc),
-         EVI = get_evi(sf_loc),
+         EVI = get_evi(ll_loc),
          capacity = get_dist_wrp(sf_loc)$capacity,
          dist_dc = apply(st_distance(sf_loc, d_channel), 1, min),
          inactive_2km = get_well_inactive(sf_loc),
@@ -270,58 +278,113 @@ data_visit1 <- data_visit1 %>%
   st_drop_geometry() %>%
   select(-c(sf_loc, ll_loc))
 
-# Same for visit2
-# Get the time-independent variables
-data_visit2 <- carson_participant_data %>%
-  select(StudyID, Visit2, mon_utm_x, mon_utm_y) %>%
-  filter(!is.na(Visit2))
+# # Same for visit2
+# # Get the time-independent variables
+# data_visit2 <- carson_participant_data %>%
+#   select(StudyID, Visit2, mon_utm_x, mon_utm_y) %>%
+#   filter(!is.na(Visit2))
+# 
+# data_visit2 <- data_visit2 %>%
+#   mutate(sf_loc = get_sf_loc(mon_utm_x, mon_utm_y),
+#          ll_loc = get_ll_loc(mon_utm_x, mon_utm_y)) %>%
+#   mutate(dist_wrp = get_dist_wrp(sf_loc)$dist_wrp,
+#          MinDist = get_dist_ref(sf_loc),
+#          elevation = get_elevation(ll_loc),
+#          EVI = get_evi(sf_loc),
+#          capacity = get_dist_wrp(sf_loc)$capacity,
+#          dist_dc = apply(st_distance(sf_loc, d_channel), 1, min),
+#          inactive_2km = get_well_inactive(sf_loc),
+#          zipcode = get_zipcode(sf_loc))
+# 
+# # expand the data with past 4 weeks
+# data_visit2 <- data_visit2 %>%
+#   cross_join(tibble(days_prior = 0:28))
+# 
+# data_visit2$date_prior <- data_visit2$Visit2 - data_visit2$days_prior*60*60*24
+# 
+# data_visit2$month_floor <- floor_date(data_visit2$date_prior, 'month')
+# 
+# # get monthly oil
+# data_visit2_month <- data_visit2 %>%
+#   select(sf_loc, StudyID, Visit2, month_floor) %>%
+#   distinct()
+# 
+# data_visit2_month <- data_visit2_month %>%
+#   rowwise() %>%
+#   mutate(well_prod_data = get_well_prod(sf_loc, month_floor)) %>%
+#   ungroup()
+# 
+# data_visit2 <- data_visit2 %>%
+#   left_join(data_visit2_month, join_by(sf_loc, StudyID, Visit2, month_floor))
+# 
+# data_visit2 <- data_visit2 %>%
+#   mutate(active_2km = well_prod_data$active_2km,
+#          monthly_oil_2km = well_prod_data$monthly_oil_2km,
+#          monthly_gas_2km = well_prod_data$monthly_gas_2km) %>%
+#   select(-well_prod_data)
+# 
+# data_visit2 <- data_visit2 %>%
+#   rowwise() %>%
+#   mutate(num_odor_complaints = get_odor(zipcode, date_prior))
+# 
+# data_visit2 <- data_visit2 %>%
+#   st_drop_geometry() %>%
+#   select(-c(sf_loc, ll_loc))
 
-data_visit2 <- data_visit2 %>%
+# Also for the two month of exposure, Oct 2021 and Nov 2021
+data_exposure <- carson_participant_data %>%
+  select(StudyID, Visit1, mon_utm_x, mon_utm_y, lon, lat) %>%
+  filter(!is.na(Visit1)) %>%
+  filter(!(lat > 33.99))
+
+data_exposure <- data_exposure %>%
   mutate(sf_loc = get_sf_loc(mon_utm_x, mon_utm_y),
          ll_loc = get_ll_loc(mon_utm_x, mon_utm_y)) %>%
   mutate(dist_wrp = get_dist_wrp(sf_loc)$dist_wrp,
          MinDist = get_dist_ref(sf_loc),
          elevation = get_elevation(ll_loc),
-         EVI = get_evi(sf_loc),
+         EVI = get_evi(ll_loc),
          capacity = get_dist_wrp(sf_loc)$capacity,
          dist_dc = apply(st_distance(sf_loc, d_channel), 1, min),
          inactive_2km = get_well_inactive(sf_loc),
          zipcode = get_zipcode(sf_loc))
 
 # expand the data with past 4 weeks
-data_visit2 <- data_visit2 %>%
-  cross_join(tibble(days_prior = 0:28))
+data_exposure <- data_exposure %>%
+  cross_join(tibble(exposure_date = 
+                      ceiling_date(seq(as.POSIXct('2021-10-01', tz = 'America/Los_Angeles'), 
+                                       as.POSIXct('2021-11-30', tz = 'America/Los_Angeles'), 
+                                       by = 'day'), 
+                                   unit = 'day')))
 
-data_visit2$date_prior <- data_visit2$Visit2 - data_visit2$days_prior*60*60*24
-
-data_visit2$month_floor <- floor_date(data_visit2$date_prior, 'month')
+data_exposure$month_floor <- floor_date(data_exposure$exposure_date, 'month')
 
 # get monthly oil
-data_visit2_month <- data_visit2 %>%
-  select(sf_loc, StudyID, Visit2, month_floor) %>%
+data_exposure_month <- data_exposure %>%
+  select(sf_loc, StudyID, Visit1, month_floor) %>%
   distinct()
 
-data_visit2_month <- data_visit2_month %>%
+data_exposure_month <- data_exposure_month %>%
   rowwise() %>%
   mutate(well_prod_data = get_well_prod(sf_loc, month_floor)) %>%
   ungroup()
 
-data_visit2 <- data_visit2 %>%
-  left_join(data_visit2_month, join_by(sf_loc, StudyID, Visit2, month_floor))
+data_exposure <- data_exposure %>%
+  left_join(data_exposure_month, join_by(sf_loc, StudyID, Visit1, month_floor))
 
-data_visit2 <- data_visit2 %>%
+data_exposure <- data_exposure %>%
   mutate(active_2km = well_prod_data$active_2km,
          monthly_oil_2km = well_prod_data$monthly_oil_2km,
          monthly_gas_2km = well_prod_data$monthly_gas_2km) %>%
   select(-well_prod_data)
 
-data_visit2 <- data_visit2 %>%
+data_exposure <- data_exposure %>%
   rowwise() %>%
-  mutate(num_odor_complaints = get_odor(zipcode, date_prior))
+  mutate(num_odor_complaints = get_odor(zipcode, exposure_date))
 
-data_visit2 <- data_visit2 %>%
+data_exposure <- data_exposure %>%
   st_drop_geometry() %>%
   select(-c(sf_loc, ll_loc))
 
 write_csv(data_visit1, 'data_visit1_no_weather.csv')
-write_csv(data_visit2, 'data_visit2_no_weather.csv')
+# write_csv(data_visit2, 'data_visit2_no_weather.csv')

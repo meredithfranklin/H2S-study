@@ -9,7 +9,10 @@ daily_full <- readRDS('data/daily_full.rds') %>%
          Monitor = str_replace_all(Monitor, ' ', '_'),
          weekday = weekday,
          daily_downwind_ref = as.integer(daily_downwind_ref),
-         daily_downwind_wrp = as.integer(daily_downwind_wrp))
+         daily_downwind_wrp = as.integer(daily_downwind_wrp),
+         MinDist = 1/(MinDist^2),
+         dist_wrp = 1/(dist_wrp^2),
+         dist_dc = 1/(dist_dc^2))
 
 predictors <- c('H2S_daily_avg', 'month', 'year', 'weekday', 'wd_avg', 'ws_avg', 
                 'daily_downwind_ref', 'dist_wrp', 'MinDist',
@@ -35,9 +38,7 @@ train <- daily_full %>%
 
 train <- fastDummies::dummy_cols(train %>%
                                    select(-c(Refinery, Monitor, day, H2S_daily_max, H2S_monthly_average,
-                                             monitor_lat, monitor_lon, county, dist_213)) %>%
-                                   mutate(MinDist = 1/(MinDist^2),
-                                          dist_wrp = 1/(dist_wrp^2)),
+                                             monitor_lat, monitor_lon, county, dist_213)),
                                  remove_selected_columns = TRUE)
 
 # Try for a continuous month
@@ -70,9 +71,7 @@ train <- daily_full[complete.cases(daily_full),] %>%
 
 train <- fastDummies::dummy_cols(train %>%
                                    select(-c(Refinery, Monitor, day, H2S_daily_max, H2S_monthly_average,
-                                             monitor_lat, monitor_lon, county, dist_213, year)) %>%
-                                   mutate(MinDist = 1/(MinDist^2),
-                                          dist_wrp = 1/(dist_wrp^2)),
+                                             monitor_lat, monitor_lon, county, dist_213, year)),
                                  remove_selected_columns = TRUE)
 
 fit.xgb_da_dis <- train(H2S_daily_avg~.,
@@ -89,9 +88,7 @@ train <- daily_full[complete.cases(daily_full),] %>%
 
 train <- fastDummies::dummy_cols(train %>%
                                    select(-c(Refinery, Monitor, day, H2S_daily_max, H2S_monthly_average,
-                                             monitor_lat, monitor_lon, county, dist_213)) %>%
-                                   mutate(MinDist = 1/(MinDist^2),
-                                          dist_wrp = 1/(dist_wrp^2)),
+                                             monitor_lat, monitor_lon, county, dist_213)),
                                  remove_selected_columns = TRUE)
 
 fit.xgb_da_excl_dis <- train(H2S_daily_avg~.,
@@ -112,9 +109,7 @@ everything <- daily_full %>%
 train <- everything
 
 train <- fastDummies::dummy_cols(train %>%
-                                   select(-c(day)) %>%
-                                   mutate(MinDist = 1/(MinDist^2),
-                                          dist_wrp = 1/(dist_wrp^2)),
+                                   select(-c(day)),
                                  remove_selected_columns = TRUE)
 
 # 10 Fold for Everything models
@@ -148,9 +143,7 @@ train <- everything %>%
   select(-disaster)
 
 train <- fastDummies::dummy_cols(train %>%
-                                   select(-c(day)) %>%
-                                   mutate(MinDist = 1/(MinDist^2),
-                                          dist_wrp = 1/(dist_wrp^2)),
+                                   select(-c(day)),
                                  remove_selected_columns = TRUE)
 
 fit.xgb_da_full <- train(H2S_daily_avg~.,
@@ -172,9 +165,7 @@ train <- daily_avg_train_sincefeb2022 %>%
   mutate(H2S_daily_avg = log(H2S_daily_avg))
 
 train <- fastDummies::dummy_cols(train %>%
-                                   select(-c(day)) %>%
-                                   mutate(MinDist = 1/(MinDist^2),
-                                          dist_wrp = 1/(dist_wrp^2)),
+                                   select(-c(day)),
                                  remove_selected_columns = TRUE)
 
 fit.xgb_da_log_h2s_sincefeb2022 <- train(H2S_daily_avg~.,
@@ -195,9 +186,7 @@ train <- disaster %>%
   mutate(H2S_daily_avg = log(H2S_daily_avg))
 
 train <- fastDummies::dummy_cols(train %>%
-                                   select(-c(day)) %>%
-                                   mutate(MinDist = 1/(MinDist^2),
-                                          dist_wrp = 1/(dist_wrp^2)),
+                                   select(-c(day)),
                                  remove_selected_columns = TRUE)
 
 fit.xgb_da_log_h2s_dis <- readRDS('rfiles/fit.xgb_da_log_h2s_dis.rds')
@@ -219,9 +208,7 @@ train <- excl_disaster %>%
   mutate(H2S_daily_avg = log(H2S_daily_avg))
 
 train <- fastDummies::dummy_cols(train %>%
-                                   select(-c(day)) %>%
-                                   mutate(MinDist = 1/(MinDist^2),
-                                          dist_wrp = 1/(dist_wrp^2)),
+                                   select(-c(day)),
                                  remove_selected_columns = TRUE)
 
 fit.xgb_da_log_h2s_excl_dis <- train(H2S_daily_avg~.,
@@ -232,28 +219,26 @@ fit.xgb_da_log_h2s_excl_dis <- train(H2S_daily_avg~.,
                  tuneLength = 10, importance=TRUE, verbosity = 0, verbose=FALSE)
 saveRDS(fit.xgb_da_log_h2s_excl_dis, 'rfiles/fit.xgb_da_log_h2s_excl_dis.rds')
 
-# Everything w. Disaster Indicator
-everything <- daily_full %>% 
-  select(all_of(predictors)) %>% 
-  mutate(disaster = if_else(year == '2021' & month %in% c('10', '11', '12'), 1, 0)) %>% 
-  filter(complete.cases(.)) 
-
-train <- everything %>% 
-  mutate(H2S_daily_avg = log(H2S_daily_avg))
-
-train <- fastDummies::dummy_cols(train %>%
-                                   select(-c(day)) %>%
-                                   mutate(MinDist = 1/(MinDist^2),
-                                          dist_wrp = 1/(dist_wrp^2)),
-                                 remove_selected_columns = TRUE)
-
-fit.xgb_da_log_h2s_dis_ind <- train(H2S_daily_avg~.,
-                 method = 'xgbTree',
-                 data = train,
-                 trControl=control_everything,
-                 tuneGrid = tune_grid,
-                 tuneLength = 10, importance=TRUE, verbosity = 0, verbose=FALSE)
-saveRDS(fit.xgb_da_log_h2s_dis_ind, 'rfiles/fit.xgb_da_log_h2s_dis_ind.rds')
+# # Everything w. Disaster Indicator
+# everything <- daily_full %>% 
+#   select(all_of(predictors)) %>% 
+#   mutate(disaster = if_else(year == '2021' & month %in% c('10', '11', '12'), 1, 0)) %>% 
+#   filter(complete.cases(.)) 
+# 
+# train <- everything %>% 
+#   mutate(H2S_daily_avg = log(H2S_daily_avg))
+# 
+# train <- fastDummies::dummy_cols(train %>%
+#                                    select(-c(day)),
+#                                  remove_selected_columns = TRUE)
+# 
+# fit.xgb_da_log_h2s_dis_ind <- train(H2S_daily_avg~.,
+#                  method = 'xgbTree',
+#                  data = train,
+#                  trControl=control_everything,
+#                  tuneGrid = tune_grid,
+#                  tuneLength = 10, importance=TRUE, verbosity = 0, verbose=FALSE)
+# saveRDS(fit.xgb_da_log_h2s_dis_ind, 'rfiles/fit.xgb_da_log_h2s_dis_ind.rds')
 
 # Everything w.o Disaster Indicator
 train <- everything %>% 
@@ -261,9 +246,7 @@ train <- everything %>%
   mutate(H2S_daily_avg = log(H2S_daily_avg))
 
 train <- fastDummies::dummy_cols(train %>%
-                                   select(-c(day)) %>%
-                                   mutate(MinDist = 1/(MinDist^2),
-                                          dist_wrp = 1/(dist_wrp^2)),
+                                   select(-c(day)),
                                  remove_selected_columns = TRUE)
 
 fit.xgb_da_log_h2s_full <- train(H2S_daily_avg~.,
@@ -274,96 +257,90 @@ fit.xgb_da_log_h2s_full <- train(H2S_daily_avg~.,
                  tuneLength = 10, importance=TRUE, verbosity = 0, verbose=FALSE)
 saveRDS(fit.xgb_da_log_h2s_full, 'rfiles/fit.xgb_da_log_h2s_full.rds')
 
-# 80/20 split on everything log models
-# Everything w. Disaster Indicator
-set.seed(123)
-everything_80train <- daily_full %>% 
-  select(all_of(predictors)) %>% 
-  mutate(disaster = if_else(year == '2021' & month %in% c('10', '11', '12'), 1, 0)) %>% 
-  filter(complete.cases(.)) %>%
-  slice_sample(prop = 0.8) 
-
-everything_20test <- anti_join(daily_full %>% 
-                               select(all_of(predictors)) %>% 
-                               mutate(disaster = if_else(year == '2021' & month %in% c('10', '11', '12'), 1, 0)) %>% 
-                               filter(complete.cases(.)),
-                               everything_80train)
-
-train <- everything_80train %>% 
-  mutate(H2S_daily_avg = log(H2S_daily_avg))
-
-train <- fastDummies::dummy_cols(train %>%
-                                   select(-c(day)) %>%
-                                   mutate(MinDist = 1/(MinDist^2),
-                                          dist_wrp = 1/(dist_wrp^2)),
-                                 remove_selected_columns = TRUE)
-
-test <- everything_20test  %>% 
-  mutate(H2S_daily_avg = log(H2S_daily_avg))
-
-test <- fastDummies::dummy_cols(test %>%
-                                  select(-c(day)) %>%
-                                  mutate(MinDist = 1/(MinDist^2),
-                                         dist_wrp = 1/(dist_wrp^2)),
-                                remove_selected_columns = TRUE)
-
-# 10 Fold for Everything models
-set.seed(90)
-folds_1 <- createFolds(which(train$disaster == 1), k = 10)
-folds_0 <- createFolds(which(train$disaster == 0), k = 10)
-folds <- list()
-for (i in 1:10){
-  folds <- append(folds, list(c(which(train$disaster == 1)[folds_1[[i]]], 
-                                which(train$disaster == 0)[folds_0[[i]]])))
-}
-
-# Separate trainControl for everything models, stratified sampling folds
-control_everything_8020 <- trainControl(method="cv", 
-                                   number=10,
-                                   indexOut = folds,
-                                   verboseIter=TRUE, 
-                                   search='grid',
-                                   savePredictions = 'final')
-
-fit.xgb_da_log_h2s_dis_ind_8020 <- train(H2S_daily_avg~.,
-                                    method = 'xgbTree',
-                                    data = train,
-                                    trControl=control_everything_8020,
-                                    tuneGrid = tune_grid,
-                                    tuneLength = 10, importance=TRUE, verbosity = 0, verbose=FALSE)
-saveRDS(fit.xgb_da_log_h2s_dis_ind_8020, 'rfiles/fit.xgb_da_log_h2s_dis_ind_8020.rds')
-
-# Everything w.o Disaster Indicator
-train <- train %>% select(-disaster)
-test <- test %>% select(-disaster)
-fit.xgb_da_log_h2s_full_8020 <- train(H2S_daily_avg~.,
-                                 method = 'xgbTree',
-                                 data = train,
-                                 trControl=control_everything_8020,
-                                 tuneGrid = tune_grid,
-                                 tuneLength = 10, importance=TRUE, verbosity = 0, verbose=FALSE)
-saveRDS(fit.xgb_da_log_h2s_full_8020, 'rfiles/fit.xgb_da_log_h2s_full_8020.rds')
+# # 80/20 split on everything log models
+# # Everything w. Disaster Indicator
+# set.seed(123)
+# everything_80train <- daily_full %>% 
+#   select(all_of(predictors)) %>% 
+#   mutate(disaster = if_else(year == '2021' & month %in% c('10', '11', '12'), 1, 0)) %>% 
+#   filter(complete.cases(.)) %>%
+#   slice_sample(prop = 0.8) 
+# 
+# everything_20test <- anti_join(daily_full %>% 
+#                                select(all_of(predictors)) %>% 
+#                                mutate(disaster = if_else(year == '2021' & month %in% c('10', '11', '12'), 1, 0)) %>% 
+#                                filter(complete.cases(.)),
+#                                everything_80train)
+# 
+# train <- everything_80train %>% 
+#   mutate(H2S_daily_avg = log(H2S_daily_avg))
+# 
+# train <- fastDummies::dummy_cols(train %>%
+#                                    select(-c(day)),
+#                                  remove_selected_columns = TRUE)
+# 
+# test <- everything_20test  %>% 
+#   mutate(H2S_daily_avg = log(H2S_daily_avg))
+# 
+# test <- fastDummies::dummy_cols(test %>%
+#                                   select(-c(day)),
+#                                 remove_selected_columns = TRUE)
+# 
+# # 10 Fold for Everything models
+# set.seed(90)
+# folds_1 <- createFolds(which(train$disaster == 1), k = 10)
+# folds_0 <- createFolds(which(train$disaster == 0), k = 10)
+# folds <- list()
+# for (i in 1:10){
+#   folds <- append(folds, list(c(which(train$disaster == 1)[folds_1[[i]]], 
+#                                 which(train$disaster == 0)[folds_0[[i]]])))
+# }
+# 
+# # Separate trainControl for everything models, stratified sampling folds
+# control_everything_8020 <- trainControl(method="cv", 
+#                                    number=10,
+#                                    indexOut = folds,
+#                                    verboseIter=TRUE, 
+#                                    search='grid',
+#                                    savePredictions = 'final')
+# 
+# fit.xgb_da_log_h2s_dis_ind_8020 <- train(H2S_daily_avg~.,
+#                                     method = 'xgbTree',
+#                                     data = train,
+#                                     trControl=control_everything_8020,
+#                                     tuneGrid = tune_grid,
+#                                     tuneLength = 10, importance=TRUE, verbosity = 0, verbose=FALSE)
+# saveRDS(fit.xgb_da_log_h2s_dis_ind_8020, 'rfiles/fit.xgb_da_log_h2s_dis_ind_8020.rds')
+# 
+# # Everything w.o Disaster Indicator
+# train <- train %>% select(-disaster)
+# test <- test %>% select(-disaster)
+# fit.xgb_da_log_h2s_full_8020 <- train(H2S_daily_avg~.,
+#                                  method = 'xgbTree',
+#                                  data = train,
+#                                  trControl=control_everything_8020,
+#                                  tuneGrid = tune_grid,
+#                                  tuneLength = 10, importance=TRUE, verbosity = 0, verbose=FALSE)
+# saveRDS(fit.xgb_da_log_h2s_full_8020, 'rfiles/fit.xgb_da_log_h2s_full_8020.rds')
 
 # Since Feb 2022 without meteorological
-train <- daily_full %>%
-  select(all_of(predictors_no_met)) %>%
-  filter(day >= '2022-01-31') %>%
-  mutate(H2S_daily_avg = log(H2S_daily_avg)) %>%
-  filter(complete.cases(.)) 
-
-train <- fastDummies::dummy_cols(train %>%
-                                   select(-c(day)) %>%
-                                   mutate(MinDist = 1/(MinDist^2),
-                                          dist_wrp = 1/(dist_wrp^2)),
-                                 remove_selected_columns = TRUE)
-
-fit.xgb_da_log_h2s_sincefeb2022_no_met <- train(H2S_daily_avg~.,
-                                           method = 'xgbTree',
-                                           data = train,
-                                           trControl=control,
-                                           tuneGrid = tune_grid,
-                                           tuneLength = 10, importance=TRUE, verbosity = 0, verbose=FALSE)
-saveRDS(fit.xgb_da_log_h2s_sincefeb2022_no_met, 'rfiles/fit.xgb_da_log_h2s_sincefeb2022_no_met.rds')
+# train <- daily_full %>%
+#   select(all_of(predictors_no_met)) %>%
+#   filter(day >= '2022-01-31') %>%
+#   mutate(H2S_daily_avg = log(H2S_daily_avg)) %>%
+#   filter(complete.cases(.)) 
+# 
+# train <- fastDummies::dummy_cols(train %>%
+#                                    select(-c(day)),
+#                                  remove_selected_columns = TRUE)
+# 
+# fit.xgb_da_log_h2s_sincefeb2022_no_met <- train(H2S_daily_avg~.,
+#                                            method = 'xgbTree',
+#                                            data = train,
+#                                            trControl=control,
+#                                            tuneGrid = tune_grid,
+#                                            tuneLength = 10, importance=TRUE, verbosity = 0, verbose=FALSE)
+# saveRDS(fit.xgb_da_log_h2s_sincefeb2022_no_met, 'rfiles/fit.xgb_da_log_h2s_sincefeb2022_no_met.rds')
 
 # Everything Models without meteorological
 
@@ -377,9 +354,7 @@ train <- everything_no_met %>%
   mutate(H2S_daily_avg = log(H2S_daily_avg))
 
 train <- fastDummies::dummy_cols(train %>%
-                                   select(-c(day)) %>%
-                                   mutate(MinDist = 1/(MinDist^2),
-                                          dist_wrp = 1/(dist_wrp^2)),
+                                   select(-c(day)),
                                  remove_selected_columns = TRUE)
 
 # 10 Fold for Everything models
@@ -409,61 +384,19 @@ fit.xgb_da_log_h2s_dis_ind_no_met <- train(H2S_daily_avg~.,
 saveRDS(fit.xgb_da_log_h2s_dis_ind_no_met, 'rfiles/fit.xgb_da_log_h2s_dis_ind_no_met.rds')
 
 # Everything w.o Disaster Indicator
-train <- everything_no_met %>% 
-  select(-disaster) %>%
-  mutate(H2S_daily_avg = log(H2S_daily_avg))
+# train <- everything_no_met %>% 
+#   select(-disaster) %>%
+#   mutate(H2S_daily_avg = log(H2S_daily_avg))
+# 
+# train <- fastDummies::dummy_cols(train %>%
+#                                    select(-c(day)),
+#                                  remove_selected_columns = TRUE)
+# 
+# fit.xgb_da_log_h2s_full_no_met <- train(H2S_daily_avg~.,
+#                                  method = 'xgbTree',
+#                                  data = train,
+#                                  trControl=control_everything_no_met,
+#                                  tuneGrid = tune_grid,
+#                                  tuneLength = 10, importance=TRUE, verbosity = 0, verbose=FALSE)
+# saveRDS(fit.xgb_da_log_h2s_full_no_met, 'rfiles/fit.xgb_da_log_h2s_full_no_met.rds')
 
-train <- fastDummies::dummy_cols(train %>%
-                                   select(-c(day)) %>%
-                                   mutate(MinDist = 1/(MinDist^2),
-                                          dist_wrp = 1/(dist_wrp^2)),
-                                 remove_selected_columns = TRUE)
-
-fit.xgb_da_log_h2s_full_no_met <- train(H2S_daily_avg~.,
-                                 method = 'xgbTree',
-                                 data = train,
-                                 trControl=control_everything_no_met,
-                                 tuneGrid = tune_grid,
-                                 tuneLength = 10, importance=TRUE, verbosity = 0, verbose=FALSE)
-saveRDS(fit.xgb_da_log_h2s_full_no_met, 'rfiles/fit.xgb_da_log_h2s_full_no_met.rds')
-
-# Without humidity
-# Everything w. Disaster Indicator
-everything_no_hum <- daily_full %>% 
-  select(all_of(predictors_no_hum)) %>% 
-  mutate(disaster = if_else(year == '2021' & month %in% c('10', '11', '12'), 1, 0)) %>% 
-  filter(complete.cases(.)) 
-
-train <- everything_no_hum %>% 
-  mutate(H2S_daily_avg = log(H2S_daily_avg))
-
-train <- fastDummies::dummy_cols(train %>%
-                                   select(-c(day)) %>%
-                                   mutate(MinDist = 1/(MinDist^2),
-                                          dist_wrp = 1/(dist_wrp^2)),
-                                 remove_selected_columns = TRUE)
-
-set.seed(90)
-folds_1 <- createFolds(which(train$disaster == 1), k = 10)
-folds_0 <- createFolds(which(train$disaster == 0), k = 10)
-folds <- list()
-for (i in 1:10){
-  folds <- append(folds, list(c(which(train$disaster == 1)[folds_1[[i]]], 
-                                which(train$disaster == 0)[folds_0[[i]]])))
-}
-
-# Separate trainControl for everything models, stratified sampling folds
-control_everything_no_hum <- trainControl(method="cv", 
-                                   number=10,
-                                   indexOut = folds,
-                                   verboseIter=TRUE, 
-                                   search='grid',
-                                   savePredictions = 'final')
-
-fit.xgb_da_log_h2s_dis_ind_no_hum <- train(H2S_daily_avg~.,
-                                    method = 'xgbTree',
-                                    data = train,
-                                    trControl=control_everything_no_hum,
-                                    tuneGrid = tune_grid,
-                                    tuneLength = 10, importance=TRUE, verbosity = 0, verbose=FALSE)
-saveRDS(fit.xgb_da_log_h2s_dis_ind_no_hum, 'rfiles/fit.xgb_da_log_h2s_dis_ind_no_hum.rds')
