@@ -58,6 +58,8 @@ top_3_blk_zip_graph <- ggplot() +
 
 top_3_blk_zip_graph
 
+ggsave('top_3_blk_zip_graph.png', plot = top_3_blk_zip_graph)
+
 write_csv(top_3_blk, 'top_3_blk_without_metero.csv')
 
 # We have 89 blocks here for 90 zip codes, as 90747 has only two blocks

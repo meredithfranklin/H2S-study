@@ -49,7 +49,7 @@ point_date <- rbind(disaster_dates, normal_dates) %>%
 # Sample request
 start_time <- Sys.time()
 get_url <- sprintf('https://timemachine.pirateweather.net/forecast/%s/%s,%s,%s?exclude=minutely,hourly',
-                   api, point_date$lat[1], point_date$lon[1], '2023-01-01T15:00:00Z')
+                   api, point_date$lat[80000], point_date$lon[80000], '1604270546')
 
 res = GET(get_url)
 end_time <- Sys.time()
