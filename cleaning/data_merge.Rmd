@@ -1,0 +1,753 @@
+---
+title: "Merge LA refinery data sets"
+author: "Jerry Wu"
+date: "12/12/2023"
+output:
+  html_document:
+    df_print: paged
+abstract: ''
+subtitle: ''
+editor_options: 
+  chunk_output_type: inline
+---
+
+```{r setup, include=FALSE}
+library(tidyverse)
+library(rgdal)
+library(sf)
+library(plotly)
+library(units)
+library(lwgeom)
+library(circular)
+library(raster)
+library(units)
+select <- dplyr::select
+```
+
+```{r}
+# load data sets
+full_data <- tibble()
+names <- c(ws = 'windSpeed', wd = 'windDirection', H2S = 'Value', QC.Code = 'qcCode',
+           Monitor = 'siteName', MinDist = 'NEAR_DIST')
+for (file in list.files('data/raw_csv')){
+  new_data <- read.csv(paste0('data/raw_csv/', file)) %>% rename(any_of(names))
+  print(sum(is.na(new_data$H2S)))
+  full_data <- bind_rows(full_data, new_data)
+}
+
+remove(new_data)
+gc()
+```
+
+# Compute date variables
+```{r}
+full_data <- full_data %>% 
+  mutate(DateTime = case_when(Monitor %in% c('North HS', 'West HS', 'Elm Ave') ~ parse_date_time(DateTime, 'ymd HMS'),
+                              .default = parse_date_time(DateTime, 'mdy HM'))) %>%
+  mutate(DateTime = as.POSIXct(DateTime, "%Y-%m-%d %H:%M:%OS", tz = 'UTC'))
+
+full_data <- full_data %>% 
+  mutate(day = as.POSIXct(format(DateTime, "%Y-%m-%d"), format="%Y-%m-%d", tz = 'UTC'))
+ 
+# Remove observations before 2020
+full_data <- full_data %>% filter(day > '2019-12-31') %>% distinct()
+ 
+full_data <- full_data %>% 
+  mutate(yearmonth = format(day, "%Y-%m"),
+         year = format(day, "%Y"),
+         month = format(day, "%m"),
+         weekday = relevel(factor(wday(full_data$day, label=TRUE), ordered = FALSE), ref = "Sun"))
+```
+
+# Add wind data for El Segundo and St Anthony
+```{r}
+klax_data <- read_csv('data/KLAX_2020-2023.csv', show_col_types = FALSE) %>% 
+  filter(!row_number() == 1)
+
+klax_daily <- klax_data %>%
+  group_by(Date) %>%
+  summarise(avg_temp = mean(as.numeric(air_temp), na.rm=T),
+            avg_hum = mean(as.numeric(relative_humidity), na.rm=T),
+            precip = precip_accum_24_hour[which(!is.na(precip_accum_24_hour))[1]],
+            ws = mean(as.numeric(wind_speed), na.rm=TRUE),
+            wd = as.numeric(mean(circular(as.numeric(wind_direction), units = 'degrees'), na.rm=TRUE))) %>%
+  mutate(precip = coalesce(as.numeric(precip), 0),
+         Date = parse_date_time(Date, c('m/d/y')),
+         Date = as.POSIXct(Date, "%Y-%m-%d", tz = 'UTC'),
+         wd = if_else(wd < 0, wd + 360, wd))
+
+full_data <- rbind(full_data %>% 
+                     filter(!(Monitor %in% c('El Segundo', 'St. Anthony'))), 
+                   full_data %>%
+                     select(-c(wd, ws)) %>%
+                     filter(Monitor %in% c('El Segundo', 'St. Anthony')) %>%
+                     left_join(klax_daily %>% select(Date, ws, wd), join_by(day == Date))) 
+```
+
+```{r}
+# Remove rows without wd or ws
+full_data <- full_data %>% 
+  drop_na(c("wd", "ws"))
+```
+
+
+```{r}
+# Check for duplicate time
+# full_data %>%
+#    group_by(DateTime, Monitor) %>%
+#    summarise(n = n()) %>%
+#    filter(n > 1)
+```
+We observe multiple rows for the same date time and monitor. 
+From a quick glance, this could be a conversion issue from Date.Time to DateTime, since the H2S measurements are different. 
+In other occasions, multiple rows exist as complements, where one row contains data on the missing values of the other.
+It also appears that some times we get different measurements for the same time when it's not daylight saving conversion days?
+
+- example: January 31, G Street, wd and ws are recorded more than once.
+```{r}
+# full_data %>%
+#     group_by(DateTime, Monitor) %>%
+#     summarise(n = n()) %>%
+#     filter(n > 1) %>%
+#     mutate(day = as.POSIXct(format(DateTime, "%Y-%m-%d"), format="%Y-%m-%d", tz = 'UTC')) %>%
+#     group_by(day, Monitor) %>%
+#     summarise(n = n())
+```
+
+
+```{r}
+# Deal with duplicate rows for same time
+
+# For the 213 monitor it seems like the duplicate rows are complements to the other
+#https://stackoverflow.com/questions/45515218/combine-rows-in-data-frame-containing-na-to-make-complete-row
+# coalesce_by_column <- function(df) {
+#   return(dplyr::coalesce(!!! as.list(df)))
+# }
+# 
+# data_213 <- full_data %>%
+#   filter(Monitor == '213th & Chico') %>%
+#   group_by(DateTime) %>%
+#   summarise_all(coalesce_by_column)
+# 
+# full_data <- full_data %>% 
+#   filter(Monitor != '213th & Chico') %>%
+#   rbind(data_213)
+```
+
+
+```{r}
+glimpse(full_data)
+```
+
+```{r}
+summary(full_data)
+```
+Some concerns for the data include:
+For TorranceAir_H2SWind, there are actually three sites, but only one site contains ws/wd information
+What's the difference between DateTime and Date/Time?
+DateTime would be the time after converting
+What's the difference between Date/Time and Date/Time.First? The latter is present in FirstMethodist
+For missing H2S, it could be missing due to mismatch from merging, or flagged due to issues such as low detection (minimm detection limit: 0.4)
+
+# Any additional cleaning
+```{r}
+# For Judson, it appeared that longitude had some significant figure issues
+full_data <- full_data %>%
+  mutate(longitude = case_when(Monitor == 'Judson' ~ -118.268128,
+                               Monitor == 'West HS' ~ -118.36836539131416,
+                               Monitor == 'Elm Ave' ~ -118.3316298600153,
+                               Monitor == 'North HS' ~ -118.33660803949037,
+                               Monitor == 'G Street' ~ -118.2818168,
+                               Monitor == 'Guenser Park' ~ -118.313499,
+                               Monitor == 'Harbor Park' ~ -118.286028,
+                               .default = longitude),
+         latitude = case_when(Monitor == 'West HS' ~ 33.85032033929173, 
+                               Monitor == 'Elm Ave' ~ 33.84048285612423,
+                               Monitor == 'North HS' ~ 33.86785391284254, 
+                               Monitor == 'G Street' ~ 33.77785794,
+                               Monitor == 'Guenser Park' ~ 33.869231,
+                               Monitor == 'Harbor Park' ~ 33.786252,
+                               .default = latitude))
+```
+
+```{r}
+# For observations below MDL, set it to half of MDL
+# As confirmed, MDL for all monitors is 0.4
+# Check how many observations are below MDL
+full_data %>%
+  group_by() %>%
+  summarise('Below MDL' = sum(full_data$H2S < 0.4, na.rm=T),
+            'Proportion' = sum(full_data$H2S < 0.4, na.rm=T) / n())
+
+full_data <- full_data %>%
+  mutate(H2S = if_else(H2S < 0.4, 0.2, H2S))
+```
+
+
+
+# Compute Daily Max H2S
+```{r}
+# Compute daily max
+# -Inf (all NA) is converted to NA for that day
+H2S_dm <- full_data %>%
+  group_by(day, Monitor) %>%
+  summarise(H2S_daily_max = max(H2S, na.rm = TRUE)) %>%
+  mutate(H2S_daily_max = if_else(H2S_daily_max == -Inf, NA, H2S_daily_max))
+
+full_data <- full_data %>%
+  left_join(H2S_dm, by = c('day', 'Monitor'))
+```
+
+# Compute Monthly Avearge H2S
+```{r}
+H2S_ma <- H2S_dm %>%
+  mutate(yearmonth = format(day, "%Y-%m")) %>%
+  group_by(yearmonth, Monitor) %>%
+  summarise(H2S_monthly_average = mean(H2S_daily_max, na.rm = TRUE))
+
+full_data <- full_data %>%
+  left_join(H2S_ma, by = c('yearmonth', 'Monitor'))
+
+remove(H2S_ma, H2S_dm)
+```
+
+# Compute daily average H2S
+```{r}
+# Compute daily average
+H2S_da <- full_data %>%
+  group_by(day, Monitor) %>%
+  summarise(H2S_daily_avg = mean(H2S, na.rm=TRUE))
+
+full_data <- full_data %>%
+  left_join(H2S_da, by = c('day', 'Monitor'))
+
+remove(H2S_da)
+```
+
+# Compute wind sector
+```{r}
+full_data <- full_data %>%
+  mutate(wd_sec = case_when(0 <= wd & wd < 90 ~ 'Q1',
+                            90 <= wd & wd < 180 ~ 'Q2',
+                            180 <= wd & wd < 270 ~ 'Q3',
+                            270 <= wd & wd <= 360 ~ 'Q4'))
+```
+
+# Water treatment plants
+```{r}
+la_wrp <- read_sf('shapefiles/LA_WRP.shp', layer = 'LA_WRP')
+
+CRS_UTM <- CRS("+proj=utm +zone=11 ellps=WGS84")
+
+# Convert both water treatment plants and monitor coordinates to UTM
+la_wrp <- st_transform(la_wrp, CRS_UTM)
+
+monitors <- full_data %>%
+  select(Monitor, latitude, longitude) %>%
+  distinct() %>% 
+  st_as_sf(coords = c('longitude', 'latitude')) %>% 
+  st_set_crs(4326) %>% 
+  st_transform(CRS_UTM)
+
+# get nearest wrp for each monitor
+monitor_wrp <- monitors %>% 
+  mutate(wrp_name = la_wrp$CWP_NAM[st_nearest_feature(monitors, la_wrp)],
+         dist_wrp = apply(st_distance(monitors, la_wrp), 1, min),
+         capacity = la_wrp$cpcty_m[st_nearest_feature(monitors, la_wrp)])
+
+# we also want to find the angle between the monitor and wrp
+angles <- tibble(monitors$geometry, la_wrp$geometry[st_nearest_feature(monitors, la_wrp)]) %>%
+  pivot_longer(cols = everything()) %>% 
+  pull(value) %>% # extract coordinates only
+  st_transform(4326) %>% # convert to lat/lon for function below
+  st_geod_azimuth() %>%
+  set_units('degrees') %>% # convert to degrees
+  drop_units()
+
+# angles <- tibble(locations$geometry, la_wrp$geometry[st_nearest_feature(locations, la_wrp)]) %>%
+#   pivot_longer(cols = everything()) %>% 
+#   pull(value) %>% # extract coordinates only
+#   st_transform(4326) %>% # convert to lat/lon for function below
+#   st_geod_azimuth() %>%
+#   set_units('degrees') %>% # convert to degrees
+#   drop_units()
+
+# angles <- tibble(locations$geometry, refineries$geometry[st_nearest_feature(locations, refineries)]) %>%
+#   pivot_longer(cols = everything()) %>%
+#   pull(value) %>% # extract coordinates only
+#   st_transform(4326) %>% # convert to lat/lon for function below
+#   st_geod_azimuth() %>%
+#   set_units('degrees') %>% # convert to degrees
+#   drop_units()
+
+angles <- angles[c(T, F)] # keep only odd index, valid pairs
+angles <- if_else(angles < 0, angles + 360, angles)
+
+monitor_wrp$wrp_angle <- angles
+
+full_data <- full_data %>%
+  left_join(tibble(monitor_wrp) %>% select(-geometry), join_by('Monitor'))
+```
+
+# Dominguez Channel
+```{r}
+# Read in the shape file, it already has a CRS
+st_read('shapefiles/DominguezChannel_Carson.shp')
+d_channel <- read_sf('shapefiles/DominguezChannel_Carson.shp', layer = 'DominguezChannel_Carson')
+d_channel <- st_transform(d_channel, CRS_UTM) # convert to UTM crs
+
+monitor_d_channel <- monitors %>%
+  mutate(dist_dc = apply(st_distance(monitors, d_channel), 1, min),
+         dist_213 = c(drop_units(st_distance(monitors, 
+                                             monitors[monitors$Monitor == '213th & Chico',]))))
+
+full_data <- full_data %>%
+  left_join(tibble(monitor_d_channel) %>% select(-geometry), join_by(Monitor))
+```
+
+```{r}
+dist_plot <- d_channel %>% 
+  ggplot() +
+  geom_sf() +
+  geom_sf(data = monitors) +
+  geom_sf_label(data = monitors %>% mutate(dist_dc = apply(st_distance(monitors, d_channel), 1, min)), 
+                aes(label = paste0(Monitor, ' ', round(dist_dc, 2)))) +
+  theme_minimal()
+
+dist_plot
+```
+
+```{r}
+remove(dist_plot, la_wrp, monitor_wrp, monitor_d_channel, d_channel)
+gc()
+```
+
+
+# Weather data from National Weather Service
+```{r}
+# klax_data <- read_csv('data/KLAX_2020-2023.csv', show_col_types = FALSE) %>% 
+#   filter(!row_number() == 1)
+ktoa_data <- read_csv('data/KTOA_2020-2023.csv', show_col_types = FALSE) %>% 
+  filter(!row_number() == 1)
+klgb_data <- read_csv('data/KLGB_2020-2023.csv', show_col_types = FALSE) %>% 
+  filter(!row_number() == 1)
+```
+
+```{r}
+# compute daily average temperature, humidity, and precipitation
+# klax_daily <- klax_data %>%
+#   group_by(Date) %>%
+#   summarise(avg_temp = mean(as.numeric(air_temp), na.rm=T),
+#             avg_hum = mean(as.numeric(relative_humidity), na.rm=T),
+#             precip = precip_accum_24_hour[which(!is.na(precip_accum_24_hour))[1]]) %>%
+#   mutate(precip = coalesce(as.numeric(precip), 0),
+#          Date = parse_date_time(Date, c('m/d/y')),
+#          Date = as.POSIXct(Date, "%Y-%m-%d", tz = 'UTC'))
+
+klax_daily <- klax_daily %>% 
+  select(-c(ws, wd))
+
+klgb_daily <- klgb_data %>%
+  group_by(Date) %>%
+  summarise(avg_temp = mean(as.numeric(air_temp), na.rm=T),
+            avg_hum = mean(as.numeric(relative_humidity), na.rm=T),
+            precip = precip_accum_24_hour[which(!is.na(precip_accum_24_hour))[1]]) %>%
+  mutate(precip = coalesce(as.numeric(precip), 0),
+         Date = parse_date_time(Date, c('m/d/y')),
+         Date = as.POSIXct(Date, "%Y-%m-%d", tz = 'UTC'))
+
+ktoa_daily <- ktoa_data %>%
+  group_by(Date) %>%
+  summarise(avg_temp = mean(as.numeric(air_temp), na.rm=T),
+            avg_hum = mean(as.numeric(relative_humidity), na.rm=T)) %>%
+  mutate(Date = parse_date_time(Date, c('m/d/y')),
+         Date = as.POSIXct(Date, "%Y-%m-%d", tz = 'UTC'))
+
+remove(klax_data, ktoa_data, klgb_data)
+
+# notice that the Torrance station is missing 10 days of observations
+# for that 10 days, use the long beach airport data as substitutes
+ktoa_daily <- bind_rows(ktoa_daily, 
+                        anti_join(klgb_daily,ktoa_daily, by = 'Date') %>% select(-precip))
+```
+
+
+```{r}
+# map each monitor to closest monitor
+weather_stations <- tibble(station = c('KLAX', 'KLGB', 'KTOA'),
+                           latitude = c(33.93806, 33.81167, 33.803979),
+                           longitude = c(-118.33194, -118.38889, -118.339432)) %>%
+  st_as_sf(coords = c('longitude', 'latitude')) %>% 
+  st_set_crs(4326)
+
+weather_stations <- st_transform(weather_stations, CRS_UTM)
+
+closest_temp_hum_station <- weather_stations$station[st_nearest_feature(monitors, weather_stations)]
+
+closest_precip_station <- weather_stations$station[st_nearest_feature(monitors, weather_stations %>% filter(station != 'KTOA'))]
+
+monitors_weather <- tibble(Monitor = monitors$Monitor, 
+                           weather_station = closest_temp_hum_station,
+                           closest_precip_station = closest_precip_station)
+
+weather_full <- bind_rows(klax_daily %>% select(-precip) %>% 
+                            mutate(weather_station = 'KLAX'),
+                          klgb_daily %>% select(-precip) %>% 
+                            mutate(weather_station = 'KLGB'),
+                          ktoa_daily %>% 
+                            mutate(weather_station = 'KTOA'))
+
+precip_full <- bind_rows(klax_daily %>% select(Date, precip) %>% 
+                            mutate(closest_precip_station = 'KLAX'),
+                          klgb_daily %>% select(Date, precip) %>% 
+                            mutate(closest_precip_station = 'KLGB'))
+
+full_data <- full_data %>%
+  left_join(monitors_weather, join_by('Monitor')) %>%
+  left_join(weather_full, join_by('day' == 'Date', 'weather_station')) %>%
+  left_join(precip_full, join_by('day' == 'Date', 'closest_precip_station'))
+
+remove(klax_daily, ktoa_daily, klgb_daily, precip_full, weather_full, 
+       monitors_weather, weather_stations)
+gc()
+```
+
+
+# Well production data
+```{r}
+well_prod <- read_csv('data/LA well prod Dec2023 Well Monthly Production.CSV', show_col_types = FALSE)
+full_well_info <- read_csv('data/well_active_inactive_prod_since_2000.CSV', show_col_types = FALSE)
+active_well_info <- read_csv('data/LA well prod Dec2023 Well Headers.CSV', show_col_types = FALSE)
+```
+
+```{r}
+inactive_well_info <- anti_join(full_well_info, active_well_info, join_by(API14)) %>%
+  rename(lon = `Surface Hole Longitude (WGS84)`,
+         lat = `Surface Hole Latitude (WGS84)`) %>%
+  select(`API14`, lon, lat) %>%
+  distinct() %>%
+  st_as_sf(coords = c('lon', 'lat')) %>% 
+  st_set_crs(4326) %>%
+  st_transform(CRS_UTM) 
+
+well_prod <- well_prod %>%
+  left_join(active_well_info, join_by(`API/UWI` == API14)) 
+
+well_prod <- well_prod %>%
+  select(`API/UWI`, `Monthly Production Date`, `Monthly Oil`, `Monthly Gas`, 
+         `Monthly Water`, `Monthly BOE`, Days, `Operator Company Name.x`, 
+         `Production Type.x`, `Well Status.x`, `Drill Type`, 
+         `Surface Hole Latitude (WGS84)`, `Surface Hole Longitude (WGS84)`) %>%
+  rename(lon = `Surface Hole Longitude (WGS84)`,
+         lat = `Surface Hole Latitude (WGS84)`)
+
+# project distinct well locations to UTM
+active_well_location <- well_prod %>%
+  select(`API/UWI`, lon, lat) %>%
+  distinct() %>%
+  st_as_sf(coords = c('lon', 'lat')) %>% 
+  st_set_crs(4326) %>%
+  st_transform(CRS_UTM) 
+
+# distance to closest monitor for each well
+monitor_active_wells <- tibble()
+for (i in 1:nrow(monitors)){
+  monitor_well_api <- drop_units(st_distance(monitors[i, ], active_well_location))
+  monitor_well_api <- active_well_location[which(monitor_well_api <= 2000), ] %>% st_drop_geometry()
+  monitor_active_wells <- rbind(monitor_active_wells, 
+                                tibble(Monitor = monitors[i, 1]$Monitor, 
+                                       API14 = monitor_well_api$`API/UWI`))
+}
+
+monitor_well_prod <- monitor_active_wells %>% 
+  left_join(well_prod, join_by(API14 == `API/UWI`)) %>%
+  group_by(Monitor, `Monthly Production Date`) %>%
+  summarise(active_2km = n(),
+            monthly_oil_2km = sum(`Monthly Oil`, na.rm = TRUE),
+            monthly_gas_2km = sum(`Monthly Gas`, na.rm = TRUE)) %>%
+  mutate(yearmonth = format(`Monthly Production Date`, '%Y-%m')) %>%
+  select(-`Monthly Production Date`)
+
+full_data <- full_data %>%
+  left_join(monitor_well_prod, join_by(Monitor, yearmonth)) %>%
+  mutate(active_2km = coalesce(active_2km, 0),
+            monthly_oil_2km = coalesce(monthly_oil_2km, 0),
+            monthly_gas_2km = coalesce(monthly_gas_2km, 0))
+
+monitor_inactive_wells <- tibble()
+for (i in 1:nrow(monitors)){
+  monitor_well_api <- drop_units(st_distance(monitors[i, ], inactive_well_info))
+  monitor_well_api <- inactive_well_info[which(monitor_well_api <= 2000), ] %>% st_drop_geometry()
+  monitor_inactive_wells <- rbind(monitor_inactive_wells, 
+                                  tibble(Monitor = monitors[i, 1]$Monitor, 
+                                         inactive_2km = nrow(monitor_well_api)))
+}
+
+full_data <- full_data %>%
+  left_join(monitor_inactive_wells, join_by(Monitor))
+```
+
+```{r}
+# get monthly production data at different distance levels (monitor to well)
+# prod_data <- list(
+#     well_prod %>% 
+#       filter(`1km` == TRUE) %>% 
+#       group_by(`Monthly Production Date`) %>% 
+#       summarise(active_1km = n(),
+#                 monthly_oil_1km = sum(`Monthly Oil`, na.rm = TRUE),
+#                 monthly_gas_1km = sum(`Monthly Gas`, na.rm = TRUE),
+#                 monthly_water_1km = sum(`Monthly Water`, na.rm = TRUE),
+#                 monthly_boe_1km = sum(`Monthly BOE`, na.rm = TRUE))
+#     ,
+#     well_prod %>% 
+#       filter(`2p5km` == TRUE) %>% 
+#       group_by(`Monthly Production Date`) %>% 
+#       summarise(active_2p5km = n(),
+#             monthly_oil_2p5km = sum(`Monthly Oil`, na.rm = TRUE),
+#             monthly_gas_2p5km = sum(`Monthly Gas`, na.rm = TRUE),
+#             monthly_water_2p5km = sum(`Monthly Water`, na.rm = TRUE),
+#             monthly_boe_2p5km = sum(`Monthly BOE`, na.rm = TRUE))
+#     ,
+#     well_prod %>% 
+#       filter(`5km` == TRUE) %>% 
+#       group_by(`Monthly Production Date`) %>% 
+#       summarise(active_5km = n(),
+#             monthly_oil_5km = sum(`Monthly Oil`, na.rm = TRUE),
+#             monthly_gas_5km = sum(`Monthly Gas`, na.rm = TRUE),
+#             monthly_water_5km = sum(`Monthly Water`, na.rm = TRUE),
+#             monthly_boe_5km = sum(`Monthly BOE`, na.rm = TRUE))
+#   ) %>%
+#   reduce(inner_join, by = 'Monthly Production Date') %>%
+#   mutate(yearmonth = format(`Monthly Production Date`, '%Y-%m'))
+# 
+# full_data <- full_data %>%
+#   left_join(prod_data, join_by(yearmonth))
+```
+
+```{r}
+# cleanup columns
+full_data <- full_data  %>%
+  select(-c('Date.Time', 'MDL', 'Unit', 'Averaging.Hour', 'Join_Count', 'siteId', 'unitName', 
+            'qcName', 'opName', 'windSpeed_Unit', 'windDirection_Unit', 'opCode', 'Source',
+            'DaylightSavings', 'QC.Code', 'wd_QCcode', 'ws_QCcode'))
+```
+
+# Downwind Indicator wrp Refinery
+```{r}
+# Create variable to indicate downwind wrt refinery
+wind_diff <- abs(full_data$Converted_Angle - 180 - full_data$wd)
+wind_diff <- ifelse(wind_diff > 180, 360 - wind_diff, wind_diff)
+full_data$downwind_ref <- as.integer(wind_diff <= 15)
+```
+
+# Downwind of wrp
+```{r}
+# Finally, check if wind direction is downwind w.r.t wrp
+wind_diff <- abs(full_data$wrp_angle - full_data$wd)
+wind_diff <- ifelse(wind_diff > 180, 360 - wind_diff, wind_diff)
+
+full_data$downwind_wrp <- as.integer(wind_diff <= 15)
+```
+
+# Compute UTM coordinates for monitors
+```{r}
+CRS_UTM <- CRS("+proj=utm +zone=11 ellps=WGS84")
+
+monitors <- full_data %>%
+  select(Monitor, latitude, longitude) %>%
+  distinct() %>% 
+  st_as_sf(coords = c('longitude', 'latitude')) %>% 
+  st_set_crs(4326) %>% 
+  st_transform(CRS_UTM)
+monitors <- tibble(Monitor = monitors$Monitor,
+                   mon_utm_x = st_coordinates(monitors)[,1],
+                   mon_utm_y = st_coordinates(monitors)[,2])
+
+full_data <- full_data %>%
+  left_join(monitors, join_by(Monitor))
+```
+
+```{r}
+# Compute daily average wd/ws
+daily_full <- full_data %>%
+  select(H2S_daily_max, H2S_daily_avg, H2S_monthly_average, ws, wd, latitude, 
+         longitude, mon_utm_x, mon_utm_y, Monitor, MinDist, 
+         Converted_Angle, Refinery, year, month, day, weekday, 
+         active_2km, monthly_oil_2km, monthly_gas_2km, inactive_2km,
+         dist_wrp, capacity, wrp_angle, dist_dc, dist_213,
+         avg_temp, avg_hum, precip) %>%
+  group_by(Monitor, day) %>%
+  mutate(ws_avg = mean(ws, na.rm=TRUE),
+         wd_avg = as.numeric(mean(circular(wd, units = 'degrees'), na.rm=TRUE))) %>%
+  mutate(wd_avg = if_else(wd_avg < 0, wd_avg+360, wd_avg)) %>%
+  ungroup() %>%
+  rename(monitor_lat = latitude, monitor_lon = longitude)  %>%
+  select(-c(wd, ws)) %>%
+  distinct()
+```
+
+```{r}
+# Get the downwind indicators for daily data
+wind_diff <- abs(daily_full$Converted_Angle - 180 - daily_full$wd_avg)
+wind_diff <- ifelse(wind_diff > 180, 360 - wind_diff, wind_diff)
+daily_full$daily_downwind_ref <- as.integer(wind_diff <= 15)
+
+wind_diff <- abs(daily_full$wrp_angle - daily_full$wd_avg)
+wind_diff <- ifelse(wind_diff > 180, 360 - wind_diff, wind_diff)
+
+daily_full$daily_downwind_wrp <- as.integer(wind_diff <= 15)
+```
+
+
+# Get monitor locations
+```{r}
+monitors_coord <- full_data %>%
+  select(Monitor, latitude, longitude) %>%
+  distinct()
+
+monitors <- monitors_coord %>%
+  select(Monitor)
+  
+coordinates(monitors_coord) <- ~ longitude + latitude
+```
+
+# Load in elevation data
+```{r}
+elevation <- raster('shapefiles/N33W119.hgt')
+
+monitors <- cbind(monitors, extract(elevation, monitors_coord)) %>%
+  as.data.frame() %>%
+  rename(elevation = 2)
+```
+
+# Load in EVI data
+```{r}
+#evi <- raster('shapefiles/MOD13Q1.061__250m_16_days_EVI_doy2023145_aid0001.tif')
+evi <- raster('shapefiles/MOD13Q1.006__250m_16_days_EVI_doy2022177_aid0001.tif')
+monitors <- cbind(monitors, extract(evi, monitors_coord) * 0.0001) %>%
+  as.data.frame() %>%
+  rename(EVI = 3)
+```
+
+# Merge EVI and elevation to data
+```{r}
+full_data <- full_data %>%
+  left_join(monitors, join_by(Monitor))
+
+daily_full <- daily_full %>%
+  left_join(monitors, join_by(Monitor))
+```
+
+# Merge Odor Complaint data
+```{r}
+odor <- read_csv('data/odorcomplaintdata_2018_2023.csv')
+la_county <- read_sf('shapefiles/Zip_Codes_(LA_County)/Zip_Codes_(LA_County).shp')
+```
+
+```{r}
+# https://gis.stackexchange.com/questions/282750/identify-polygon-containing-point-with-r-sf-package
+pnts_sf <- do.call("st_sfc",c(lapply(1:nrow(monitors_coord@coords), 
+function(i) {st_point(as.numeric(monitors_coord@coords[i, ]))}), list("crs" = 4326))) 
+
+pnts_trans <- st_transform(pnts_sf, CRS_UTM) # apply transformation to pnts sf
+la_county_trans <- st_transform(la_county, CRS_UTM)      # apply transformation to polygons sf
+
+# intersect and extract state name
+monitors_coord@data$county <- apply(st_intersects(la_county_trans, pnts_trans, sparse = FALSE), 2, 
+               function(col) { 
+                  la_county_trans[which(col), ]$ZIPCODE
+               })
+```
+
+```{r}
+library(ggrepel)
+# Plot results to double check
+la_county_present <- la_county[la_county$ZIPCODE %in% unique(monitors_coord$county), ]
+
+monitor_zip <- tibble(Monitor = monitors_coord@data$Monitor,
+                      zip = monitors_coord@data$county,
+                      longitude = monitors_coord@coords[,1],
+                      latitude = monitors_coord@coords[,2])
+
+monitor_zip_graph <- ggplot() +
+  geom_sf(data = la_county_present, aes(fill = ZIPCODE)) +
+  geom_point(data = monitor_zip, 
+             aes(x = longitude, y = latitude))
+
+monitor_zip_graph + 
+  geom_label_repel(data = monitor_zip, aes(x = longitude, y = latitude, label = Monitor),
+                  box.padding   = 0.35, 
+                  point.padding = 0.5,
+                  segment.color = 'grey50') +
+  theme_minimal()
+```
+
+```{r}
+odor <- odor[odor$zip %in% unique(monitors_coord$county), ]
+
+monitor_odor <- monitors_coord@data %>%
+  left_join(odor %>% mutate(zip = as.character(zip)), join_by(county == zip)) %>%
+  select(-`...1`)
+
+full_data <- full_data %>%
+  left_join(monitors_coord@data, join_by(Monitor))
+
+daily_full <- daily_full %>%
+  left_join(monitors_coord@data, join_by(Monitor))
+
+full_data <- full_data %>%
+  left_join(monitor_odor %>% select(Monitor, date, num_odor_complaints), join_by(Monitor, day == date))
+
+full_data <- full_data %>%
+  mutate(num_odor_complaints = coalesce(num_odor_complaints, 0))
+
+daily_full <- daily_full %>%
+  left_join(monitor_odor %>% select(Monitor, date, num_odor_complaints), join_by(Monitor, day == date))
+
+daily_full <- daily_full %>%
+  mutate(num_odor_complaints = coalesce(num_odor_complaints, 0))
+```
+
+```{r}
+odor_graph <- odor %>%
+  filter(zip %in% unique(monitors_coord$county)) %>%
+  mutate(zip = as.character(zip)) %>%
+   ggplot(aes(x=date, y=num_odor_complaints, group=zip, color=zip)) +
+   geom_line() +
+   labs(title = "Number of odor complaints over time", y = 'Number of odor complaints', x = 'time') +
+   theme_minimal() +
+   theme(axis.text.x = element_text(angle = 45))
+
+ggplotly(odor_graph) %>% layout(dragmode = 'pan')
+```
+
+```{r}
+odor_graph_b <- odor %>%
+  filter(zip %in% unique(monitors_coord$county)) %>%
+  mutate(zip = as.character(zip)) %>%
+   ggplot(aes(x=date, y=num_odor_complaints, group=zip, color=zip)) +
+   geom_line() +
+   labs(title = "Number of odor complaints over time w/o outliers", y = 'Number of odor complaints', x = 'time') +
+   scale_y_continuous(limits = c(0, 30)) +  
+   theme_minimal() +
+   theme(axis.text.x = element_text(angle = 45))
+
+ggplotly(odor_graph_b) %>% layout(dragmode = 'pan')
+```
+
+
+```{r}
+saveRDS(full_data, 'data/full_data.rds')
+saveRDS(daily_full, 'data/daily_full.rds')
+```
+
+```{r}
+remove(la_county, la_county_present, la_county_trans, monitor_odor, monitor_zip,
+       monitor_zip_graph, monitors, monitor_coord, odor, odor_graph, odor_graph_b,
+       pnts_sf, pnts_trans, elevation, evi)
+gc()
+```
+
+
+# Other issues
+- Seems like for Torrance Refinery, the three monitors had different locations recorded at first, but stayed the same for many observations.
