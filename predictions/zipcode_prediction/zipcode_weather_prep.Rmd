@@ -16,7 +16,7 @@ library(circular)
 
 # Load in data
 ```{r}
-top_3_blk <- read_csv('top_3_blk_without_metero.csv')
+top_3_blk <- read_csv('top_3_blk_without_meteo.csv')
 ```
 
 ```{r}
@@ -80,33 +80,105 @@ top_3_blk <- read_csv('top_3_blk_without_metero.csv')
 ```
 
 ```{r}
-hourly_result <- read_csv('top_3_blk_hourly_with_meteo.csv')
+# hourly_result <- read_csv('top_3_blk_hourly_with_meteo.csv')
+# 
+# daily_result <- hourly_result %>%
+#   mutate(date = as.POSIXct(hourly)) %>%
+#   mutate(day = format(date, "%Y-%m-%d"))
+# 
+# remove(hourly_result)
+# 
+# daily_result$hourly_wd <- as.numeric(daily_result$hourly_wd)
+# 
+# daily_result <- daily_result %>%
+#   group_by(latitude, longitude, day) %>%
+#   summarise(daily_temp = mean(hourly_temp, na.rm = T),
+#             daily_hum = mean(hourly_hum, na.rm = T),
+#             daily_precip = sum(hourly_precip, na.rm = T),
+#             daily_ws = mean(hourly_ws, na.rm = T),
+#             daily_wd = as.numeric(mean(circular(hourly_wd, units = 'degrees'), na.rm=TRUE)))
+# 
+# daily_result <- daily_result %>%
+#   ungroup() %>%
+#   mutate(day = as.POSIXct(day),
+#          daily_wd = if_else(daily_wd < 0, daily_wd + 360, daily_wd),
+#          yearmonth = format(day, "%Y-%m"),
+#          year = format(day, "%Y"),
+#          month = format(day, "%m"),
+#          weekday = relevel(factor(wday(daily_result$day, label=TRUE), ordered = FALSE), ref = "Sun"))
+# 
+# write_csv(daily_result, 'top_3_blk_daily_with_meteo.csv')
+```
 
-daily_result <- hourly_result %>%
-  mutate(date = as.POSIXct(hourly)) %>%
-  mutate(day = format(date, "%Y-%m-%d"))
+```{r}
+top_3_blk_daily_with_meteo <- read_csv('top_3_blk_daily_with_meteo.csv')
+# 
+# # Compare to pirate weather
+# api <- '4Q7hFEmsDjk3orhrP46zKtmQ0BMGYw9s'
+# 
+# top_3_blk_with_date <- top_3_blk %>%
+#   cross_join(tibble(day = seq(as.POSIXct('2018-01-01', tz = 'America/Los_Angeles'), as.POSIXct('2022-12-31', tz = 'America/Los_Angeles'),"days"))) %>%
+#   mutate(unix = as.numeric(day))
+# 
+# set.seed(123)
+# top_3_blk_sample <- top_3_blk_with_date %>%
+#   sample_n(200)
+# 
+# top_3_blk_sample_temp <- read_csv('top_3_blk_sample.csv')
+# 
+# result_tibble1 <- tibble(rowid = numeric(),
+#                         avg_temp = numeric(),
+#                         wd_avg = numeric(),
+#                         ws_avg = numeric(),
+#                         precip = numeric(),
+#                         dewpoint = numeric(),
+#                         hum = numeric())
+# # loop through rows
+# for (i in 1:nrow(top_3_blk_sample)){
+#   get_url <- sprintf('https://timemachine.pirateweather.net/forecast/%s/%s,%s,%s?exclude=minutely,hourly',
+#                    api, top_3_blk_sample$INTPTLAT[i], top_3_blk_sample$INTPTLON[i], top_3_blk_sample$unix[i])
+#   res = GET(get_url)
+#   data = fromJSON(rawToChar(res$content))
+#   if (typeof(data) == 'character') {
+#     result_tibble1 <- rbind(result_tibble1, tibble(rowid = i, avg_temp = NA, wd_avg = NA, ws_avg = NA, precip = NA, dewpoint = NA, hum = NA))
+#   } else if (is.null(data$daily)) {
+#     result_tibble1 <- rbind(result_tibble1, tibble(rowid = i, avg_temp = NA, wd_avg = NA, ws_avg = NA, precip = NA, dewpoint = NA, hum = NA))
+#   } else {
+#     result_tibble1 <- rbind(result_tibble1, tibble(rowid = i,
+#                                                  avg_temp = mean(data$daily$data$temperatureHigh, data$daily$data$temperatureLow),
+#                                                  wd_avg = data$daily$data$windBearing,
+#                                                  ws_avg = data$daily$data$windSpeed,
+#                                                  precip = data$daily$data$precipAccumulation,
+#                                                  dewpoint = data$daily$data$dewPoint) %>%
+#                                               mutate(hum = 100 * (exp((17.625 * (dewpoint - 32) * (5/9)) / (243.04 + (dewpoint - 32) * (5/9)))
+#                                                                        / exp((17.625 * (avg_temp - 32) * (5/9)) / (243.04 + (avg_temp - 32) * (5/9))))))
+#   }
+#   print(sprintf("Row %s completed", i))
+#   if (i %% 10 == 0) {write_csv(cbind(top_3_blk_sample[1:i, ], result_tibble1), 'top_3_blk_sample_temp.csv')}
+# }
+# 
+# top_3_blk_sample <- cbind(top_3_blk_sample, result_tibble1)
+# 
+# write_csv(top_3_blk_sample, 'top_3_blk_sample_result.csv')
+```
 
-remove(hourly_result)
+```{r}
+# comparisons
+top_3_blk_sample_result <- read_csv('top_3_blk_sample_result.csv')
 
-daily_result$hourly_wd <- as.numeric(daily_result$hourly_wd)
+top_3_blk_sample_result <- top_3_blk_sample_result %>%
+  mutate(day = format(day, "%Y-%m-%d"))
 
-daily_result <- daily_result %>%
-  group_by(latitude, longitude, day) %>%
-  summarise(daily_temp = mean(hourly_temp, na.rm = T),
-            daily_hum = mean(hourly_hum, na.rm = T),
-            daily_precip = sum(hourly_precip, na.rm = T),
-            daily_ws = mean(hourly_ws, na.rm = T),
-            daily_wd = as.numeric(mean(circular(hourly_wd, units = 'degrees'), na.rm=TRUE)))
+comp <- top_3_blk_sample_result %>% 
+  left_join(top_3_blk_daily_with_meteo %>% mutate(day = format(day, "%Y-%m-%d")), join_by(INTPTLAT == latitude, INTPTLON == longitude, day)) %>%
+  mutate(temp_diff = avg_temp - daily_temp,
+         wd_diff = wd_avg - daily_wd,
+         ws_diff = ws_avg - daily_ws,
+         precip_diff = precip - daily_precip,
+         hum_diff = hum - daily_hum)
 
-daily_result <- daily_result %>%
-  ungroup() %>%
-  mutate(day = as.POSIXct(day),
-         daily_wd = if_else(daily_wd < 0, daily_wd + 360, daily_wd),
-         yearmonth = format(day, "%Y-%m"),
-         year = format(day, "%Y"),
-         month = format(day, "%m"),
-         weekday = relevel(factor(wday(daily_result$day, label=TRUE), ordered = FALSE), ref = "Sun"))
-
-write_csv(daily_result, 'top_3_blk_daily_with_meteo.csv')
+comp %>% 
+  select(temp_diff, wd_diff, ws_diff, precip_diff, hum_diff) %>%
+  summary()
 ```
 

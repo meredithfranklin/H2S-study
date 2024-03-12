@@ -22,6 +22,7 @@ library(htmlwidgets)
 library(fontawesome) 
 library(units)
 library(lwgeom)
+library(magick)
 select <- dplyr::select
 ```
 
@@ -367,4 +368,6 @@ zipcode_result <- zipcode_data %>%
 
 write_csv(zipcode_result, 'zipcode_result.csv')
 ```
+
+
 

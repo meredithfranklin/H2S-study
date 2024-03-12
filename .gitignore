@@ -4,3 +4,5 @@
 .Ruserdata
 data/raw_csv/TorranceAir_Merged_H2SWind.csv
 nhgis0001_csv/nhgis0001_ds258_2020_block.csv
+predictions/zipcode_prediction/top_3_blk_hourly_with_meteo.csv
+predictions/zipcode_prediction/nhgis0001_csv/nhgis0001_ds258_2020_block.csv

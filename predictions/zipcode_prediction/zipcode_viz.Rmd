@@ -1,0 +1,84 @@
+---
+title: "Zipcode Visualisations"
+author: "Jerry Wu"
+date: "2023-12-12"
+output: html_document
+editor_options: 
+  chunk_output_type: inline
+---
+
+```{r setup, include=FALSE}
+library(tidyverse)
+library(sf)
+library(stars)
+library(ggspatial)
+library(KernSmooth)
+library(rgdal)
+library(mgcv)
+library(raster)
+library(caret)
+library(leaflet)
+library(htmlwidgets)
+library(fontawesome) 
+library(units)
+library(lwgeom)
+library(magick)
+select <- dplyr::select
+```
+
+```{r}
+# load in data
+zipcode_result <- read_csv('zipcode_result.csv')
+```
+
+```{r}
+# clean to zipcode averages
+zipcode_result_clean <- zipcode_result %>%
+  group_by(zipcode, day) %>%
+  summarise(daily_h2s_predict = mean(daily_h2s_predict))
+
+CRS_UTM <- CRS("+proj=utm +zone=11 ellps=WGS84")
+CRS_LL <- CRS("+proj=longlat +datum=WGS84")
+
+la_county <- read_sf('../../shapefiles/Zip_Codes_(LA_County)/Zip_Codes_(LA_County).shp')
+
+la_county <- st_transform(la_county, CRS_UTM)
+
+zipcode_result_clean <- zipcode_result_clean %>%
+  left_join(la_county %>% select(ZIP, geometry), join_by(zipcode == ZIP))
+
+zipcode_result_clean <- zipcode_result_clean %>%
+  st_as_sf() %>%
+  st_set_crs(CRS_UTM)
+  
+zipcode_result_clean <- zipcode_result_clean %>%
+  mutate(day = format(day, "%Y-%m-%d"))
+
+ramp1 <- colorRampPalette(colors = c("blue", "green"), space = "Lab")(25)
+ramp2 <- colorRampPalette(colors = c("green", "yellow"), space = "Lab")(35)
+ramp3 <- colorRampPalette(colors = c("yellow", "red"), space = "Lab")(24040)
+ramp <- c(ramp1, ramp2, ramp3)
+
+monitor_zip_graph <- ggplot() +
+  geom_sf(data = zipcode_result_clean[zipcode_result_clean$day == '2021-10-07',], aes(fill = daily_h2s_predict)) +
+  scale_fill_gradientn(colors = ramp, 
+                       values = c(0, 
+                                  scales::rescale(seq(0, 24), to = c(0, 0.70)),
+                                  scales::rescale(seq(25, 59), to = c(0.70, 0.9)),
+                                  scales::rescale(seq(60, 24100), to = c(0.90, 1))),
+                       labels = c("0", "0.25", "0.6", "241"),
+                       breaks = c(0.0, 0.7*241, 0.9*241, 241.0),
+                       limits = c(0, 241), 
+                       trans = 'pseudo_log',
+                       guide = guide_colourbar(title = 'Daily\nH2s')) +
+  theme(legend.position = c(.95, .05), legend.justification = c(0, 0),
+        legend.direction = 'vertical', legend.background = element_blank(),
+        legend.key.height = unit(0.85, 'cm'),
+        legend.key.width = unit(4, 'mm'),
+        axis.text = element_blank(),
+        axis.title = element_blank(),
+        axis.ticks = element_blank(),
+        panel.border = element_blank())
+monitor_zip_graph
+```
+
