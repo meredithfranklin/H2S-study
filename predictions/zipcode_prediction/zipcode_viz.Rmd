@@ -54,31 +54,31 @@ zipcode_result_clean <- zipcode_result_clean %>%
 zipcode_result_clean <- zipcode_result_clean %>%
   mutate(day = format(day, "%Y-%m-%d"))
 
-ramp1 <- colorRampPalette(colors = c("blue", "green"), space = "Lab")(25)
-ramp2 <- colorRampPalette(colors = c("green", "yellow"), space = "Lab")(35)
-ramp3 <- colorRampPalette(colors = c("yellow", "red"), space = "Lab")(24040)
+zipcode_result_clean <- zipcode_result_clean %>%
+  mutate(daily_h2s_predict_100x = 100 * daily_h2s_predict)
+
+ramp1 <- colorRampPalette(colors = c("blue", "green"), space = "Lab")(100)
+ramp2 <- colorRampPalette(colors = c("green", "yellow"), space = "Lab")(250)
+ramp3 <- colorRampPalette(colors = c("yellow", "red"), space = "Lab")(23750)
 ramp <- c(ramp1, ramp2, ramp3)
 
-monitor_zip_graph <- ggplot() +
-  geom_sf(data = zipcode_result_clean[zipcode_result_clean$day == '2021-10-07',], aes(fill = daily_h2s_predict)) +
-  scale_fill_gradientn(colors = ramp, 
-                       values = c(0, 
-                                  scales::rescale(seq(0, 24), to = c(0, 0.70)),
-                                  scales::rescale(seq(25, 59), to = c(0.70, 0.9)),
-                                  scales::rescale(seq(60, 24100), to = c(0.90, 1))),
-                       labels = c("0", "0.25", "0.6", "241"),
-                       breaks = c(0.0, 0.7*241, 0.9*241, 241.0),
+days <- unique(zipcode_result_clean$day)
+
+pngs <- c()
+for (i in 1:length(days)) {
+  plot <- ggplot() +
+    geom_sf(data = zipcode_result_clean[zipcode_result_clean$day == days[i],], aes(fill = daily_h2s_predict)) +
+    scale_fill_gradientn(colors = ramp, 
                        limits = c(0, 241), 
-                       trans = 'pseudo_log',
-                       guide = guide_colourbar(title = 'Daily\nH2s')) +
-  theme(legend.position = c(.95, .05), legend.justification = c(0, 0),
-        legend.direction = 'vertical', legend.background = element_blank(),
-        legend.key.height = unit(0.85, 'cm'),
-        legend.key.width = unit(4, 'mm'),
-        axis.text = element_blank(),
-        axis.title = element_blank(),
-        axis.ticks = element_blank(),
-        panel.border = element_blank())
-monitor_zip_graph
+                       guide = "none",
+                       oob = scales::squish) +
+    labs(title = days[i])
+  ggsave(filename = paste0("daily_zipcode_map/map-", days[i], ".png"), height = 5.75, width = 6, dpi = 450)
+  png <- image_read(paste0("daily_zipcode_map/map-", days[i], ".png"))
+  pngs <- append(pngs, plot_png)
+}
+image_append(image_scale(plots, "x200"))
+my.animation<-image_animate(image_scale(plots, "400x400"), fps = 10, dispose = "previous")
+image_write(my.animation, "zipcode_map.gif")
 ```
 
