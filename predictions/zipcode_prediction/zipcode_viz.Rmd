@@ -73,12 +73,19 @@ for (i in 1:length(days)) {
                        guide = "none",
                        oob = scales::squish) +
     labs(title = days[i])
-  ggsave(filename = paste0("daily_zipcode_map/map-", days[i], ".png"), height = 5.75, width = 6, dpi = 450)
+  ggsave(filename = paste0("daily_zipcode_map/map-", days[i], ".png"), height = 4, width = 4, dpi = 200)
   png <- image_read(paste0("daily_zipcode_map/map-", days[i], ".png"))
-  pngs <- append(pngs, plot_png)
+  pngs <- append(pngs, png)
 }
-image_append(image_scale(plots, "x200"))
-my.animation<-image_animate(image_scale(plots, "400x400"), fps = 10, dispose = "previous")
+
+for (i in 1:length(days)) {
+  png <- image_read(paste0("daily_zipcode_map/map-", days[i], ".png"))
+  pngs <- append(pngs, png)
+  print(paste0(days[i], ' completed'))
+  
+}
+image_append(image_scale(pngs, "x200"))
+my.animation<-image_animate(image_scale(pngs, "400x400"), fps = 25, dispose = "previous")
 image_write(my.animation, "zipcode_map.gif")
 ```
 

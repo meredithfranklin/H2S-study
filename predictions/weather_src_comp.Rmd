@@ -1,0 +1,425 @@
+---
+title: "Weather compare"
+author: "Jerry Wu"
+date: "2024-03-18"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(httr)
+library(jsonlite)
+library(sf)
+library(circular)
+```
+
+# Load in data
+```{r}
+# KLAX
+klax_data <- read_csv('../data/KLAX_2020-2023.csv', show_col_types = FALSE) %>% 
+  filter(!row_number() == 1)
+ktoa_data <- read_csv('../data/KTOA_2020-2023.csv', show_col_types = FALSE) %>% 
+  filter(!row_number() == 1)
+klgb_data <- read_csv('../data/KLGB_2020-2023.csv', show_col_types = FALSE) %>% 
+  filter(!row_number() == 1)
+
+klax_daily <- klax_data %>%
+  group_by(Date) %>%
+  summarise(avg_temp = mean(as.numeric(air_temp), na.rm=T),
+            avg_hum = mean(as.numeric(relative_humidity), na.rm=T),
+            precip = precip_accum_24_hour[which(!is.na(precip_accum_24_hour))[1]]) %>%
+  mutate(precip = coalesce(as.numeric(precip), 0),
+         Date = parse_date_time(Date, c('m/d/y')),
+         Date = as.POSIXct(Date, "%Y-%m-%d", tz = 'UTC'),
+         lat = 33.93806,
+         lon = -118.38889)
+
+klgb_daily <- klgb_data %>%
+  group_by(Date) %>%
+  summarise(avg_temp = mean(as.numeric(air_temp), na.rm=T),
+            avg_hum = mean(as.numeric(relative_humidity), na.rm=T),
+            precip = precip_accum_24_hour[which(!is.na(precip_accum_24_hour))[1]]) %>%
+  mutate(precip = coalesce(as.numeric(precip), 0),
+         Date = parse_date_time(Date, c('m/d/y')),
+         Date = as.POSIXct(Date, "%Y-%m-%d", tz = 'UTC'),
+         lat = 33.81167,
+         lon = -118.14639)
+
+ktoa_daily <- ktoa_data %>%
+  group_by(Date) %>%
+  summarise(avg_temp = mean(as.numeric(air_temp), na.rm=T),
+            avg_hum = mean(as.numeric(relative_humidity), na.rm=T)) %>%
+  mutate(Date = parse_date_time(Date, c('m/d/y')),
+         Date = as.POSIXct(Date, "%Y-%m-%d", tz = 'UTC'),
+         lat = 33.92361,
+         lon = -118.33194,
+         precip = NA)
+
+remove(klax_data, ktoa_data, klgb_data)
+airport_full_daily <- rbind(klax_daily, klgb_daily, ktoa_daily)
+```
+
+```{r}
+# Randomly select 50% of dates between Nov to end of Feb
+dates <- seq(as.Date('2020-01-01'), as.Date('2022-12-31'), by = 'day')
+
+dates <- dates[format(dates, '%m') %in% c('11', '12', '01', '02')]
+
+airport_nov_to_feb <- airport_full_daily %>%
+  filter(Date %in% dates)
+
+set.seed(123)
+airport_nov_to_feb_sample <- airport_nov_to_feb %>%
+  sample_n(300)
+
+airport_nov_to_feb_sample <- airport_nov_to_feb_sample %>%
+  mutate(unix = as.numeric(as.POSIXct(as.character(Date), tz = 'America/Los_Angeles')))
+```
+
+
+```{r}
+# # Code to fetch weather data
+# hourly_result <- tibble(latitude = numeric(),
+#                  longitude = numeric(),
+#                  hourly = numeric(),
+#                  hourly_temp = numeric(),
+#                  hourly_hum = numeric(),
+#                  hourly_precip = numeric(),
+#                  hourly_ws = numeric(),
+#                  hourly_wd = numeric())
+# counter <- 0
+# start_time_60s <- Sys.time()
+# start_time_60m <- Sys.time()
+# 
+# station_loc <- airport_nov_to_feb_sample %>%
+#   select(lon, lat) %>%
+#   distinct()
+# 
+# for (i in 1:3) {
+# 
+#   # In order to follow the 600 calls per minute restriction from open-meteo
+#   if (counter != 0 && counter %% 9 == 0) {
+#     end_time <- Sys.time()
+#     sec_until_60s <- 60 - (as.numeric(end_time) - as.numeric(start_time_60s))
+#     print(paste0('Completed ', counter, ' coordinates'))
+#     print(paste0('Waiting ', sec_until_60s, ' seconds'))
+#     Sys.sleep(sec_until_60s + 3) # give 3s buffer
+#     start_time_60s <- Sys.time()
+#   }
+# 
+#   # In order to follow the 5000 calls per hour restriction from open-meteo
+#   if (counter != 0 && counter %% 55 == 0) {
+#     end_time <- Sys.time()
+#     sec_until_60m <- 3600 - (as.numeric(end_time) - as.numeric(start_time_60m))
+#     print(paste0('Completed ', counter, ' coordinates'))
+#     print(paste0('Waiting ', sec_until_60m, ' seconds'))
+#     Sys.sleep(sec_until_60m + 30) # give 30s buffer
+#     start_time_60m <- Sys.time()
+#   }
+# 
+# 
+# 
+#   counter <- counter + 1
+# 
+# 
+#     get_url <- sprintf("https://archive-api.open-meteo.com/v1/archive?latitude=%s&longitude=%s&start_date=2020-01-01&end_date=2022-12-31&hourly=temperature_2m,relative_humidity_2m,precipitation,wind_speed_10m,wind_direction_10m&temperature_unit=fahrenheit&wind_speed_unit=mph&precipitation_unit=inch&timezone=America%%2FLos_Angeles",
+#                        station_loc$lat[i], station_loc$lon[i])
+#   res = GET(get_url)
+#   data = fromJSON(rawToChar(res$content))
+#   hourly_result <- rbind(hourly_result,
+#                          tibble(latitude = station_loc$lat[i],
+#                                 longitude = station_loc$lon[i],
+#                                 elevation = data$elevation,
+#                                 hourly = data$hourly$time,
+#                                 hourly_temp = data$hourly$temperature_2m,
+#                                 hourly_hum = data$hourly$relative_humidity_2m,
+#                                 hourly_precip = data$hourly$precipitation,
+#                                 hourly_ws = data$hourly$wind_speed_10m,
+#                                 hourly_wd = data$hourly$wind_direction_10m))
+# }
+# 
+# write_csv(hourly_result, 'station_weather_om_hourly.csv')
+```
+
+```{r}
+hourly_result <- read_csv('station_weather_om_hourly.csv')
+
+daily_result <- hourly_result %>%
+  mutate(date = as.POSIXct(hourly)) %>%
+  mutate(day = format(date, "%Y-%m-%d"))
+
+remove(hourly_result)
+
+daily_result$hourly_wd <- as.numeric(daily_result$hourly_wd)
+
+daily_result <- daily_result %>%
+  group_by(latitude, longitude, day) %>%
+  summarise(daily_temp = mean(hourly_temp, na.rm = T),
+            daily_hum = mean(hourly_hum, na.rm = T),
+            daily_precip = sum(hourly_precip, na.rm = T),
+            daily_ws = mean(hourly_ws, na.rm = T),
+            daily_wd = as.numeric(mean(circular(hourly_wd, units = 'degrees'), na.rm=TRUE)))
+
+daily_result <- daily_result %>%
+  ungroup() %>%
+  mutate(day = as.POSIXct(day),
+         daily_wd = if_else(daily_wd < 0, daily_wd + 360, daily_wd),
+         yearmonth = format(day, "%Y-%m"),
+         year = format(day, "%Y"),
+         month = format(day, "%m"),
+         weekday = relevel(factor(wday(daily_result$day, label=TRUE), ordered = FALSE), ref = "Sun"))
+
+```
+
+```{r}
+# # Compare to pirate weather
+# api <- '4Q7hFEmsDjk3orhrP46zKtmQ0BMGYw9s'
+# 
+# result_tibble1 <- tibble(rowid = numeric(),
+#                         avg_temp = numeric(),
+#                         wd_avg = numeric(),
+#                         ws_avg = numeric(),
+#                         precip = numeric(),
+#                         dewpoint = numeric(),
+#                         hum = numeric())
+# # loop through rows
+# for (i in 1:nrow(airport_nov_to_feb_sample)){
+#   get_url <- sprintf('https://timemachine.pirateweather.net/forecast/%s/%s,%s,%s?exclude=minutely,hourly',
+#                    api, airport_nov_to_feb_sample$lat[i], airport_nov_to_feb_sample$lon[i], airport_nov_to_feb_sample$unix[i])
+#   res = GET(get_url)
+#   data = fromJSON(rawToChar(res$content))
+#   if (typeof(data) == 'character') {
+#     result_tibble1 <- rbind(result_tibble1, tibble(rowid = i, avg_temp = NA, wd_avg = NA, ws_avg = NA, precip = NA, dewpoint = NA, hum = NA))
+#   } else if (is.null(data$daily)) {
+#     result_tibble1 <- rbind(result_tibble1, tibble(rowid = i, avg_temp = NA, wd_avg = NA, ws_avg = NA, precip = NA, dewpoint = NA, hum = NA))
+#   } else {
+#     result_tibble1 <- rbind(result_tibble1, tibble(rowid = i,
+#                                                  avg_temp = mean(data$daily$data$temperatureHigh, data$daily$data$temperatureLow),
+#                                                  wd_avg = data$daily$data$windBearing,
+#                                                  ws_avg = data$daily$data$windSpeed,
+#                                                  precip = data$daily$data$precipAccumulation,
+#                                                  dewpoint = data$daily$data$dewPoint) %>%
+#                                               mutate(hum = 100 * (exp((17.625 * (dewpoint - 32) * (5/9)) / (243.04 + (dewpoint - 32) * (5/9)))
+#                                                                        / exp((17.625 * (avg_temp - 32) * (5/9)) / (243.04 + (avg_temp - 32) * (5/9))))))
+#   }
+#   print(sprintf("Row %s completed", i))
+#   if (i %% 10 == 0) {write_csv(cbind(airport_nov_to_feb_sample[1:i, ], result_tibble1), 'airport_nov_to_feb_sample_temp.csv')}
+# }
+# 
+# airport_nov_to_feb_sample_result <- cbind(airport_nov_to_feb_sample, result_tibble1)
+# 
+# write_csv(airport_nov_to_feb_sample_result, 'airport_nov_to_feb_sample_result.csv')
+```
+
+```{r}
+# comparisons
+airport_nov_to_feb_sample_result <- read_csv('airport_nov_to_feb_sample_result.csv')
+
+airport_nov_to_feb_sample_result$Date <- as.character(airport_nov_to_feb_sample_result$Date)
+
+airport_nov_to_feb_sample_result <- airport_nov_to_feb_sample_result %>%
+  rename(Station_Temp = avg_temp...2,
+         Station_Hum = avg_hum,
+         Station_Precip = precip...4,
+         PirateW_Temp = avg_temp...9,
+         PirateW_Hum = hum,
+         PirateW_Precip = precip...12,
+         PirateW_Dewpoint = dewpoint,
+         PirateW_WindDirection = wd_avg,
+         PirateW_WindSpeed = ws_avg)
+
+daily_result <- daily_result %>%
+  rename(lon = longitude,
+         lat = latitude,
+         Date = day,
+         OpenMeteo_Temp = daily_temp,
+         OpenMeteo_Hum = daily_hum,
+         OpenMeteo_Precip = daily_precip,
+         OpenMeteo_WindDirection = daily_wd,
+         OpenMeteo_WindSpeed = daily_ws)
+
+daily_result$Date <- as.character(daily_result$Date)
+
+comp <- airport_nov_to_feb_sample_result %>% 
+  left_join(daily_result) %>%
+  mutate(po_temp_diff = PirateW_Temp - OpenMeteo_Temp,
+         po_wd_diff = PirateW_WindDirection - OpenMeteo_WindDirection,
+         po_ws_diff = PirateW_WindSpeed - OpenMeteo_WindSpeed,
+         po_precip_diff = PirateW_Precip - OpenMeteo_Precip,
+         po_hum_diff = PirateW_Hum - OpenMeteo_Hum,
+         sp_temp_diff = Station_Temp - PirateW_Temp,
+         sp_precip_diff = Station_Precip - PirateW_Precip,
+         sp_hum_diff = Station_Hum - PirateW_Hum,
+         so_temp_diff = Station_Temp - OpenMeteo_Temp,
+         so_precip_diff = Station_Precip - OpenMeteo_Precip,
+         so_hum_diff = Station_Hum - OpenMeteo_Hum,
+         )
+
+comp %>% 
+  select(po_temp_diff, po_wd_diff, po_ws_diff, po_precip_diff, po_hum_diff) %>%
+  summary()
+```
+- Pirate Weather has higher daily temperature than Open Meteo for all dates.
+- Pirate Weather has lower daily humidity than Open Meteo for all dates
+
+```{r}
+comp %>% 
+  select(sp_temp_diff, sp_hum_diff, sp_precip_diff) %>%
+  summary()
+
+SP_Temp_Diff_Hist <- comp %>%
+  ggplot() +
+  geom_histogram(aes(x = Station_Temp, fill = 'sienna2'), alpha = 0.4, position = 'identity') +
+  geom_histogram(aes(x = PirateW_Temp, fill = 'steelblue1'), alpha = 0.4, position = 'identity') +
+  scale_fill_identity(name = 'Sources', labels = c('Airport', 'Pirate-Weather'), 
+                      breaks = c('sienna2', 'steelblue1'), guide = 'legend') +
+  labs(title = 'Average Daily Temperature Station vs Pirate Weather', 
+       x = 'Daily Temperature (F)', y = 'Count')
+
+SP_Temp_Diff_Hist
+
+SP_Hum_Diff_Hist <- comp %>%
+  ggplot() +
+  geom_histogram(aes(x = Station_Hum, fill = 'sienna2'), alpha = 0.4, position = 'identity') +
+  geom_histogram(aes(x = PirateW_Hum, fill = 'steelblue1'), alpha = 0.4, position = 'identity') +
+  scale_fill_identity(name = 'Sources', labels = c('Airport', 'Pirate-Weather'), 
+                      breaks = c('sienna2', 'steelblue1'), guide = 'legend') +
+  labs(title = 'Average Daily Humidity Station vs Pirate Weather', 
+       x = 'Daily Humidity (%)', y = 'Count')
+
+SP_Hum_Diff_Hist
+
+SP_Precip_Diff_Hist <- comp %>%
+  ggplot() +
+  geom_histogram(aes(x = Station_Precip, fill = 'sienna2'), alpha = 0.4, position = 'identity') +
+  geom_histogram(aes(x = PirateW_Precip, fill = 'steelblue1'), alpha = 0.4, position = 'identity') +
+  scale_fill_identity(name = 'Sources', labels = c('Airport', 'Pirate-Weather'), 
+                      breaks = c('sienna2', 'steelblue1'), guide = 'legend') +
+  labs(title = 'Average Daily Precip Station vs Pirate Weather', 
+       x = 'Daily Precip', y = 'Count')
+
+SP_Precip_Diff_Hist
+
+SP_Temp_Diff_Point <- comp %>%
+  ggplot() +
+  geom_point(aes(x = PirateW_Temp, y = Station_Temp), alpha = 0.8) +
+  geom_abline(slope = 1, intercept = 0, linetype = 'dashed') +
+  labs(title = 'Average Daily Temp Station vs Pirate Weather', 
+       x = 'Pirate Weather', y = 'Station')
+
+SP_Temp_Diff_Point
+
+SP_Hum_Diff_Point <- comp %>%
+  ggplot() +
+  geom_point(aes(x = PirateW_Hum, y = Station_Hum), alpha = 0.8) +
+  geom_abline(slope = 1, intercept = 0, linetype = 'dashed') +
+  labs(title = 'Average Daily Hum Station vs Pirate Weather', 
+       x = 'Pirate Weather', y = 'Station')
+
+SP_Hum_Diff_Point
+
+SP_Precip_Diff_Point <- comp %>%
+  ggplot() +
+  geom_point(aes(x = PirateW_Precip, y = Station_Precip), alpha = 0.8) +
+  geom_abline(slope = 1, intercept = 0, linetype = 'dashed') +
+  labs(title = 'Average Daily Precip Station vs Pirate Weather', 
+       x = 'Pirate Weather', y = 'Station')
+
+SP_Precip_Diff_Point
+```
+- Pirate weather has higher daily temperature than Station for all dates.
+
+
+```{r}
+comp %>% 
+  select(so_temp_diff, so_hum_diff, so_precip_diff) %>%
+  summary()
+
+SO_Temp_Diff_Hist <- comp %>%
+  ggplot() +
+  geom_histogram(aes(x = Station_Temp, fill = 'sienna2'), alpha = 0.4, position = 'identity') +
+  geom_histogram(aes(x = OpenMeteo_Temp, fill = 'springgreen2'), alpha = 0.4, position = 'identity') +
+  scale_fill_identity(name = 'Sources', labels = c('Airport', 'Open-Meteo'), 
+                      breaks = c('sienna2', 'springgreen2'), guide = 'legend') +
+  labs(title = 'Average Daily Temperature Station vs Open-Meteo', 
+       x = 'Daily Temperature (F)', y = 'Count')
+
+SO_Temp_Diff_Hist
+
+SO_Hum_Diff_Hist <- comp %>%
+  ggplot() +
+  geom_histogram(aes(x = Station_Hum, fill = 'sienna2'), alpha = 0.4, position = 'identity') +
+  geom_histogram(aes(x = OpenMeteo_Hum, fill = 'springgreen2'), alpha = 0.4, position = 'identity') +
+  scale_fill_identity(name = 'Sources', labels = c('Airport', 'Open-Meteo'), 
+                      breaks = c('sienna2', 'springgreen2'), guide = 'legend') +
+  labs(title = 'Average Daily Humidity Station vs Open-Meteo', 
+       x = 'Daily Humidity (%)', y = 'Count')
+
+SO_Hum_Diff_Hist
+
+SO_Precip_Diff_Hist <- comp %>%
+  ggplot() +
+  geom_histogram(aes(x = Station_Precip, fill = 'sienna2'), alpha = 0.4, position = 'identity') +
+  geom_histogram(aes(x = OpenMeteo_Precip, fill = 'springgreen2'), alpha = 0.4, position = 'identity') +
+  scale_fill_identity(name = 'Sources', labels = c('Airport', 'Open-Meteo'), 
+                      breaks = c('sienna2', 'springgreen2'), guide = 'legend') +
+  labs(title = 'Average Daily Precip Station vs Open-Meteo', 
+       x = 'Daily Precip', y = 'Count')
+
+SO_Precip_Diff_Hist
+
+SO_Temp_Diff_Point <- comp %>%
+  ggplot() +
+  geom_point(aes(x = OpenMeteo_Temp, y = Station_Temp), alpha = 0.8) +
+  geom_abline(slope = 1, intercept = 0, linetype = 'dashed') +
+  labs(title = 'Average Daily Temp Station vs Open-Meteo', 
+       x = 'Open-Meteo', y = 'Station')
+
+SO_Temp_Diff_Point
+
+SO_Hum_Diff_Point <- comp %>%
+  ggplot() +
+  geom_point(aes(x = OpenMeteo_Hum, y = Station_Hum), alpha = 0.8) +
+  geom_abline(slope = 1, intercept = 0, linetype = 'dashed') +
+  labs(title = 'Average Daily Hum Station vs Open-Meteo', 
+       x = 'Open-Meteo', y = 'Station')
+
+SO_Hum_Diff_Point
+
+SO_Precip_Diff_Point <- comp %>%
+  ggplot() +
+  geom_point(aes(x = OpenMeteo_Precip, y = Station_Precip), alpha = 0.8) +
+  geom_abline(slope = 1, intercept = 0, linetype = 'dashed') +
+  labs(title = 'Average Daily Precip Station vs Open-Meteo', 
+       x = 'Open-Meteo', y = 'Station')
+
+SO_Precip_Diff_Point
+```
+
+```{r}
+Temp_Diff_Hist <- comp %>%
+  ggplot() +
+  geom_histogram(aes(x = Station_Temp, fill = 'sienna2'), alpha = 0.4, position = 'identity') +
+  geom_histogram(aes(x = PirateW_Temp, fill = 'steelblue1'), alpha = 0.4, position = 'identity') +
+  geom_histogram(aes(x = OpenMeteo_Temp, fill = 'springgreen2'), alpha = 0.4, position = 'identity') +
+  scale_fill_identity(name = 'Sources', labels = c('Airport', 'Pirate-Weather', 'Open-Meteo'), 
+                      breaks = c('sienna2', 'steelblue1', 'springgreen2'), guide = 'legend') +
+  labs(title = 'Average Daily Temperature from different sources (F)', 
+       x = 'Daily_temp', y = 'Count')
+
+Temp_Diff_Hist
+```
+
+```{r}
+Temp_Diff_Point <- comp %>%
+  ggplot() +
+  geom_point(aes(x = sp_temp_diff, y = so_temp_diff, color = 'steelblue1'), alpha = 0.8) +
+  geom_abline(slope = 1, intercept = 0, linetype = 'dashed') +
+  labs(title = 'Difference in Average Daily Temperature from different sources (F)', 
+       x = 'Station - Pirate Weather', y = 'Station - Open Meteo') +
+  theme_minimal()
+
+Temp_Diff_Point
+```
+
