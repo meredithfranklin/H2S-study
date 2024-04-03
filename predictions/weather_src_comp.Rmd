@@ -305,6 +305,8 @@ SP_Temp_Diff_Point <- comp %>%
   ggplot() +
   geom_point(aes(x = PirateW_Temp, y = Station_Temp), alpha = 0.8) +
   geom_abline(slope = 1, intercept = 0, linetype = 'dashed') +
+  scale_x_continuous(limits=c(50,90))+
+  scale_y_continuous(limits=c(50,90))+
   labs(title = 'Average Daily Temp Station vs Pirate Weather', 
        x = 'Pirate Weather', y = 'Station')
 
@@ -373,6 +375,8 @@ SO_Temp_Diff_Point <- comp %>%
   ggplot() +
   geom_point(aes(x = OpenMeteo_Temp, y = Station_Temp), alpha = 0.8) +
   geom_abline(slope = 1, intercept = 0, linetype = 'dashed') +
+  scale_x_continuous(limits=c(45,80)) +
+  scale_y_continuous(limits=c(45,80)) +
   labs(title = 'Average Daily Temp Station vs Open-Meteo', 
        x = 'Open-Meteo', y = 'Station')
 
