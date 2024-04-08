@@ -41,6 +41,8 @@ patient_zip <- patient_zip[ ,2:3] %>% distinct()
 
 CRS_UTM <- CRS("+proj=utm +zone=11 ellps=WGS84")
 
+CRS_LL <- CRS("+proj=longlat +datum=WGS84")
+
 # mon_location <- daily_full %>%
 #   select(Monitor, mon_utm_x, mon_utm_y) %>%
 #   distinct() %>%
@@ -107,60 +109,69 @@ zipcode_map
 # mapshot(zipcode_map, file = "zipcode_map.png")
 ```
 
+```{r}
+# Subset Zip Code boundaries
+patient_zipcode_points_cropped <- patient_zipcode_points %>%
+  st_crop(xmin = -118.46, xmax = -118.14, ymin = 33.7, ymax = 33.99)
+
+patient_zipcode_boundaries_cropped <- patient_zipcode_boundaries %>%
+    filter(ZIP_CODE %in% patient_zipcode_points_cropped$ZIP_CODE)
+
+leaflet() %>% 
+      addProviderTiles(providers$MtbMap) %>%
+              addProviderTiles(providers$Stadia.StamenTerrainBackground,
+                               options = providerTileOptions(opacity = 0.9, api_key = "2960e34d-9997-48db-abeb-360be74fc3f5")) %>%
+              addProviderTiles(providers$Stadia.StamenTonerLines,
+                options = providerTileOptions(opacity = 0.25, api_key = "2960e34d-9997-48db-abeb-360be74fc3f5")) %>%
+              addProviderTiles(providers$Stadia.StamenTonerLabels,
+                               options=providerTileOptions(api_key = "2960e34d-9997-48db-abeb-360be74fc3f5")) %>%
+      addPolygons(data = patient_zipcode_boundaries_cropped,
+                  fillOpacity = 0.5, 
+                  weight = 2, 
+                  color = "#808080",
+                  fillColor = '#C0C0C0',
+                  popup = zipcode_boundaries_popup) %>%
+       addCircleMarkers(data = patient_zipcode_points_cropped,
+                  fillOpacity = 0.9,
+                  radius = 2,
+                  weight = 1, 
+                  color = "#DC143C",
+                  popup = zipcode_points_popup)
+```
+
+
 # Set up grid
 ## Using the stars package to counties
 ```{r}
-# Get the grids for each zipcode separately
-grd_stars_500 <- list()
-grd_ind_500 <- tibble()
-for (i in 1:nrow(la_county_full)) {
-  grd_ind_temp <- st_bbox(la_county_full[i,]) %>%
-          st_as_stars(dx = 500) %>%
-          st_crop(la_county_full[i,])
-  grd_stars_500 <- append(grd_stars_500, list(grd_ind_temp))
-  grd_ind_500 <- rbind(grd_ind_500, 
-                   tibble(la_county_full[i, c('OBJECTID', 'ZIPCODE', 'geometry')], 
-                          cells = sum(grd_ind_temp$values == 0, na.rm=T)))
-}
+# Get the grids for the zip codes as a whole
+patient_zipcode_boundaries_cropped <- st_transform(patient_zipcode_boundaries_cropped, CRS_UTM)
+zipcode_grid <- st_bbox(patient_zipcode_boundaries_cropped) %>%
+                  st_as_stars(dx = 500) %>%
+                  st_crop(patient_zipcode_boundaries_cropped)
 
-print(paste0('Number of cells at 500m resolution: ', sum(grd_ind_500$cells)))
+zipcode_grid <- zipcode_grid %>%
+  mutate(utm_x = sf::st_coordinates(.)[,1],
+         utm_y = sf::st_coordinates(.)[,2])
+
+zipcode_grid <- zipcode_grid %>%
+  st_transform("+proj=longlat +datum=WGS84") %>%
+  mutate(lon = sf::st_coordinates(.)[,1],
+         lat = sf::st_coordinates(.)[,2])
+
+zipcode_grid_df <- as.data.frame(zipcode_grid) %>% filter(values == 0)
+print(paste0('Number of cells at 500m resolution: ', nrow(zipcode_grid_df)))
 ```
 
 ```{r}
-temp <- st_bbox(la_county_full[13,]) %>%
-    st_as_stars(dx = 500)
-
-temp2 <- st_bbox(la_county_full[16,]) %>%
-    st_as_stars(dx = 500)
-
-grd_df <- rbind(as.data.frame(temp2) %>% filter(values == 0),
-                as.data.frame(temp) %>% filter(values == 0))
-
-raster_temp_xgb <- rasterFromXYZ(grd_df %>% select(x, y) %>% mutate(z = 1:nrow(grd_df)))
-crs(raster_temp_xgb) <- CRS_UTM
-
-leaflet() %>% addTiles() %>% 
-                  addRasterImage(raster_temp_xgb,  
-                                 opacity = .8)
-image(temp)
+image(zipcode_grid)
 ```
-
 
 ```{r}
-for (i in 1:length(grd_stars_500)) {
-  print(image(grd_stars_500[[i]], text_values  = T))
-}
+write_csv(zipcode_grid_df, 'zipcode_grid_df.csv')
+write_csv(zipcode_grid_df[1:1500, ], 'zipcode_grid_df_home.csv')
+write_csv(zipcode_grid_df[1501:2909, ], 'zipcode_grid_df_cosmos.csv')
 ```
-We notice that zip code 90261 is very small and will not fit a 500m square, so we will use itself as the box. 
-
-
-```{r}
-# Convert to a data frame so we can compute the prediction at each grid
-grd_df <- as.data.frame(grd) %>% filter(values == 0)
-
-# There are 1642 points
-```
-
+ 
 # Disaster Period Grid Prediction
 ```{r}
 # Helper Functions 
