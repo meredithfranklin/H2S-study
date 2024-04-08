@@ -17,16 +17,16 @@ library(circular)
 # Load in data
 ```{r}
 zipcode_grid_df_home <- read_csv('zipcode_grid_df_home.csv')
-zipcode_grid_fetched_home <- read_csv('zipcode_grid_fetched_home.csv')
+zipcode_grid_fetched_home <- readRDS('zipcode_grid_fetched_home.rds')
 ```
 
 ```{r}
 # Code to fetch weather data
 # For first time
-zipcode_grid_fetched_home <- tibble(lon = numeric(), lat = numeric())
+#zipcode_grid_fetched_home <- tibble(lon = numeric(), lat = numeric())
  
 zipcode_grid_unfetched_home <- zipcode_grid_df_home %>%
-  anti_join(zipcode_grid_fetched_home, join_by(lon, lat))
+  anti_join(zipcode_grid_fetched_home, join_by(lon == longitude, lat == latitude))
 
 hourly_result <- tibble(latitude = numeric(),
                  longitude = numeric(),
@@ -89,7 +89,7 @@ for (i in 1:nrow(zipcode_grid_unfetched_home)) {
 
 result <- rbind(zipcode_grid_fetched_home,
                 hourly_result)
-write_csv(hourly_result, 'zipcode_grd_fetched_home.csv')
+saveRDS(hourly_result, 'zipcode_grid_fetched_home.rds')
 ```
 
 ```{r}

@@ -11,10 +11,10 @@ zipcode_grid_df_cosmos <- read_csv('zipcode_grid_df_cosmos.csv')
 
 # Code to fetch weather data
 # For first time
-zipcode_grid_fetched_cosmos <- tibble(lon = numeric(), lat = numeric())
+zipcode_grid_fetched_cosmos <- tibble(longitude = numeric(), latitude = numeric())
 
 zipcode_grid_unfetched_cosmos <- zipcode_grid_df_cosmos %>%
-  anti_join(zipcode_grid_fetched_cosmos, join_by(lon, lat))
+  anti_join(zipcode_grid_fetched_cosmos, join_by(lon == longitude, lat == latitude))
 
 hourly_result <- tibble(latitude = numeric(),
                         longitude = numeric(),
@@ -76,4 +76,4 @@ for (i in 1:nrow(zipcode_grid_unfetched_cosmos)) {
 
 # result <- rbind(zipcode_grid_fetched_cosmos,
 #                 hourly_result)
-write_csv(hourly_result, 'zipcode_grd_fetched_cosmos.csv')
+saveRDS(hourly_result, 'zipcode_grid_fetched_cosmos.rds')
