@@ -226,9 +226,8 @@ d_channel <- st_transform(d_channel, CRS_UTM) # convert to UTM crs
 
 # prepare data for each visit
 # Get the time-independent variables
-data_visit1 <- carson_participant_data %>%
-  select(StudyID, Visit1, mon_utm_x, mon_utm_y, lon, lat) %>%
-  filter(!is.na(Visit1)) %>%
+data_visit_full <- carson_participant_data %>%
+  select(StudyID, Visit1, Visit2, mon_utm_x, mon_utm_y, lon, lat) %>%
   filter(!(lat > 33.99))
 
 data_visit1 <- data_visit1 %>%

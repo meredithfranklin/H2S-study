@@ -18,6 +18,7 @@ library(circular)
 ```{r}
 zipcode_grid_df_home <- read_csv('zipcode_grid_df_home.csv')
 zipcode_grid_fetched_home <- readRDS('zipcode_grid_fetched_home.rds')
+zipcode_grid_df_cosmos <- read_csv('zipcode_grid_df_cosmos.csv')
 ```
 
 ```{r}
@@ -25,8 +26,17 @@ zipcode_grid_fetched_home <- readRDS('zipcode_grid_fetched_home.rds')
 # For first time
 #zipcode_grid_fetched_home <- tibble(lon = numeric(), lat = numeric())
  
-zipcode_grid_unfetched_home <- zipcode_grid_df_home %>%
-  anti_join(zipcode_grid_fetched_home, join_by(lon == longitude, lat == latitude))
+zipcode_daily_unfetched_result <- zipcode_grid_df_cosmos %>%
+  anti_join(zipcode_daily_result, join_by(lon == longitude, lat == latitude))
+
+zipcode_daily_result <- tibble(latitude = numeric(),
+                               longitude = numeric(),
+                               day = numeric(),
+                               daily_temp = numeric(),
+                               daily_hum = numeric(),
+                               daily_precip = numeric(),
+                               daily_ws = numeric(),
+                               daily_wd = numeric())
 
 hourly_result <- tibble(latitude = numeric(),
                  longitude = numeric(),
@@ -36,92 +46,67 @@ hourly_result <- tibble(latitude = numeric(),
                  hourly_precip = numeric(),
                  hourly_ws = numeric(),
                  hourly_wd = numeric())
-counter <- 0
-start_time <- Sys.time()
-for (i in 1:nrow(zipcode_grid_unfetched_home)) {
-  if (counter == 150) {
-    break
-  }
-  reset <- FALSE
-  # In order to follow the 600 calls per minute restriction from open-meteo
-  if (counter != 0 && counter %% 9 == 0) {
-    end_time <- Sys.time()
-    sec_until_60s <- 60 - (as.numeric(end_time) - as.numeric(start_time))
-    print(paste0('Completed ', counter, ' coordinates'))
-    print(paste0('Waiting ', sec_until_60s, ' seconds'))
-    Sys.sleep(sec_until_60s + 3) # give 3s buffer
-    reset <- TRUE
-  }
 
-  # In order to follow the 5000 calls per hour restriction from open-meteo
-  if (counter != 0 && counter %% 55 == 0) {
-    end_time <- Sys.time()
-    sec_until_60m <- 3600 - (as.numeric(end_time) - as.numeric(start_time))
-    print(paste0('Completed ', counter, ' coordinates'))
-    print(paste0('Waiting ', sec_until_60m, ' seconds'))
-    Sys.sleep(sec_until_60m + 30) # give 30s buffer
-    reset <- TRUE
-  }
+# loop through rows
+for (i in 1:nrow(zipcode_grid_df_cosmos)){
 
-  if (reset == T) {
-    start_time <- Sys.time()
-  }
-
-  counter <- counter + 1
-
-
-    get_url <- sprintf("https://archive-api.open-meteo.com/v1/archive?latitude=%s&longitude=%s&start_date=2018-01-01&end_date=2022-12-31&hourly=temperature_2m,relative_humidity_2m,precipitation,wind_speed_10m,wind_direction_10m&temperature_unit=fahrenheit&wind_speed_unit=mph&precipitation_unit=inch&timezone=America%%2FLos_Angeles",
-                       zipcode_grid_unfetched_home$lat[i], zipcode_grid_unfetched_home$lon[i])
+  get_url <- sprintf("https://customer-archive-api.open-meteo.com/v1/archive?latitude=%s&longitude=%s&start_date=2018-10-01&end_date=2022-12-31&hourly=temperature_2m,relative_humidity_2m,precipitation,wind_speed_10m,wind_direction_10m&temperature_unit=fahrenheit&wind_speed_unit=mph&precipitation_unit=inch&timezone=America%%2FLos_Angeles&apikey=S4sRENjfQvm2aH86",
+                     zipcode_grid_df_cosmos$lat[i], zipcode_grid_df_cosmos$lon[i])
   res = GET(get_url)
   data = fromJSON(rawToChar(res$content))
-  hourly_result <- rbind(hourly_result,
-                         tibble(latitude = zipcode_grid_unfetched_home$lat[i],
-                                longitude = zipcode_grid_unfetched_home$lon[i],
-                                elevation = data$elevation,
-                                hourly = data$hourly$time,
-                                hourly_temp = data$hourly$temperature_2m,
-                                hourly_hum = data$hourly$relative_humidity_2m,
-                                hourly_precip = data$hourly$precipitation,
-                                hourly_ws = data$hourly$wind_speed_10m,
-                                hourly_wd = data$hourly$wind_direction_10m))
+  if (!(is.null(try(data$error)))){
+    ith_daily_exposure_result <- tibble(latitude = zipcode_grid_df_cosmos$lat[i],
+                                        longitude = zipcode_grid_df_cosmos$lon[i],
+                                        day = NA,
+                                        daily_temp = NA,
+                                        daily_hum = NA,
+                                        daily_precip = NA,
+                                        daily_ws = NA,
+                                        daily_wd = NA)
+  }
+  else {
+    hourly_result <- tibble(latitude = zipcode_grid_df_cosmos$lat[i],
+                                        longitude = zipcode_grid_df_cosmos$lon[i],
+                            elevation = data$elevation,
+                            hourly = data$hourly$time,
+                            hourly_temp = data$hourly$temperature_2m,
+                            hourly_hum = data$hourly$relative_humidity_2m,
+                            hourly_precip = data$hourly$precipitation,
+                            hourly_ws = data$hourly$wind_speed_10m,
+                            hourly_wd = data$hourly$wind_direction_10m)
+    
+    ith_daily_result <- hourly_result %>%
+      mutate(date = as.POSIXct(hourly)) %>%
+      mutate(day = format(date, "%Y-%m-%d"))
+    
+    ith_daily_result$hourly_wd <- as.numeric(ith_daily_result$hourly_wd)
+
+    ith_daily_result <- ith_daily_result %>%
+      group_by(latitude, longitude, day) %>%
+      summarise(daily_temp = mean(hourly_temp, na.rm = T),
+                daily_hum = mean(hourly_hum, na.rm = T),
+                daily_precip = sum(hourly_precip, na.rm = T),
+                daily_ws = mean(hourly_ws, na.rm = T),
+                daily_wd = as.numeric(mean(circular(hourly_wd, units = 'degrees'), na.rm=TRUE)),
+                .groups = 'drop')
+    
+    ith_daily_result <- ith_daily_result %>%
+      mutate(daily_wd = if_else(daily_wd < 0, daily_wd + 360, daily_wd))
+  }
+
+  zipcode_daily_result <- rbind(zipcode_daily_result, ith_daily_result)
+  
+  print(sprintf("Row %s completed", i))
 }
 
 
-result <- rbind(zipcode_grid_fetched_home,
-                hourly_result)
-saveRDS(hourly_result, 'zipcode_grid_fetched_home.rds')
+saveRDS(zipcode_daily_result, 'zipcode_daily_result_temp.rds')
+result <- rbind(result_copy,
+                zipcode_daily_result)
+
+saveRDS(result, 'zipcode_grid_fetched_weather.rds')
 ```
 
-```{r}
-# hourly_result <- read_csv('top_3_blk_hourly_with_meteo.csv')
-# 
-# daily_result <- hourly_result %>%
-#   mutate(date = as.POSIXct(hourly)) %>%
-#   mutate(day = format(date, "%Y-%m-%d"))
-# 
-# remove(hourly_result)
-# 
-# daily_result$hourly_wd <- as.numeric(daily_result$hourly_wd)
-# 
-# daily_result <- daily_result %>%
-#   group_by(latitude, longitude, day) %>%
-#   summarise(daily_temp = mean(hourly_temp, na.rm = T),
-#             daily_hum = mean(hourly_hum, na.rm = T),
-#             daily_precip = sum(hourly_precip, na.rm = T),
-#             daily_ws = mean(hourly_ws, na.rm = T),
-#             daily_wd = as.numeric(mean(circular(hourly_wd, units = 'degrees'), na.rm=TRUE)))
-# 
-# daily_result <- daily_result %>%
-#   ungroup() %>%
-#   mutate(day = as.POSIXct(day),
-#          daily_wd = if_else(daily_wd < 0, daily_wd + 360, daily_wd),
-#          yearmonth = format(day, "%Y-%m"),
-#          year = format(day, "%Y"),
-#          month = format(day, "%m"),
-#          weekday = relevel(factor(wday(daily_result$day, label=TRUE), ordered = FALSE), ref = "Sun"))
-# 
-# write_csv(daily_result, 'top_3_blk_daily_with_meteo.csv')
-```
 
 ```{r}
 top_3_blk_daily_with_meteo <- read_csv('top_3_blk_daily_with_meteo.csv')

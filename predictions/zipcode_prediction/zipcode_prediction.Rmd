@@ -28,7 +28,7 @@ select <- dplyr::select
 
 ```{r}
 # load in data
-top_3_blk_daily_with_meteo <- read_csv('top_3_blk_daily_with_meteo.csv')
+zipcode_grid_fetched_weather <- readRDS('zipcode_grid_fetched_weather.rds')
 
 # load in model
 fit.xgb_da_log_h2s_dis_ind <- readRDS('../../rfiles/fit.xgb_da_log_h2s_dis_ind.rds')
@@ -123,6 +123,7 @@ inactive_well_info <- anti_join(full_well_info, active_well_info, join_by(API14)
   st_transform(CRS_UTM)
 
 well_prod <- well_prod %>%
+  mutate('Monthly Production Date' = force_tz(`Monthly Production Date`, tz = 'America/Los_Angeles')) %>%
   left_join(active_well_info, join_by(`API/UWI` == API14))
 
 well_prod <- well_prod %>%
@@ -142,8 +143,8 @@ active_well_location <- well_prod %>%
   st_transform(CRS_UTM)
 
 get_well_prod <- function(api, month) {
-  # if month is later than a certain month, return NA
-  if (month > max(well_prod$`Monthly Production Date`) + 31){
+  # if date is later than a certain month, return NA
+  if (month > max(well_prod$`Monthly Production Date`) + 60*60*24*31){
     return(tibble(active_2km = NA,
                   monthly_oil_2km = NA,
                   monthly_gas_2km = NA))
@@ -168,6 +169,7 @@ get_well_prod <- function(api, month) {
   return(loc_well_prod)
 }
 
+
 get_well_inactive <- function(location) {
   # get inactive wells within 2km
   inactive_well_api <- drop_units(st_distance(location, inactive_well_info))
@@ -176,7 +178,7 @@ get_well_inactive <- function(location) {
 }
 
 # Get elevation
-elevation <- raster('../../shapefiles/N33W119.hgt')
+elevation <- raster('../../shapefiles/ASTGTM_NC.003_ASTER_GDEM_DEM_doy2000061_aid0001.tif')
 
 get_elevation <- function(location_ll) {
   return(raster::extract(elevation, location_ll))
@@ -215,12 +217,19 @@ get_evi <- function(location){
 
 # Get Number of Odor Complaints
 odor <- read_csv('../../data/odorcomplaintdata_2018_2023.csv')
-top_3_blk_wo_meteo <- read_csv('top_3_blk_without_meteo.csv')
-
-odor <- odor %>%
-  filter(zip %in% top_3_blk_wo_meteo$ZCTAA)
 
 odor$date <- as.character(odor$date)
+
+la_county <- read_sf('../../shapefiles/CA_Zipcode.shp')
+
+la_county_trans <- st_transform(la_county, CRS_UTM)
+
+get_zipcode <- function(location) {
+  return(apply(st_intersects(la_county_trans, location, sparse = FALSE), 2,
+               function(col) {
+                 la_county_trans[which(col), ]$ZIP_CODE
+               }))
+}
 
 get_odor <- function(zipcode, day) {
   odor <- odor %>% filter(zip == zipcode & date == format(day, '%Y-%m-%d'))
@@ -237,9 +246,11 @@ get_odor <- function(zipcode, day) {
 st_read('../../shapefiles/DominguezChannel_Carson.shp')
 d_channel <- read_sf('../../shapefiles/DominguezChannel_Carson.shp', layer = 'DominguezChannel_Carson')
 d_channel <- st_transform(d_channel, CRS_UTM) # convert to UTM crs
+```
 
+```{r}
 # Get coordinates as columns
-top_3_blk_daily_with_meteo <- top_3_blk_daily_with_meteo %>%
+zipcode_grid_fetched_weather <- zipcode_grid_fetched_weather %>%
   st_as_sf(coords = c('longitude', 'latitude'), remove = F) %>%
   st_set_crs(CRS_LL) %>%
   st_transform(CRS_UTM) %>%
@@ -249,7 +260,7 @@ top_3_blk_daily_with_meteo <- top_3_blk_daily_with_meteo %>%
 
 
 # Compute static variables first
-zipcode_data <- top_3_blk_daily_with_meteo %>%
+zipcode_data <- zipcode_grid_fetched_weather %>%
   mutate(sf_loc = get_sf_loc(mon_utm_x, mon_utm_y),
          ll_loc = get_ll_loc(mon_utm_x, mon_utm_y))
 
@@ -261,9 +272,10 @@ zipcode_static_data <- zipcode_static_data %>%
   mutate(dist_wrp = get_dist_wrp(sf_loc)$dist_wrp,
          MinDist = get_dist_ref(sf_loc),
          elevation = get_elevation(ll_loc),
-         EVI = get_evi(sf_loc),
+         EVI = get_evi(ll_loc),
          capacity = get_dist_wrp(sf_loc)$capacity,
          dist_dc = apply(st_distance(sf_loc, d_channel), 1, min),
+         zipcode = get_zipcode(sf_loc),
          angle_ref = get_angle_ref(sf_loc),
          angle_wrp = get_angle_wrp(sf_loc))
 
@@ -272,13 +284,6 @@ zipcode_static_data <- zipcode_static_data %>%
   mutate(inactive_2km = get_well_inactive(sf_loc)) %>%
   ungroup()
 
-# Get zipcode for each blk
-zipcode_static_data <- zipcode_static_data %>%
-  left_join(top_3_blk_wo_meteo, join_by(longitude == INTPTLON, latitude == INTPTLAT)) %>%
-  rename(zipcode = ZCTAA,
-         block = BLOCKA,
-         population = U7H001)
-remove(top_3_blk_wo_meteo)
 
 zipcode_data <- zipcode_data %>%
   left_join(zipcode_static_data)
@@ -291,6 +296,8 @@ zipcode_data$daily_downwind_ref <- as.integer(wind_diff <= 15)
 wind_diff <- abs(zipcode_data$angle_wrp - zipcode_data$daily_wd)
 wind_diff <- ifelse(wind_diff > 180, 360 - wind_diff, wind_diff)
 zipcode_data$daily_downwind_wrp <- as.integer(wind_diff <= 15)
+
+zipcode_data$day <- force_tz(zipcode_data$day, tz = 'America/Los_Angeles')
 
 coord_month_well_prod <- zipcode_data %>%
   mutate(month_floor = floor_date(day, 'month')) %>%
@@ -322,51 +329,57 @@ wells_monthly_prod <- wells_monthly_prod %>%
   mutate(yearmonth = format(month_floor, '%Y-%m'))
 
 zipcode_data <- zipcode_data %>%
+  mutate(yearmonth = format(day, '%Y-%m')) %>%
   left_join(wells_monthly_prod, join_by(sf_loc, yearmonth))
 
+# zipcode_data <- zipcode_data %>%
+#   rowwise() %>%
+#   mutate(num_odor_complaints = get_odor(zipcode, day))
+
 zipcode_data <- zipcode_data %>%
-  rowwise() %>%
-  mutate(num_odor_complaints = get_odor(zipcode, day))
+  mutate(daystring = as.character(zipcode_data$day)) %>%
+  left_join(odor %>%
+              select(date, zip, num_odor_complaints) %>%
+              mutate(zip = as.character(zip)),
+            join_by(daystring == date, zipcode == zip)) %>%
+  select(-daystring) %>%
+  mutate(num_odor_complaints = coalesce(num_odor_complaints, 0))
 
 zipcode_data <- zipcode_data %>%
   st_drop_geometry() %>%
   select(-c(sf_loc, ll_loc, month_floor, yearmonth))
 
-# saveRDS(zipcode_data, 'zipcode_data.rds')
-# write_csv(zipcode_data, 'zipcode_data.csv')
+saveRDS(zipcode_data, 'zipcode_data.rds')
+write_csv(zipcode_data, 'zipcode_data.csv')
 ```
 
 ```{r}
 zipcode_data <- readRDS('zipcode_data.rds')
 
 zipcode_data <- zipcode_data %>%
-  rename(ws_avg = daily_ws,
-         wd_avg = daily_wd,
-         avg_temp = daily_temp,
-         avg_hum = daily_hum,
-         precip = daily_precip)
-
-zipcode_data<- zipcode_data %>%
-                 mutate(disaster = if_else(year == 2021 & month %in% c('10', '11', '12'), 1, 0),
-                        MinDist = 1/(MinDist^2),
-                        dist_wrp = 1/(dist_wrp^2),
-                        dist_dc = 1/(dist_dc^2),
-                        year = as.character(year),
-                        year_2023 = 0)
+                  mutate(MinDist = 1/(MinDist^2),
+                         dist_wrp = 1/(dist_wrp^2),
+                         dist_dc = 1/(dist_dc^2),
+                         year_2023 = 0,
+                         year = as.character(format(day, "%Y")),
+                         month = as.character(format(day, "%m")),
+                         weekday = relevel(factor(wday(zipcode_data$day, label=TRUE), ordered = FALSE), ref = "Sun")) %>%
+                  mutate(disaster = if_else(year == 2021 & month %in% c('10', '11', '12'), 1, 0))
 
 zipcode_data_mat <- fastDummies::dummy_cols(zipcode_data %>% 
-                                              select(-c(zipcode, block, population, 
-                                                        angle_wrp, angle_ref, day, 
+                                              select(-c(zipcode, angle_wrp, 
+                                                        angle_ref, day, 
                                                         latitude, longitude)),
                                  remove_selected_columns = TRUE)
 
 
 zipcode_result <- zipcode_data %>%
   ungroup() %>%
-  mutate(xgb_dis_ind_predict = predict(fit.xgb_da_log_h2s_dis_ind, newdata = zipcode_data_mat)) %>%
-  mutate(daily_h2s_predict = exp(xgb_dis_ind_predict))
+  mutate(daily_h2s_log_prediction = predict(fit.xgb_da_log_h2s_dis_ind, newdata = zipcode_data_mat))
 
-write_csv(zipcode_result, 'zipcode_result.csv')
+zipcode_result$daily_h2s_prediction <- exp(zipcode_result$daily_h2s_log_prediction)
+
+write_csv(zipcode_result, 'zipcode_grid_result.csv')
 ```
 
 
