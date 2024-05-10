@@ -17,12 +17,14 @@ library(rgdal)
 library(mgcv)
 library(raster)
 library(caret)
+library(xgboost)
 library(leaflet)
 library(htmlwidgets)
 library(fontawesome) 
 library(units)
 library(lwgeom)
 library(magick)
+library(exactextractr)
 select <- dplyr::select
 ```
 
@@ -32,6 +34,7 @@ zipcode_grid_fetched_weather <- readRDS('zipcode_grid_fetched_weather.rds')
 
 # load in model
 fit.xgb_da_log_h2s_dis_ind <- readRDS('../../rfiles/fit.xgb_da_log_h2s_dis_ind.rds')
+#fit.xgb_da_log_h2s_dis_ind <- xgb.load('fit.xgb_da_log_h2s_dis_ind')
 ```
 
 ```{r}
@@ -185,7 +188,7 @@ get_elevation <- function(location_ll) {
 }
 
 # Get EVI
-evi <- raster('../../shapefiles/MOD13Q1.061__250m_16_days_EVI_doy2023145_aid0001_2.tif')
+evi <- raster('../../shapefiles/MOD13Q1.061__250m_16_days_EVI_doy2022177_aid0001_2.tif')
 
 evi <- projectRaster(evi, crs = CRS_UTM)
 # fill NA pixels
@@ -225,10 +228,7 @@ la_county <- read_sf('../../shapefiles/CA_Zipcode.shp')
 la_county_trans <- st_transform(la_county, CRS_UTM)
 
 get_zipcode <- function(location) {
-  return(apply(st_intersects(la_county_trans, location, sparse = FALSE), 2,
-               function(col) {
-                 la_county_trans[which(col), ]$ZIP_CODE
-               }))
+  return(la_county_trans[st_nearest_feature(zipcode_static_data$sf_loc, la_county_trans),]$ZIP_CODE)
 }
 
 get_odor <- function(zipcode, day) {
@@ -297,7 +297,7 @@ wind_diff <- abs(zipcode_data$angle_wrp - zipcode_data$daily_wd)
 wind_diff <- ifelse(wind_diff > 180, 360 - wind_diff, wind_diff)
 zipcode_data$daily_downwind_wrp <- as.integer(wind_diff <= 15)
 
-zipcode_data$day <- force_tz(zipcode_data$day, tz = 'America/Los_Angeles')
+zipcode_data$day <- force_tz(as.Date(zipcode_data$day), tz = 'America/Los_Angeles')
 
 coord_month_well_prod <- zipcode_data %>%
   mutate(month_floor = floor_date(day, 'month')) %>%
@@ -364,22 +364,100 @@ zipcode_data <- zipcode_data %>%
                          year = as.character(format(day, "%Y")),
                          month = as.character(format(day, "%m")),
                          weekday = relevel(factor(wday(zipcode_data$day, label=TRUE), ordered = FALSE), ref = "Sun")) %>%
-                  mutate(disaster = if_else(year == 2021 & month %in% c('10', '11', '12'), 1, 0))
+                  mutate(disaster = if_else(year == 2021 & month %in% c('10', '11', '12'), 1, 0)) %>%
+  rename(avg_temp = daily_temp,
+         avg_hum = daily_hum,
+         precip = daily_precip,
+         ws_avg = daily_ws,
+         wd_avg = daily_wd)
 
 zipcode_data_mat <- fastDummies::dummy_cols(zipcode_data %>% 
                                               select(-c(zipcode, angle_wrp, 
                                                         angle_ref, day, 
                                                         latitude, longitude)),
-                                 remove_selected_columns = TRUE)
+                                 remove_selected_columns = TRUE) %>%
+  select(-c(year_2018, year_2019))
 
 
 zipcode_result <- zipcode_data %>%
   ungroup() %>%
-  mutate(daily_h2s_log_prediction = predict(fit.xgb_da_log_h2s_dis_ind, newdata = zipcode_data_mat))
+  mutate(daily_h2s_log_prediction = predict(fit.xgb_da_log_h2s_dis_ind, newdata = as.matrix(zipcode_data_mat)))
 
 zipcode_result$daily_h2s_prediction <- exp(zipcode_result$daily_h2s_log_prediction)
 
-write_csv(zipcode_result, 'zipcode_grid_result.csv')
+saveRDS(zipcode_result, 'zipcode_grid_result.rds')
+```
+
+# Post prediction cleaning
+```{r}
+zipcode_result <- readRDS('zipcode_grid_result.rds')
+
+# Get wanted zipcodes
+ca_zip <- read_sf('../../shapefiles/CA_Zipcode.shp')
+ca_zip_point <- read_sf('../../shapefiles/CA_Zipcode_points.shp')
+
+patient_zip <- read_csv('lacounty_EDpatients_ZIPcodes.csv')
+
+patient_zip <- patient_zip[ ,2:3] %>% distinct()
+
+patient_zipcode_boundaries <- ca_zip[ca_zip$ZIP_CODE %in% patient_zip$zipcode, ]
+patient_zipcode_points <- ca_zip_point[ca_zip_point$ZIP_CODE %in% patient_zip$zipcode, ]
+
+patient_zipcode_points_cropped <- patient_zipcode_points %>%
+  st_crop(xmin = -118.46, xmax = -118.14, ymin = 33.7, ymax = 33.99)
+
+patient_zipcode_boundaries_cropped <- patient_zipcode_boundaries %>%
+    filter(ZIP_CODE %in% patient_zipcode_points_cropped$ZIP_CODE)
+
+patient_zipcode_sf <- patient_zipcode_boundaries_cropped %>%
+  st_set_crs(CRS_LL) %>%
+  st_transform(CRS_UTM)
+
+grid <- zipcode_result %>%
+    select(mon_utm_x, mon_utm_y, zipcode) %>%
+    distinct()
+  
+zipcode_grid_raster <- rasterFromXYZ(grid %>% select(mon_utm_x, mon_utm_y, 0), res = c(500, 500), crs = CRS_UTM)
+
+grid_to_zipcode <- exact_extract(zipcode_grid_raster, patient_zipcode_sf, include_cell = T, include_xy = T)
+
+grid_to_zipcode <- tibble(zipcode = patient_zipcode_sf$ZIP_CODE,
+                          grid_to_zipcode) %>%
+  unnest()
+
+zipcode_raster_df <- zipcode_grid_raster %>%  
+              as.data.frame(xy = T) %>% 
+              rowid_to_column()
+
+grid_to_zipcode <- grid_to_zipcode %>%
+  inner_join(zipcode_raster_df, join_by(cell == rowid))
+
+zipcode_weights <- grid_to_zipcode %>%
+  group_by(zipcode) %>%
+  summarise(total_weight = sum(coverage_fraction))
+
+grid_to_zipcode <- grid_to_zipcode %>%
+  select(zipcode, x.x, y.x, coverage_fraction) %>%
+  mutate(x = as.integer(x.x),
+         y = as.integer(y.x)) %>%
+  left_join(zipcode_result %>% mutate(x = as.integer(mon_utm_x),
+                            y = as.integer(mon_utm_y)), join_by(x == x, y == y)) %>%
+  left_join(zipcode_weights, join_by(zipcode.x == zipcode))
+
+zipcode_daily_average <- grid_to_zipcode %>%
+  group_by(zipcode.x, day, total_weight) %>%
+  summarise(daily_average_h2s_log = sum(daily_h2s_log_prediction * coverage_fraction),
+            daily_average_h2s = sum(daily_h2s_prediction * coverage_fraction)) %>%
+  mutate(daily_average_h2s_log = daily_average_h2s_log / total_weight,
+         daily_average_h2s = daily_average_h2s / total_weight)
+
+zipcode_daily_average <- zipcode_daily_average %>%
+  ungroup() %>%
+  select(zipcode.x, day, daily_average_h2s_log, daily_average_h2s) %>%
+  rename(zip_code = zipcode.x)
+
+saveRDS(zipcode_daily_average, 'zipcode_daily_average.rds')
+write_csv(zipcode_daily_average, 'zipcode_daily_average.csv')
 ```
 
 

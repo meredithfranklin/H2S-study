@@ -25,13 +25,14 @@ select <- dplyr::select
 ```
 
 ```{r}
-daily_full <- readRDS('data/daily_full.rds')
+daily_full <- readRDS('../../data/daily_full.rds')
 ```
 
 # Set up grid
 ## Traditional method
 ```{r}
 CRS_UTM <- CRS("+proj=utm +zone=11 ellps=WGS84")
+CRS_LL <- CRS("+proj=longlat +datum=WGS84")
 
 mon_location <- daily_full %>%
   select(Monitor, mon_utm_x, mon_utm_y) %>%
@@ -60,7 +61,7 @@ myGrid_ll<- st_transform(myGrid, proj_albers)
 
 ## Using the stars package to counties
 ```{r}
-la_county <- read_sf('shapefiles/Zip_Codes_(LA_County)/Zip_Codes_(LA_County).shp')
+la_county <- read_sf('../../shapefiles/Zip_Codes_(LA_County)/Zip_Codes_(LA_County).shp')
 
 la_county_trans <- st_transform(la_county, CRS_UTM)      # apply transformation to polygons sf
 
@@ -160,7 +161,7 @@ For now, try the model without meteorological data
 
 ```{r}
 # Without meteorological data XGBoost results
-fit.xgb_da_log_h2s_sincefeb2022_no_met <- readRDS('rfiles/fit.xgb_da_log_h2s_sincefeb2022_no_met.rds')
+fit.xgb_da_log_h2s_sincefeb2022_no_met <- readRDS('../../rfiles/fit.xgb_da_log_h2s_sincefeb2022_no_met.rds')
 fit.xgb_da_log_h2s_sincefeb2022_no_met$pred %>% group_by(Resample) %>% 
      summarise(R2 = R2(pred, obs), RMSE = RMSE(pred, obs),
                R2_BT = R2(exp(pred), exp(obs)), RMSE_BT = RMSE(exp(pred), exp(obs))) %>% 
@@ -169,7 +170,7 @@ fit.xgb_da_log_h2s_sincefeb2022_no_met$pred %>% group_by(Resample) %>%
 
 ```{r}
 # Without meteorological data XGBoost results
-fit.xgb_da_log_h2s_dis_ind_no_met <- readRDS('rfiles/fit.xgb_da_log_h2s_dis_ind_no_met.rds')
+fit.xgb_da_log_h2s_dis_ind_no_met <- readRDS('../../rfiles/fit.xgb_da_log_h2s_dis_ind_no_met.rds')
 fit.xgb_da_log_h2s_dis_ind_no_met$pred %>% group_by(Resample) %>% 
      summarise(R2 = R2(pred, obs), RMSE = RMSE(pred, obs),
                R2_BT = R2(exp(pred), exp(obs)), RMSE_BT = RMSE(exp(pred), exp(obs))) %>% 
@@ -177,7 +178,7 @@ fit.xgb_da_log_h2s_dis_ind_no_met$pred %>% group_by(Resample) %>%
 ```
 
 ```{r}
-fit.xgb_da_log_h2s_full_no_met <- readRDS('rfiles/fit.xgb_da_log_h2s_full_no_met.rds')
+fit.xgb_da_log_h2s_full_no_met <- readRDS('../../rfiles/fit.xgb_da_log_h2s_full_no_met.rds')
 fit.xgb_da_log_h2s_full_no_met$pred %>% group_by(Resample) %>% 
      summarise(R2 = R2(pred, obs), RMSE = RMSE(pred, obs),
                R2_BT = R2(exp(pred), exp(obs)), RMSE_BT = RMSE(exp(pred), exp(obs))) %>% 
@@ -225,7 +226,7 @@ logh2s_da_dis_withoutmeteoro <- gam(I(log(H2S_daily_avg))~month + weekday + I(1/
 summary(logh2s_da_dis_withoutmeteoro)
 
 # WRP Data
-la_wrp <- read_sf('shapefiles/LA_WRP.shp', layer = 'LA_WRP')
+la_wrp <- read_sf('../../shapefiles/LA_WRP.shp', layer = 'LA_WRP')
 
 # Convert both water treatment plants and monitor coordinates to UTM
 la_wrp <- st_transform(la_wrp, CRS_UTM)
@@ -236,8 +237,8 @@ get_dist_wrp <- function(location) {
 }
 
 # Get MinDist to Refinery
-st_read('shapefiles/Petroleum_Refinery.shp')
-refineries <- read_sf('shapefiles/Petroleum_Refinery.shp', layer = 'Petroleum_Refinery')
+st_read('../../shapefiles/Petroleum_Refinery.shp')
+refineries <- read_sf('../../shapefiles/Petroleum_Refinery.shp', layer = 'Petroleum_Refinery')
 refineries <- refineries %>%
   select(Company, Site, Latitude, Longitude) %>%
   mutate(refinery = case_when(Site == 'Carson' ~ 'Marathon (Carson)',
@@ -253,9 +254,9 @@ get_dist_ref <- function(location) {
 }
 
 # Get production data
-well_prod <- read_csv('data/LA well prod Dec2023 Well Monthly Production.CSV', show_col_types = FALSE)
-full_well_info <- read_csv('data/well_active_inactive_prod_since_2000.CSV', show_col_types = FALSE)
-active_well_info <- read_csv('data/LA well prod Dec2023 Well Headers.CSV', show_col_types = FALSE)
+well_prod <- read_csv('../../data/LA well prod Dec2023 Well Monthly Production.CSV', show_col_types = FALSE)
+full_well_info <- read_csv('../../data/well_active_inactive_prod_since_2000.CSV', show_col_types = FALSE)
+active_well_info <- read_csv('../../data/LA well prod Dec2023 Well Headers.CSV', show_col_types = FALSE)
 
 inactive_well_info <- anti_join(full_well_info, active_well_info, join_by(API14)) %>%
   rename(lon = `Surface Hole Longitude (WGS84)`,
@@ -325,14 +326,14 @@ get_well_inactive <- function(location) {
 }
 
 # Get elevation
-elevation <- raster('shapefiles/N33W119.hgt')
+elevation <- raster('../../shapefiles/N33W119.hgt')
 
 get_elevation <- function(location_ll) {
   return(raster::extract(elevation, location_ll))
 }
 
 # Get EVI
-evi <- raster('shapefiles/MOD13Q1.061__250m_16_days_EVI_doy2023145_aid0001.tif')
+evi <- raster('../../shapefiles/MOD13Q1.061__250m_16_days_EVI_doy2023145_aid0001.tif')
 
 evi <- projectRaster(evi, crs = CRS_UTM)
 # fill NA pixels
@@ -361,7 +362,7 @@ get_evi <- function(location){
 }
 
 # Get Number of Odor Complaints
-odor <- read_csv('data/odorcomplaintdata_2018_2023.csv')
+odor <- read_csv('../../data/odorcomplaintdata_2018_2023.csv')
 
 get_zipcode <- function(location) {
   return(apply(st_intersects(la_county_trans, location, sparse = FALSE), 2,
@@ -384,8 +385,8 @@ get_odor <- function(location, disaster) {
 
 # Distance to Dominguez Channel
 # Read in the shape file, it already has a CRS
-st_read('shapefiles/DominguezChannel_Carson.shp')
-d_channel <- read_sf('shapefiles/DominguezChannel_Carson.shp', layer = 'DominguezChannel_Carson')
+st_read('../../shapefiles/DominguezChannel_Carson.shp')
+d_channel <- read_sf('../../shapefiles/DominguezChannel_Carson.shp', layer = 'DominguezChannel_Carson')
 d_channel <- st_transform(d_channel, CRS_UTM) # convert to UTM crs
 
 
@@ -444,9 +445,9 @@ d_channel <- st_transform(d_channel, CRS_UTM) # convert to UTM crs
 #   select(-c(x, y, values, sf_loc, ll_loc))
 # 
 # 
-# saveRDS(grd_data_disaster, 'rfiles/grd_data_disaster.rds')
+# saveRDS(grd_data_disaster, '../../rfiles/grd_data_disaster.rds')
 
-grd_data_disaster <- readRDS('rfiles/grd_data_disaster.rds')
+grd_data_disaster <- readRDS('../../rfiles/grd_data_disaster.rds')
 
 grd_data_dis_ind_mat <- fastDummies::dummy_cols(grd_data_disaster %>%
                                    select(-c(day)) %>%
@@ -615,8 +616,8 @@ dis_di_pred <- leaflet() %>% addTiles() %>%
                   
 
 dis_di_pred
-saveWidget(dis_di_pred, file="figures/dis_di_pred.html")
-writeRaster(raster_di_dis_xgb, file = 'rfiles/raster_di_dis_xgb.tif', overwrite=TRUE)
+saveWidget(dis_di_pred, file="../../figures/dis_di_pred.html")
+writeRaster(raster_di_dis_xgb, file = '../../rfiles/raster_di_dis_xgb.tif', overwrite=TRUE)
 ```
 
 ```{r}
@@ -1004,3 +1005,30 @@ Then, we will compute the predicted H2S concentration for each day October 2021 
 # }
 
 ```
+
+```{r}
+la_county_full_ll <- la_county_full %>%
+  st_transform(CRS_LL)
+
+leaflet() %>% addTiles() %>% 
+                  addRasterImage(raster_di_dis_xgb, 
+                                 colors = pal, 
+                                 opacity = .8) %>%
+                  addLegend(pal = pal_legend, 
+                            values = c(0, 12), 
+                            title = "Monthly Average H2S",
+                            opacity = 1) %>%
+                  addMarkers(data = monitor_loc, icon = mon_icon,
+                         lng=~x, lat=~y, label = ~Monitor) %>%
+                  #addMarkers(data = top_10_disaster, icon = well_icon,
+                  #       lng=~lon, lat=~lat,label = ~`API/UWI`) %>%
+                  addCircleMarkers(data = all_wells_disaster, lng = ~lon, lat = ~lat,
+                                   fillColor = '#333333', radius = 4, fillOpacity = 0.8,
+                                   label = ~'API/UWI', color = '#888888', weight = 1) %>%
+                  addMarkers(data = wrp_in_region, icon = wrp_factory_icon,
+                         lng=~x, lat=~y, label = ~`CWP_NAM`) %>%
+                  addPolygons(data = la_county_full_ll) %>%
+                  addMarkers(data = refineries, icon = oil_factory_icon,
+                         lng=~Longitude, lat=~Latitude, label = ~`refinery`)
+```
+

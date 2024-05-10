@@ -4,7 +4,7 @@ library(caret)
 library(fastDummies)
 select <- dplyr::select
 
-daily_full <- readRDS('data/daily_full.rds') %>%
+daily_full <- readRDS('../../data/daily_full.rds') %>%
   mutate(Refinery = str_replace_all(str_replace_all(Refinery, '[()]', ''), ' ', '_'),
          Monitor = str_replace_all(Monitor, ' ', '_'),
          weekday = weekday,
@@ -219,26 +219,26 @@ fit.xgb_da_log_h2s_excl_dis <- train(H2S_daily_avg~.,
                  tuneLength = 10, importance=TRUE, verbosity = 0, verbose=FALSE)
 saveRDS(fit.xgb_da_log_h2s_excl_dis, 'rfiles/fit.xgb_da_log_h2s_excl_dis.rds')
 
-# # Everything w. Disaster Indicator
-# everything <- daily_full %>% 
-#   select(all_of(predictors)) %>% 
-#   mutate(disaster = if_else(year == '2021' & month %in% c('10', '11', '12'), 1, 0)) %>% 
-#   filter(complete.cases(.)) 
-# 
-# train <- everything %>% 
-#   mutate(H2S_daily_avg = log(H2S_daily_avg))
-# 
-# train <- fastDummies::dummy_cols(train %>%
-#                                    select(-c(day)),
-#                                  remove_selected_columns = TRUE)
-# 
-# fit.xgb_da_log_h2s_dis_ind <- train(H2S_daily_avg~.,
-#                  method = 'xgbTree',
-#                  data = train,
-#                  trControl=control_everything,
-#                  tuneGrid = tune_grid,
-#                  tuneLength = 10, importance=TRUE, verbosity = 0, verbose=FALSE)
-# saveRDS(fit.xgb_da_log_h2s_dis_ind, 'rfiles/fit.xgb_da_log_h2s_dis_ind.rds')
+# Everything w. Disaster Indicator
+everything <- daily_full %>%
+  select(all_of(predictors)) %>%
+  mutate(disaster = if_else(year == '2021' & month %in% c('10', '11', '12'), 1, 0)) %>%
+  filter(complete.cases(.))
+
+train <- everything %>%
+  mutate(H2S_daily_avg = log(H2S_daily_avg))
+
+train <- fastDummies::dummy_cols(train %>%
+                                   select(-c(day)),
+                                 remove_selected_columns = TRUE)
+
+fit.xgb_da_log_h2s_dis_ind <- train(H2S_daily_avg~.,
+                 method = 'xgbTree',
+                 data = train,
+                 trControl=control_everything,
+                 tuneGrid = tune_grid,
+                 tuneLength = 10, importance=TRUE, verbosity = 0, verbose=FALSE)
+saveRDS(fit.xgb_da_log_h2s_dis_ind, 'rfiles/fit.xgb_da_log_h2s_dis_ind.rds')
 
 # Everything w.o Disaster Indicator
 train <- everything %>% 

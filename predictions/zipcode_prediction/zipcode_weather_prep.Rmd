@@ -12,22 +12,22 @@ library(httr)
 library(jsonlite)
 library(sf)
 library(circular)
+select <- dplyr::select
 ```
 
 # Load in data
 ```{r}
-zipcode_grid_df_home <- read_csv('zipcode_grid_df_home.csv')
-zipcode_grid_fetched_home <- readRDS('zipcode_grid_fetched_home.rds')
-zipcode_grid_df_cosmos <- read_csv('zipcode_grid_df_cosmos.csv')
+zipcode_grid_df <- read_csv('zipcode_grid_df.csv')
+zipcode_fetched <- readRDS('zipcode_grid_fetched_weather.rds')
 ```
 
 ```{r}
 # Code to fetch weather data
 # For first time
 #zipcode_grid_fetched_home <- tibble(lon = numeric(), lat = numeric())
- 
-zipcode_daily_unfetched_result <- zipcode_grid_df_cosmos %>%
-  anti_join(zipcode_daily_result, join_by(lon == longitude, lat == latitude))
+
+zipcode_daily_unfetched_result <- zipcode_grid_df %>%
+  anti_join(zipcode_fetched, join_by(lon == longitude, lat == latitude))
 
 zipcode_daily_result <- tibble(latitude = numeric(),
                                longitude = numeric(),
@@ -48,15 +48,15 @@ hourly_result <- tibble(latitude = numeric(),
                  hourly_wd = numeric())
 
 # loop through rows
-for (i in 1:nrow(zipcode_grid_df_cosmos)){
+for (i in 1:nrow(zipcode_daily_unfetched_result)){
 
-  get_url <- sprintf("https://customer-archive-api.open-meteo.com/v1/archive?latitude=%s&longitude=%s&start_date=2018-10-01&end_date=2022-12-31&hourly=temperature_2m,relative_humidity_2m,precipitation,wind_speed_10m,wind_direction_10m&temperature_unit=fahrenheit&wind_speed_unit=mph&precipitation_unit=inch&timezone=America%%2FLos_Angeles&apikey=S4sRENjfQvm2aH86",
-                     zipcode_grid_df_cosmos$lat[i], zipcode_grid_df_cosmos$lon[i])
+  get_url <- sprintf("https://customer-archive-api.open-meteo.com/v1/archive?latitude=%s&longitude=%s&start_date=2018-01-01&end_date=2022-12-31&hourly=temperature_2m,relative_humidity_2m,precipitation,wind_speed_10m,wind_direction_10m&temperature_unit=fahrenheit&wind_speed_unit=mph&precipitation_unit=inch&timezone=America%%2FLos_Angeles&apikey=S4sRENjfQvm2aH86",
+                     zipcode_daily_unfetched_result$lat[i], zipcode_daily_unfetched_result$lon[i])
   res = GET(get_url)
   data = fromJSON(rawToChar(res$content))
   if (!(is.null(try(data$error)))){
-    ith_daily_exposure_result <- tibble(latitude = zipcode_grid_df_cosmos$lat[i],
-                                        longitude = zipcode_grid_df_cosmos$lon[i],
+    ith_daily_result <- tibble(latitude = zipcode_daily_unfetched_result$lat[i],
+                                        longitude = zipcode_daily_unfetched_result$lon[i],
                                         day = NA,
                                         daily_temp = NA,
                                         daily_hum = NA,
@@ -65,8 +65,8 @@ for (i in 1:nrow(zipcode_grid_df_cosmos)){
                                         daily_wd = NA)
   }
   else {
-    hourly_result <- tibble(latitude = zipcode_grid_df_cosmos$lat[i],
-                                        longitude = zipcode_grid_df_cosmos$lon[i],
+    hourly_result <- tibble(latitude = zipcode_daily_unfetched_result$lat[i],
+                                        longitude = zipcode_daily_unfetched_result$lon[i],
                             elevation = data$elevation,
                             hourly = data$hourly$time,
                             hourly_temp = data$hourly$temperature_2m,
@@ -99,12 +99,8 @@ for (i in 1:nrow(zipcode_grid_df_cosmos)){
   print(sprintf("Row %s completed", i))
 }
 
-
-saveRDS(zipcode_daily_result, 'zipcode_daily_result_temp.rds')
-result <- rbind(result_copy,
-                zipcode_daily_result)
-
-saveRDS(result, 'zipcode_grid_fetched_weather.rds')
+zipcode_daily_result <- rbind(zipcode_fetched, zipcode_daily_result)
+saveRDS(zipcode_daily_result, 'zipcode_grid_fetched_weather.rds')
 ```
 
 
