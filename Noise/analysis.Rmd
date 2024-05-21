@@ -1,0 +1,58 @@
+---
+title: "Airport Noise Analysis"
+author: "Jerry Wu"
+date: "2024-05-20"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(sf)
+library(leaflet)
+library(raster)
+library(terra)
+library(exactextractr)
+select <- dplyr::select
+```
+
+```{r}
+airport_noise_contours <- read_sf('Airport_Noise_Contours.shp')
+airport_noise_data <- read_sf('Day_4326_II.shp')
+```
+
+```{r}
+unique(airport_noise_data$DN)
+unique(airport_noise_data$layer)
+airport_noise_data %>%
+  as_tibble() %>%
+  group_by(layer) %>%
+  summarise(n = n(),
+            avg_dn = mean(DN))
+length(unique(airport_noise_data$geometry))
+```
+
+
+```{r}
+# Visualize
+pal <- colorNumeric(palette = colorRampPalette(colors = c("yellow", "red"), space = "Lab"), domain = NULL)
+
+airport_noise_viz <- leaflet() %>% 
+      addProviderTiles(providers$MtbMap) %>%
+              addProviderTiles(providers$Stadia.StamenTerrainBackground,
+                               options = providerTileOptions(opacity = 0.9, api_key = "2960e34d-9997-48db-abeb-360be74fc3f5")) %>%
+              addProviderTiles(providers$Stadia.StamenTonerLines,
+                options = providerTileOptions(opacity = 0.25, api_key = "2960e34d-9997-48db-abeb-360be74fc3f5")) %>%
+              addProviderTiles(providers$Stadia.StamenTonerLabels,
+                               options=providerTileOptions(api_key = "2960e34d-9997-48db-abeb-360be74fc3f5")) %>%
+      addPolygons(data = airport_noise_contours,
+                  fillOpacity = 0.5, 
+                  weight = 2, 
+                  color = "#808080",
+                  fillColor = '#C0C0C0') %>%
+      addPolygons(data = airport_noise_data %>% filter(layer == "1_4") %>% head(10000),
+                  fillColor = ~pal(DN), 
+                  stroke = F)
+airport_noise_viz
+```
+
