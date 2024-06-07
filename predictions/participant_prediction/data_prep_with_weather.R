@@ -123,9 +123,9 @@ get_angle_ref <- function(location) {
 }
 
 # Get production data
-well_prod <- read_csv('LA well prod Dec2023 Well Monthly Production.CSV', show_col_types = FALSE)
+well_prod <- read_csv('LA well prod Mar2024 Well Monthly Production.CSV', show_col_types = FALSE)
 full_well_info <- read_csv('well_active_inactive_prod_since_2000.CSV', show_col_types = FALSE)
-active_well_info <- read_csv('LA well prod Dec2023 Well Headers.CSV', show_col_types = FALSE)
+active_well_info <- read_csv('LA well prod Mar2024 Well Headers.CSV', show_col_types = FALSE)
 
 inactive_well_info <- anti_join(full_well_info, active_well_info, join_by(API14)) %>%
   rename(lon = `Surface Hole Longitude (WGS84)`,
@@ -156,9 +156,12 @@ active_well_location <- well_prod %>%
   st_set_crs(4326) %>%
   st_transform(CRS_UTM)
 
+prod_end_month <- strftime(well_prod[which.max(well_prod$`Monthly Production Date`), ]$`Monthly Production Date` + 60*60*24*31, format = '%Y-%m-%d')
+well_prod$`Monthly Production Date` <- strftime(well_prod$`Monthly Production Date`, format = '%Y-%m-%d')
+
 get_well_prod <- function(location, date) {
   # if date is later than a certain month, return NA
-  if (date > max(well_prod$`Monthly Production Date`) + 60*60*24*31){
+  if (date > prod_end_month) {
     return(tibble(active_2km = NA,
                   monthly_oil_2km = NA,
                   monthly_gas_2km = NA))
@@ -237,6 +240,7 @@ get_evi <- function(location){
 odor <- read_csv('odorcomplaintdata_2018_2023.csv')
 
 odor$date <- force_tz(odor$date, tz = 'America/Los_Angeles')
+odor$date <- strftime(odor$date, format = '%Y-%m-%d')
 
 la_county <- read_sf('CA_Zipcode.shp')
 
@@ -447,6 +451,68 @@ data_visit2_month <- data_visit2_month %>%
   rowwise() %>%
   mutate(well_prod_data = get_well_prod(sf_loc, month_floor)) %>%
   ungroup()
+data_visit2 <- data_visit2_with_weather %>%
+  filter(!is.na(Visit2)) %>%
+  select(Visit1, Visit2, mon_utm_x, mon_utm_y, latitude, longitude) %>%
+  distinct() %>%
+  mutate(sf_loc = get_sf_loc(mon_utm_x, mon_utm_y),
+         ll_loc = get_ll_loc(mon_utm_x, mon_utm_y)) %>%
+  mutate(dist_wrp = get_dist_wrp(sf_loc)$dist_wrp,
+         MinDist = get_dist_ref(sf_loc),
+         elevation = get_elevation(ll_loc),
+         EVI = get_evi(ll_loc),
+         capacity = get_dist_wrp(sf_loc)$capacity,
+         dist_dc = apply(st_distance(sf_loc, d_channel), 1, min),
+         zipcode = get_zipcode(sf_loc),
+         angle_ref = get_angle_ref(sf_loc),
+         angle_wrp = get_angle_wrp(sf_loc))
+
+data_visit2 <- data_visit2 %>%
+  rowwise() %>%
+  mutate(inactive_2km = get_well_inactive(sf_loc)) %>%
+  ungroup()
+
+data_visit2 <- data_visit2 %>%
+  left_join(data_visit2_with_weather, join_by(Visit1, Visit2, mon_utm_x, mon_utm_y, latitude, longitude))
+
+wind_diff <- abs(data_visit2$angle_ref - data_visit2$daily_wd)
+wind_diff <- ifelse(wind_diff > 180, 360 - wind_diff, wind_diff)
+data_visit2$daily_downwind_ref <- as.integer(wind_diff <= 15)
+
+wind_diff <- abs(data_visit2$angle_wrp - data_visit2$daily_wd)
+wind_diff <- ifelse(wind_diff > 180, 360 - wind_diff, wind_diff)
+data_visit2$daily_downwind_wrp <- as.integer(wind_diff <= 15)
+
+data_visit2$month_floor <- floor_date(data_visit2$day, 'month')
+
+# get monthly oil
+data_visit2_month <- data_visit2 %>%
+  select(sf_loc, Visit1, Visit2, month_floor) %>%
+  distinct()
+
+data_visit2_month <- data_visit2_month %>%
+  rowwise() %>%
+  mutate(well_prod_data = get_well_prod(sf_loc, month_floor)) %>%
+  ungroup()
+
+data_visit2 <- data_visit2 %>%
+  left_join(data_visit2_month, join_by(sf_loc, Visit1, Visit2, month_floor))
+
+data_visit2 <- data_visit2 %>%
+  mutate(active_2km = well_prod_data$active_2km,
+         monthly_oil_2km = well_prod_data$monthly_oil_2km,
+         monthly_gas_2km = well_prod_data$monthly_gas_2km) %>%
+  select(-well_prod_data)
+
+data_visit2 <- data_visit2 %>%
+  rowwise() %>%
+  mutate(num_odor_complaints = get_odor(zipcode, day))
+
+data_visit2 <- data_visit2 %>%
+  st_drop_geometry() %>%
+  select(-c(sf_loc, ll_loc))
+
+write_csv(data_visit2, 'data_visit2_pred_ready.csv')
 
 data_visit2 <- data_visit2 %>%
   left_join(data_visit2_month, join_by(sf_loc, Visit1, Visit2, month_floor))

@@ -2,6 +2,7 @@
 library(tidyverse)
 library(lubridate)
 library(fastDummies)
+library(xgboost)
 # Load in XGBoost model with disaster indicator
 fit.xgb_da_log_h2s_dis_ind <- readRDS('fit.xgb_da_log_h2s_dis_ind.rds')
 
