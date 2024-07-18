@@ -532,7 +532,7 @@ full_data <- full_data  %>%
             'DaylightSavings', 'QC.Code', 'wd_QCcode', 'ws_QCcode'))
 ```
 
-# Downwind Indicator wrp Refinery
+# Downwind Indicator wrp    
 ```{r}
 # Create variable to indicate downwind wrt refinery
 wind_diff <- abs(full_data$Converted_Angle - 180 - full_data$wd)

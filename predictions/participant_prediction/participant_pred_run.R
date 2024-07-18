@@ -2,7 +2,7 @@
 library(tidyverse)
 library(lubridate)
 library(fastDummies)
-library(xgboost)
+library(caret)
 # Load in XGBoost model with disaster indicator
 fit.xgb_da_log_h2s_dis_ind <- readRDS('fit.xgb_da_log_h2s_dis_ind.rds')
 
@@ -101,8 +101,9 @@ data_visit1_pred$daily_h2s_prediction <- exp(data_visit1_pred$daily_h2s_log_pred
 
 write_csv(data_visit1_pred, 'data_visit1_prediction_result.csv')
 # -------------------------
-data_visit2_complete <- data_visit2 %>% filter(complete.cases(.))
-data_visit2_incomplete <- data_visit2 %>% filter(!complete.cases(.))
+Visit1 <- data_visit2$Visit1
+data_visit2_complete <- data_visit2 %>% select(-Visit1) %>% filter(complete.cases(.))
+data_visit2_incomplete <- data_visit2 %>% select(-Visit1) %>% filter(!complete.cases(.))
 
 # format data
 data_visit2_mat <- data_visit2_complete %>%
@@ -146,9 +147,9 @@ data_visit2_pred <- data_visit2_complete %>%
 
 data_visit2_pred$daily_h2s_prediction <- exp(data_visit2_pred$daily_h2s_log_prediction)
 
-data_visit2_pred <- rbind(data_visit2_pred, 
+data_visit2_pred <- cbind(Visit1, (rbind(data_visit2_pred, 
                           data_visit2_incomplete %>% 
                             mutate(daily_h2s_log_prediction = NA, 
-                            daily_h2s_prediction = NA))
+                            daily_h2s_prediction = NA))))
 
 write_csv(data_visit2_pred, 'data_visit2_prediction_result.csv')
