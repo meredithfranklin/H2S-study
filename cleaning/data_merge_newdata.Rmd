@@ -46,6 +46,16 @@ gc()
 ```
 
 ```{r}
+# check duplicate date/site pairs
+full_data %>% 
+  select(`Date/Time`, Monitor, DST) %>%
+  group_by(`Date/Time`, Monitor, DST) %>%
+  summarise(n = n()) %>%
+  filter(n > 2) %>%
+  nrow()
+```
+
+```{r}
 site_geo_metadata <- read_csv('../data/site_geo_metadata.csv')
 
 full_data <- full_data %>%
@@ -55,11 +65,11 @@ full_data <- full_data %>%
 
 # Compute date variables
 ```{r}
-full_data2 <- full_data %>% 
+full_data <- full_data %>% 
   mutate(`Date/Time` = as.POSIXct(`Date/Time`, "%m/%d/%Y %H:%M", tz = 'America/Los_Angeles'))
 
 full_data <- full_data %>% 
-  mutate(day = as.POSIXct(format(DateTime, "%Y-%m-%d"), format="%Y-%m-%d", tz = 'GMT'))
+  mutate(day = as.POSIXct(format(`Date/Time`, "%Y-%m-%d"), format="%Y-%m-%d", tz = 'America/Los_Angeles'))
  
 # Remove observations before 2020
 full_data <- full_data %>% filter(day > '2019-12-31') %>% distinct()
@@ -68,39 +78,154 @@ full_data <- full_data %>%
   mutate(yearmonth = format(day, "%Y-%m"),
          year = format(day, "%Y"),
          month = format(day, "%m"),
+         dayhour = format(`Date/Time`, "%Y-%m-%d %H"),
          weekday = relevel(factor(wday(full_data$day, label=TRUE), ordered = FALSE), ref = "Sun"))
+
+# save for weather data download
+# saveRDS(full_data, '../data/weather/site_data_for_weather.rds')
 ```
 
-# Add wind data for El Segundo and St Anthony
+# Add meteorological data
 ```{r}
-klax_data <- read_csv('data/KLAX_2020-2023.csv', show_col_types = FALSE) %>% 
-  filter(!row_number() == 1)
-
-klax_daily <- klax_data %>%
-  group_by(Date) %>%
-  summarise(avg_temp = mean(as.numeric(air_temp), na.rm=T),
-            avg_hum = mean(as.numeric(relative_humidity), na.rm=T),
-            precip = precip_accum_24_hour[which(!is.na(precip_accum_24_hour))[1]],
-            ws = mean(as.numeric(wind_speed), na.rm=TRUE),
-            wd = as.numeric(mean(circular(as.numeric(wind_direction), units = 'degrees'), na.rm=TRUE))) %>%
-  mutate(precip = coalesce(as.numeric(precip), 0),
-         Date = parse_date_time(Date, c('m/d/y')),
-         Date = as.POSIXct(Date, "%Y-%m-%d", tz = 'UTC'),
-         wd = if_else(wd < 0, wd + 360, wd))
-
-full_data <- rbind(full_data %>% 
-                     filter(!(Monitor %in% c('El Segundo', 'St. Anthony'))), 
-                   full_data %>%
-                     select(-c(wd, ws)) %>%
-                     filter(Monitor %in% c('El Segundo', 'St. Anthony')) %>%
-                     left_join(klax_daily %>% select(Date, ws, wd), join_by(day == Date))) 
+# load in daily weather data
+monitor_daily_weather <- readRDS('../data/weather/monitor_daily_weather.rds')
+# monitor_hourly_weather <- readRDS('../data/weather/monitor_daily_weather.rds')
 ```
 
 ```{r}
-# Remove rows without wd or ws
-full_data <- full_data %>% 
-  drop_na(c("wd", "ws"))
+# Merge with full_data using day and Monitor as keys
+full_data <- full_data %>%
+  left_join(monitor_daily_weather %>% mutate(day = as.POSIXct(day, format="%Y-%m-%d", tz = 'America/Los_Angeles')), join_by(Monitor, day))
 ```
+
+```{r}
+# We also want to fill missing wind data for the monitors without wind measurements
+# !!! As for now, this will be done using daily wind data instead of hourly due to DST issues
+full_data <- full_data %>%
+  mutate(`Wind Speed` = coalesce(`Wind Speed`, daily_ws),
+         `Wind Direction` = coalesce(`Wind Direction`, daily_wd))
+```
+
+
+<!-- # This part was used to add weather data -->
+<!-- # Add wind data for El Segundo and St Anthony -->
+<!-- ```{r} -->
+<!-- klax_data <- read_csv('data/KLAX_2020-2023.csv', show_col_types = FALSE) %>%  -->
+<!--   filter(!row_number() == 1) -->
+
+<!-- klax_daily <- klax_data %>% -->
+<!--   group_by(Date) %>% -->
+<!--   summarise(avg_temp = mean(as.numeric(air_temp), na.rm=T), -->
+<!--             avg_hum = mean(as.numeric(relative_humidity), na.rm=T), -->
+<!--             precip = precip_accum_24_hour[which(!is.na(precip_accum_24_hour))[1]], -->
+<!--             ws = mean(as.numeric(wind_speed), na.rm=TRUE), -->
+<!--             wd = as.numeric(mean(circular(as.numeric(wind_direction), units = 'degrees'), na.rm=TRUE))) %>% -->
+<!--   mutate(precip = coalesce(as.numeric(precip), 0), -->
+<!--          Date = parse_date_time(Date, c('m/d/y')), -->
+<!--          Date = as.POSIXct(Date, "%Y-%m-%d", tz = 'UTC'), -->
+<!--          wd = if_else(wd < 0, wd + 360, wd)) -->
+
+<!-- full_data <- rbind(full_data %>%  -->
+<!--                      filter(!(Monitor %in% c('El Segundo', 'St. Anthony'))),  -->
+<!--                    full_data %>% -->
+<!--                      select(-c(wd, ws)) %>% -->
+<!--                      filter(Monitor %in% c('El Segundo', 'St. Anthony')) %>% -->
+<!--                      left_join(klax_daily %>% select(Date, ws, wd), join_by(day == Date)))  -->
+<!-- ``` -->
+
+<!-- ```{r} -->
+<!-- # Remove rows without wd or ws -->
+<!-- full_data <- full_data %>%  -->
+<!--   drop_na(c("wd", "ws")) -->
+<!-- ``` -->
+<!-- # Weather data from National Weather Service -->
+<!-- ```{r} -->
+<!-- # klax_data <- read_csv('data/KLAX_2020-2023.csv', show_col_types = FALSE) %>%  -->
+<!-- #   filter(!row_number() == 1) -->
+<!-- ktoa_data <- read_csv('data/KTOA_2020-2023.csv', show_col_types = FALSE) %>%  -->
+<!--   filter(!row_number() == 1) -->
+<!-- klgb_data <- read_csv('data/KLGB_2020-2023.csv', show_col_types = FALSE) %>%  -->
+<!--   filter(!row_number() == 1) -->
+<!-- ``` -->
+
+<!-- ```{r} -->
+<!-- # compute daily average temperature, humidity, and precipitation -->
+<!-- # klax_daily <- klax_data %>% -->
+<!-- #   group_by(Date) %>% -->
+<!-- #   summarise(avg_temp = mean(as.numeric(air_temp), na.rm=T), -->
+<!-- #             avg_hum = mean(as.numeric(relative_humidity), na.rm=T), -->
+<!-- #             precip = precip_accum_24_hour[which(!is.na(precip_accum_24_hour))[1]]) %>% -->
+<!-- #   mutate(precip = coalesce(as.numeric(precip), 0), -->
+<!-- #          Date = parse_date_time(Date, c('m/d/y')), -->
+<!-- #          Date = as.POSIXct(Date, "%Y-%m-%d", tz = 'UTC')) -->
+
+<!-- klax_daily <- klax_daily %>%  -->
+<!--   select(-c(ws, wd)) -->
+
+<!-- klgb_daily <- klgb_data %>% -->
+<!--   group_by(Date) %>% -->
+<!--   summarise(avg_temp = mean(as.numeric(air_temp), na.rm=T), -->
+<!--             avg_hum = mean(as.numeric(relative_humidity), na.rm=T), -->
+<!--             precip = precip_accum_24_hour[which(!is.na(precip_accum_24_hour))[1]]) %>% -->
+<!--   mutate(precip = coalesce(as.numeric(precip), 0), -->
+<!--          Date = parse_date_time(Date, c('m/d/y')), -->
+<!--          Date = as.POSIXct(Date, "%Y-%m-%d", tz = 'UTC')) -->
+
+<!-- ktoa_daily <- ktoa_data %>% -->
+<!--   group_by(Date) %>% -->
+<!--   summarise(avg_temp = mean(as.numeric(air_temp), na.rm=T), -->
+<!--             avg_hum = mean(as.numeric(relative_humidity), na.rm=T)) %>% -->
+<!--   mutate(Date = parse_date_time(Date, c('m/d/y')), -->
+<!--          Date = as.POSIXct(Date, "%Y-%m-%d", tz = 'UTC')) -->
+
+<!-- remove(klax_data, ktoa_data, klgb_data) -->
+
+<!-- # notice that the Torrance station is missing 10 days of observations -->
+<!-- # for that 10 days, use the long beach airport data as substitutes -->
+<!-- ktoa_daily <- bind_rows(ktoa_daily,  -->
+<!--                         anti_join(klgb_daily,ktoa_daily, by = 'Date') %>% select(-precip)) -->
+<!-- ``` -->
+
+
+<!-- ```{r} -->
+<!-- # map each monitor to closest monitor -->
+<!-- weather_stations <- tibble(station = c('KLAX', 'KLGB', 'KTOA'), -->
+<!--                            latitude = c(33.93806, 33.81167, 33.803979), -->
+<!--                            longitude = c(-118.33194, -118.38889, -118.339432)) %>% -->
+<!--   st_as_sf(coords = c('longitude', 'latitude')) %>%  -->
+<!--   st_set_crs(4326) -->
+
+<!-- weather_stations <- st_transform(weather_stations, CRS_UTM) -->
+
+<!-- closest_temp_hum_station <- weather_stations$station[st_nearest_feature(monitors, weather_stations)] -->
+
+<!-- closest_precip_station <- weather_stations$station[st_nearest_feature(monitors, weather_stations %>% filter(station != 'KTOA'))] -->
+
+<!-- monitors_weather <- tibble(Monitor = monitors$Monitor,  -->
+<!--                            weather_station = closest_temp_hum_station, -->
+<!--                            closest_precip_station = closest_precip_station) -->
+
+<!-- weather_full <- bind_rows(klax_daily %>% select(-precip) %>%  -->
+<!--                             mutate(weather_station = 'KLAX'), -->
+<!--                           klgb_daily %>% select(-precip) %>%  -->
+<!--                             mutate(weather_station = 'KLGB'), -->
+<!--                           ktoa_daily %>%  -->
+<!--                             mutate(weather_station = 'KTOA')) -->
+
+<!-- precip_full <- bind_rows(klax_daily %>% select(Date, precip) %>%  -->
+<!--                             mutate(closest_precip_station = 'KLAX'), -->
+<!--                           klgb_daily %>% select(Date, precip) %>%  -->
+<!--                             mutate(closest_precip_station = 'KLGB')) -->
+
+<!-- full_data <- full_data %>% -->
+<!--   left_join(monitors_weather, join_by('Monitor')) %>% -->
+<!--   left_join(weather_full, join_by('day' == 'Date', 'weather_station')) %>% -->
+<!--   left_join(precip_full, join_by('day' == 'Date', 'closest_precip_station')) -->
+
+<!-- remove(klax_daily, ktoa_daily, klgb_daily, precip_full, weather_full,  -->
+<!--        monitors_weather, weather_stations) -->
+<!-- gc() -->
+<!-- ``` -->
 
 
 ```{r}
@@ -195,244 +320,100 @@ full_data <- full_data %>%
   mutate(H2S = if_else(H2S < 0.4, 0.2, H2S))
 ```
 
-
-
-# Compute Daily Max H2S
+# Compute Hourly average H2S
 ```{r}
-# Compute daily max
+# Compute hourly average
 # -Inf (all NA) is converted to NA for that day
-H2S_dm <- full_data %>%
-  group_by(day, Monitor) %>%
-  summarise(H2S_daily_max = max(H2S, na.rm = TRUE)) %>%
-  mutate(H2S_daily_max = if_else(H2S_daily_max == -Inf, NA, H2S_daily_max))
+H2S_ha <- full_data %>%
+  group_by(dayhour, Monitor, DST) %>%
+  summarise(H2S_hourly_avg = mean(H2S, na.rm = TRUE)) %>%
+  mutate(H2S_hourly_avg = if_else(H2S_hourly_avg == -Inf, NA, H2S_hourly_avg))
 
 full_data <- full_data %>%
-  left_join(H2S_dm, by = c('day', 'Monitor'))
+  left_join(H2S_ha, join_by(dayhour, Monitor, DST))
 ```
 
-# Compute Monthly Avearge H2S
+# Compute Hourly max H2S
 ```{r}
-H2S_ma <- H2S_dm %>%
-  mutate(yearmonth = format(day, "%Y-%m")) %>%
-  group_by(yearmonth, Monitor) %>%
-  summarise(H2S_monthly_average = mean(H2S_daily_max, na.rm = TRUE))
+# Compute hourly max
+# -Inf (all NA) is converted to NA for that day
+H2S_hm <- full_data %>%
+  group_by(dayhour, Monitor, DST) %>%
+  summarise(H2S_hourly_max = max(H2S, na.rm = TRUE)) %>%
+  mutate(H2S_hourly_max = if_else(H2S_hourly_max == -Inf, NA, H2S_hourly_max))
 
 full_data <- full_data %>%
-  left_join(H2S_ma, by = c('yearmonth', 'Monitor'))
-
-remove(H2S_ma, H2S_dm)
+  left_join(H2S_hm, join_by(dayhour, Monitor, DST))
 ```
 
 # Compute daily average H2S
 ```{r}
 # Compute daily average
 H2S_da <- full_data %>%
-  group_by(day, Monitor) %>%
+  group_by(day, Monitor, DST) %>%
   summarise(H2S_daily_avg = mean(H2S, na.rm=TRUE))
 
 full_data <- full_data %>%
-  left_join(H2S_da, by = c('day', 'Monitor'))
-
-remove(H2S_da)
+  left_join(H2S_da, by = join_by(day, Monitor, DST))
 ```
+
+# Compute Daily Max H2S
+```{r}
+# Compute daily max
+# -Inf (all NA) is converted to NA for that day
+H2S_dm <- full_data %>%
+  group_by(day, Monitor, DST) %>%
+  summarise(H2S_daily_max = max(H2S, na.rm = TRUE)) %>%
+  mutate(H2S_daily_max = if_else(H2S_daily_max == -Inf, NA, H2S_daily_max))
+
+full_data <- full_data %>%
+  left_join(H2S_dm, by = join_by(day, Monitor, DST))
+```
+```{r}
+remove('H2S_ha', 'H2S_hm', 'H2S_da', 'H2S_dm')
+```
+
+<!-- # Compute Monthly Average H2S -->
+<!-- ```{r} -->
+<!-- H2S_ma <- H2S_dm %>% -->
+<!--   mutate(yearmonth = format(day, "%Y-%m")) %>% -->
+<!--   group_by(yearmonth, Monitor) %>% -->
+<!--   summarise(H2S_monthly_average = mean(H2S_daily_max, na.rm = TRUE)) -->
+
+<!-- full_data <- full_data %>% -->
+<!--   left_join(H2S_ma, by = c('yearmonth', 'Monitor')) -->
+
+<!-- remove(H2S_ma, H2S_dm) -->
+<!-- ``` -->
+
+
 
 # Compute wind sector
 ```{r}
 full_data <- full_data %>%
-  mutate(wd_sec = case_when(0 <= wd & wd < 90 ~ 'Q1',
-                            90 <= wd & wd < 180 ~ 'Q2',
-                            180 <= wd & wd < 270 ~ 'Q3',
-                            270 <= wd & wd <= 360 ~ 'Q4'))
+  mutate(wd_sec = case_when(0 <= `Wind Direction` & `Wind Direction` < 90 ~ 'Q1',
+                            90 <= `Wind Direction` & `Wind Direction` < 180 ~ 'Q2',
+                            180 <= `Wind Direction` & `Wind Direction` < 270 ~ 'Q3',
+                            270 <= `Wind Direction` & `Wind Direction` <= 360 ~ 'Q4'))
 ```
-
-# Water treatment plants
-```{r}
-la_wrp <- read_sf('shapefiles/LA_WRP.shp', layer = 'LA_WRP')
-
-CRS_UTM <- CRS("+proj=utm +zone=11 ellps=WGS84")
-
-# Convert both water treatment plants and monitor coordinates to UTM
-la_wrp <- st_transform(la_wrp, CRS_UTM)
-
-monitors <- full_data %>%
-  select(Monitor, latitude, longitude) %>%
-  distinct() %>% 
-  st_as_sf(coords = c('longitude', 'latitude')) %>% 
-  st_set_crs(4326) %>% 
-  st_transform(CRS_UTM)
-
-# get nearest wrp for each monitor
-monitor_wrp <- monitors %>% 
-  mutate(wrp_name = la_wrp$CWP_NAM[st_nearest_feature(monitors, la_wrp)],
-         dist_wrp = apply(st_distance(monitors, la_wrp), 1, min),
-         capacity = la_wrp$cpcty_m[st_nearest_feature(monitors, la_wrp)])
-
-# we also want to find the angle between the monitor and wrp
-angles <- tibble(monitors$geometry, la_wrp$geometry[st_nearest_feature(monitors, la_wrp)]) %>%
-  pivot_longer(cols = everything()) %>% 
-  pull(value) %>% # extract coordinates only
-  st_transform(4326) %>% # convert to lat/lon for function below
-  st_geod_azimuth() %>%
-  set_units('degrees') %>% # convert to degrees
-  drop_units()
-
-# angles <- tibble(locations$geometry, la_wrp$geometry[st_nearest_feature(locations, la_wrp)]) %>%
-#   pivot_longer(cols = everything()) %>% 
-#   pull(value) %>% # extract coordinates only
-#   st_transform(4326) %>% # convert to lat/lon for function below
-#   st_geod_azimuth() %>%
-#   set_units('degrees') %>% # convert to degrees
-#   drop_units()
-
-# angles <- tibble(locations$geometry, refineries$geometry[st_nearest_feature(locations, refineries)]) %>%
-#   pivot_longer(cols = everything()) %>%
-#   pull(value) %>% # extract coordinates only
-#   st_transform(4326) %>% # convert to lat/lon for function below
-#   st_geod_azimuth() %>%
-#   set_units('degrees') %>% # convert to degrees
-#   drop_units()
-
-angles <- angles[c(T, F)] # keep only odd index, valid pairs
-angles <- if_else(angles < 0, angles + 360, angles)
-
-monitor_wrp$wrp_angle <- angles
-
-full_data <- full_data %>%
-  left_join(tibble(monitor_wrp) %>% select(-geometry), join_by('Monitor'))
-```
-
-# Dominguez Channel
-```{r}
-# Read in the shape file, it already has a CRS
-st_read('shapefiles/DominguezChannel_Carson.shp')
-d_channel <- read_sf('shapefiles/DominguezChannel_Carson.shp', layer = 'DominguezChannel_Carson')
-d_channel <- st_transform(d_channel, CRS_UTM) # convert to UTM crs
-
-monitor_d_channel <- monitors %>%
-  mutate(dist_dc = apply(st_distance(monitors, d_channel), 1, min),
-         dist_213 = c(drop_units(st_distance(monitors, 
-                                             monitors[monitors$Monitor == '213th & Chico',]))))
-
-full_data <- full_data %>%
-  left_join(tibble(monitor_d_channel) %>% select(-geometry), join_by(Monitor))
-```
-
-```{r}
-dist_plot <- d_channel %>% 
-  ggplot() +
-  geom_sf() +
-  geom_sf(data = monitors) +
-  geom_sf_label(data = monitors %>% mutate(dist_dc = apply(st_distance(monitors, d_channel), 1, min)), 
-                aes(label = paste0(Monitor, ' ', round(dist_dc, 2)))) +
-  theme_minimal()
-
-dist_plot
-```
-
-```{r}
-remove(dist_plot, la_wrp, monitor_wrp, monitor_d_channel, d_channel)
-gc()
-```
-
-
-# Weather data from National Weather Service
-```{r}
-# klax_data <- read_csv('data/KLAX_2020-2023.csv', show_col_types = FALSE) %>% 
-#   filter(!row_number() == 1)
-ktoa_data <- read_csv('data/KTOA_2020-2023.csv', show_col_types = FALSE) %>% 
-  filter(!row_number() == 1)
-klgb_data <- read_csv('data/KLGB_2020-2023.csv', show_col_types = FALSE) %>% 
-  filter(!row_number() == 1)
-```
-
-```{r}
-# compute daily average temperature, humidity, and precipitation
-# klax_daily <- klax_data %>%
-#   group_by(Date) %>%
-#   summarise(avg_temp = mean(as.numeric(air_temp), na.rm=T),
-#             avg_hum = mean(as.numeric(relative_humidity), na.rm=T),
-#             precip = precip_accum_24_hour[which(!is.na(precip_accum_24_hour))[1]]) %>%
-#   mutate(precip = coalesce(as.numeric(precip), 0),
-#          Date = parse_date_time(Date, c('m/d/y')),
-#          Date = as.POSIXct(Date, "%Y-%m-%d", tz = 'UTC'))
-
-klax_daily <- klax_daily %>% 
-  select(-c(ws, wd))
-
-klgb_daily <- klgb_data %>%
-  group_by(Date) %>%
-  summarise(avg_temp = mean(as.numeric(air_temp), na.rm=T),
-            avg_hum = mean(as.numeric(relative_humidity), na.rm=T),
-            precip = precip_accum_24_hour[which(!is.na(precip_accum_24_hour))[1]]) %>%
-  mutate(precip = coalesce(as.numeric(precip), 0),
-         Date = parse_date_time(Date, c('m/d/y')),
-         Date = as.POSIXct(Date, "%Y-%m-%d", tz = 'UTC'))
-
-ktoa_daily <- ktoa_data %>%
-  group_by(Date) %>%
-  summarise(avg_temp = mean(as.numeric(air_temp), na.rm=T),
-            avg_hum = mean(as.numeric(relative_humidity), na.rm=T)) %>%
-  mutate(Date = parse_date_time(Date, c('m/d/y')),
-         Date = as.POSIXct(Date, "%Y-%m-%d", tz = 'UTC'))
-
-remove(klax_data, ktoa_data, klgb_data)
-
-# notice that the Torrance station is missing 10 days of observations
-# for that 10 days, use the long beach airport data as substitutes
-ktoa_daily <- bind_rows(ktoa_daily, 
-                        anti_join(klgb_daily,ktoa_daily, by = 'Date') %>% select(-precip))
-```
-
-
-```{r}
-# map each monitor to closest monitor
-weather_stations <- tibble(station = c('KLAX', 'KLGB', 'KTOA'),
-                           latitude = c(33.93806, 33.81167, 33.803979),
-                           longitude = c(-118.33194, -118.38889, -118.339432)) %>%
-  st_as_sf(coords = c('longitude', 'latitude')) %>% 
-  st_set_crs(4326)
-
-weather_stations <- st_transform(weather_stations, CRS_UTM)
-
-closest_temp_hum_station <- weather_stations$station[st_nearest_feature(monitors, weather_stations)]
-
-closest_precip_station <- weather_stations$station[st_nearest_feature(monitors, weather_stations %>% filter(station != 'KTOA'))]
-
-monitors_weather <- tibble(Monitor = monitors$Monitor, 
-                           weather_station = closest_temp_hum_station,
-                           closest_precip_station = closest_precip_station)
-
-weather_full <- bind_rows(klax_daily %>% select(-precip) %>% 
-                            mutate(weather_station = 'KLAX'),
-                          klgb_daily %>% select(-precip) %>% 
-                            mutate(weather_station = 'KLGB'),
-                          ktoa_daily %>% 
-                            mutate(weather_station = 'KTOA'))
-
-precip_full <- bind_rows(klax_daily %>% select(Date, precip) %>% 
-                            mutate(closest_precip_station = 'KLAX'),
-                          klgb_daily %>% select(Date, precip) %>% 
-                            mutate(closest_precip_station = 'KLGB'))
-
-full_data <- full_data %>%
-  left_join(monitors_weather, join_by('Monitor')) %>%
-  left_join(weather_full, join_by('day' == 'Date', 'weather_station')) %>%
-  left_join(precip_full, join_by('day' == 'Date', 'closest_precip_station'))
-
-remove(klax_daily, ktoa_daily, klgb_daily, precip_full, weather_full, 
-       monitors_weather, weather_stations)
-gc()
-```
-
 
 # Well production data
 ```{r}
-well_prod <- read_csv('data/LA well prod Dec2023 Well Monthly Production.CSV', show_col_types = FALSE)
-full_well_info <- read_csv('data/well_active_inactive_prod_since_2000.CSV', show_col_types = FALSE)
-active_well_info <- read_csv('data/LA well prod Dec2023 Well Headers.CSV', show_col_types = FALSE)
+well_prod <- read_csv('../data/LA well prod Jun2024 Well Monthly Production.CSV', show_col_types = FALSE)
+full_well_info <- read_csv('../data/well_active_inactive_prod_since_2000.CSV', show_col_types = FALSE)
+active_well_info <- read_csv('../data/LA well prod Jun2024 Well Headers.CSV', show_col_types = FALSE)
 ```
 
 ```{r}
+CRS_UTM <- CRS("+proj=utm +zone=11 ellps=WGS84")
+
+monitors <- full_data %>%
+  select(Monitor, lat, lon) %>%
+  distinct() %>%
+  st_as_sf(coords = c('lon', 'lat')) %>%
+  st_set_crs(4326) %>%
+  st_transform(CRS_UTM)
+
 inactive_well_info <- anti_join(full_well_info, active_well_info, join_by(API14)) %>%
   rename(lon = `Surface Hole Longitude (WGS84)`,
          lat = `Surface Hole Latitude (WGS84)`) %>%
@@ -499,55 +480,10 @@ full_data <- full_data %>%
   left_join(monitor_inactive_wells, join_by(Monitor))
 ```
 
-```{r}
-# get monthly production data at different distance levels (monitor to well)
-# prod_data <- list(
-#     well_prod %>% 
-#       filter(`1km` == TRUE) %>% 
-#       group_by(`Monthly Production Date`) %>% 
-#       summarise(active_1km = n(),
-#                 monthly_oil_1km = sum(`Monthly Oil`, na.rm = TRUE),
-#                 monthly_gas_1km = sum(`Monthly Gas`, na.rm = TRUE),
-#                 monthly_water_1km = sum(`Monthly Water`, na.rm = TRUE),
-#                 monthly_boe_1km = sum(`Monthly BOE`, na.rm = TRUE))
-#     ,
-#     well_prod %>% 
-#       filter(`2p5km` == TRUE) %>% 
-#       group_by(`Monthly Production Date`) %>% 
-#       summarise(active_2p5km = n(),
-#             monthly_oil_2p5km = sum(`Monthly Oil`, na.rm = TRUE),
-#             monthly_gas_2p5km = sum(`Monthly Gas`, na.rm = TRUE),
-#             monthly_water_2p5km = sum(`Monthly Water`, na.rm = TRUE),
-#             monthly_boe_2p5km = sum(`Monthly BOE`, na.rm = TRUE))
-#     ,
-#     well_prod %>% 
-#       filter(`5km` == TRUE) %>% 
-#       group_by(`Monthly Production Date`) %>% 
-#       summarise(active_5km = n(),
-#             monthly_oil_5km = sum(`Monthly Oil`, na.rm = TRUE),
-#             monthly_gas_5km = sum(`Monthly Gas`, na.rm = TRUE),
-#             monthly_water_5km = sum(`Monthly Water`, na.rm = TRUE),
-#             monthly_boe_5km = sum(`Monthly BOE`, na.rm = TRUE))
-#   ) %>%
-#   reduce(inner_join, by = 'Monthly Production Date') %>%
-#   mutate(yearmonth = format(`Monthly Production Date`, '%Y-%m'))
-# 
-# full_data <- full_data %>%
-#   left_join(prod_data, join_by(yearmonth))
-```
-
-```{r}
-# cleanup columns
-full_data <- full_data  %>%
-  select(-c('Date.Time', 'MDL', 'Unit', 'Averaging.Hour', 'Join_Count', 'siteId', 'unitName', 
-            'qcName', 'opName', 'windSpeed_Unit', 'windDirection_Unit', 'opCode', 'Source',
-            'DaylightSavings', 'QC.Code', 'wd_QCcode', 'ws_QCcode'))
-```
-
 # Downwind Indicator wrp    
 ```{r}
 # Create variable to indicate downwind wrt refinery
-wind_diff <- abs(full_data$Converted_Angle - 180 - full_data$wd)
+wind_diff <- abs(full_data$angle_ref - 180 - full_data$`Wind Direction`)
 wind_diff <- ifelse(wind_diff > 180, 360 - wind_diff, wind_diff)
 full_data$downwind_ref <- as.integer(wind_diff <= 15)
 ```
@@ -555,7 +491,7 @@ full_data$downwind_ref <- as.integer(wind_diff <= 15)
 # Downwind of wrp
 ```{r}
 # Finally, check if wind direction is downwind w.r.t wrp
-wind_diff <- abs(full_data$wrp_angle - full_data$wd)
+wind_diff <- abs(full_data$angle_wrp - full_data$`Wind Direction`)
 wind_diff <- ifelse(wind_diff > 180, 360 - wind_diff, wind_diff)
 
 full_data$downwind_wrp <- as.integer(wind_diff <= 15)
@@ -565,51 +501,76 @@ full_data$downwind_wrp <- as.integer(wind_diff <= 15)
 ```{r}
 CRS_UTM <- CRS("+proj=utm +zone=11 ellps=WGS84")
 
-monitors <- full_data %>%
-  select(Monitor, latitude, longitude) %>%
-  distinct() %>% 
-  st_as_sf(coords = c('longitude', 'latitude')) %>% 
-  st_set_crs(4326) %>% 
-  st_transform(CRS_UTM)
-monitors <- tibble(Monitor = monitors$Monitor,
-                   mon_utm_x = st_coordinates(monitors)[,1],
-                   mon_utm_y = st_coordinates(monitors)[,2])
+monitors <- monitors %>%
+  mutate(mon_utm_x = st_coordinates(.)[,1],
+         mon_utm_y = st_coordinates(.)[,2])
+                   
 
 full_data <- full_data %>%
   left_join(monitors, join_by(Monitor))
 ```
 
 ```{r}
-# Compute daily average wd/ws
+# Compute daily data
 daily_full <- full_data %>%
-  select(H2S_daily_max, H2S_daily_avg, H2S_monthly_average, ws, wd, latitude, 
-         longitude, mon_utm_x, mon_utm_y, Monitor, MinDist, 
-         Converted_Angle, Refinery, year, month, day, weekday, 
+  select(H2S_daily_max, H2S_daily_avg, `Wind Speed`, `Wind Direction`,
+         lat, lon, mon_utm_x, mon_utm_y, Monitor, dist_ref, 
+         angle_ref, closest_ref, year, month, day, weekday, 
          active_2km, monthly_oil_2km, monthly_gas_2km, inactive_2km,
-         dist_wrp, capacity, wrp_angle, dist_dc, dist_213,
-         avg_temp, avg_hum, precip) %>%
+         dist_wrp, closest_wrp_capacity, angle_wrp, dist_dc,
+         daily_temp, daily_precip) %>%
   group_by(Monitor, day) %>%
-  mutate(ws_avg = mean(ws, na.rm=TRUE),
-         wd_avg = as.numeric(mean(circular(wd, units = 'degrees'), na.rm=TRUE))) %>%
+  mutate(ws_avg = mean(`Wind Speed`, na.rm=TRUE),
+         wd_avg = as.numeric(mean(circular(`Wind Direction`, units = 'degrees'), na.rm=TRUE))) %>%
   mutate(wd_avg = if_else(wd_avg < 0, wd_avg+360, wd_avg)) %>%
   ungroup() %>%
-  rename(monitor_lat = latitude, monitor_lon = longitude)  %>%
-  select(-c(wd, ws)) %>%
+  rename(monitor_lat = lat, monitor_lon = lon)  %>%
+  select(-c(`Wind Speed`, `Wind Direction`)) %>%
   distinct()
 ```
 
 ```{r}
 # Get the downwind indicators for daily data
-wind_diff <- abs(daily_full$Converted_Angle - 180 - daily_full$wd_avg)
+wind_diff <- abs(daily_full$angle_ref - 180 - daily_full$wd_avg)
 wind_diff <- ifelse(wind_diff > 180, 360 - wind_diff, wind_diff)
 daily_full$daily_downwind_ref <- as.integer(wind_diff <= 15)
 
-wind_diff <- abs(daily_full$wrp_angle - daily_full$wd_avg)
+wind_diff <- abs(daily_full$angle_wrp - daily_full$wd_avg)
 wind_diff <- ifelse(wind_diff > 180, 360 - wind_diff, wind_diff)
 
 daily_full$daily_downwind_wrp <- as.integer(wind_diff <= 15)
 ```
 
+<!-- ```{r} -->
+<!-- # Compute hourly data -->
+<!-- hourly_full <- full_data %>% -->
+<!--   select(H2S_hourly_max, H2S_hourly_avg, `Wind Speed`, `Wind Direction`, -->
+<!--          lat, lon, mon_utm_x, mon_utm_y, Monitor, dist_ref,  -->
+<!--          angle_ref, closest_ref, year, month, day, weekday,dayhour,  -->
+<!--          active_2km, monthly_oil_2km, monthly_gas_2km, inactive_2km, -->
+<!--          dist_wrp, closest_wrp_capacity, angle_wrp, dist_dc, -->
+<!--          hourly_temp, hourly_precip) %>% -->
+<!--   group_by(Monitor, dayhour) %>% -->
+<!--   mutate(ws_avg = mean(`Wind Speed`, na.rm=TRUE), -->
+<!--          wd_avg = as.numeric(mean(circular(`Wind Direction`, units = 'degrees'), na.rm=TRUE))) %>% -->
+<!--   mutate(wd_avg = if_else(wd_avg < 0, wd_avg+360, wd_avg)) %>% -->
+<!--   ungroup() %>% -->
+<!--   rename(monitor_lat = lat, monitor_lon = lon)  %>% -->
+<!--   select(-c(`Wind Speed`, `Wind Direction`)) %>% -->
+<!--   distinct() -->
+<!-- ``` -->
+
+<!-- ```{r} -->
+<!-- # Get the downwind indicators for hourly data -->
+<!-- wind_diff <- abs(hourly_full$angle_ref - 180 - hourly_full$wd_avg) -->
+<!-- wind_diff <- ifelse(wind_diff > 180, 360 - wind_diff, wind_diff) -->
+<!-- hourly_full$hourly_downwind_ref <- as.integer(wind_diff <= 15) -->
+
+<!-- wind_diff <- abs(hourly_full$angle_wrp - hourly_full$wd_avg) -->
+<!-- wind_diff <- ifelse(wind_diff > 180, 360 - wind_diff, wind_diff) -->
+
+<!-- hourly_full$hourly_downwind_wrp <- as.integer(wind_diff <= 15) -->
+<!-- ``` -->
 
 # Get monitor locations
 ```{r}
@@ -625,7 +586,7 @@ coordinates(monitors_coord) <- ~ longitude + latitude
 
 # Load in elevation data
 ```{r}
-elevation <- raster('shapefiles/N33W119.hgt')
+elevation <- raster('../shapefiles/N33W119.hgt')
 
 monitors <- cbind(monitors, extract(elevation, monitors_coord)) %>%
   as.data.frame() %>%
@@ -635,7 +596,7 @@ monitors <- cbind(monitors, extract(elevation, monitors_coord)) %>%
 # Load in EVI data
 ```{r}
 #evi <- raster('shapefiles/MOD13Q1.061__250m_16_days_EVI_doy2023145_aid0001.tif')
-evi <- raster('shapefiles/MOD13Q1.006__250m_16_days_EVI_doy2022177_aid0001.tif')
+evi <- raster('../shapefiles/MOD13Q1.006__250m_16_days_EVI_doy2022177_aid0001.tif')
 monitors <- cbind(monitors, extract(evi, monitors_coord) * 0.0001) %>%
   as.data.frame() %>%
   rename(EVI = 3)
@@ -652,8 +613,8 @@ daily_full <- daily_full %>%
 
 # Merge Odor Complaint data
 ```{r}
-odor <- read_csv('data/odorcomplaintdata_2018_2023.csv')
-la_county <- read_sf('shapefiles/Zip_Codes_(LA_County)/Zip_Codes_(LA_County).shp')
+odor <- read_csv('../data/odorcomplaintdata_2018_2023.csv')
+la_county <- read_sf('../shapefiles/Zip_Codes_(LA_County)/Zip_Codes_(LA_County).shp')
 ```
 
 ```{r}
@@ -749,8 +710,8 @@ ggplotly(odor_graph_b) %>% layout(dragmode = 'pan')
 
 
 ```{r}
-saveRDS(full_data, 'data/full_data.rds')
-saveRDS(daily_full, 'data/daily_full.rds')
+saveRDS(full_data, '../data/full_data_20240905.rds')
+saveRDS(daily_full, '../data/daily_full_20240905.rds')
 ```
 
 ```{r}

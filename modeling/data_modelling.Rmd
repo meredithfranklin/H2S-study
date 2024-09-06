@@ -31,8 +31,8 @@ select <- dplyr::select
 ```
 
 ```{r}
-full_data <- readRDS('data/full_data.rds')
-daily_full <- readRDS('data/daily_full.rds')
+full_data <- readRDS('../data/full_data.rds')
+daily_full <- readRDS('../data/daily_full.rds')
 ```
 
 # Explore some summary statistics
@@ -190,7 +190,7 @@ table1 <- base_monitor_stat %>%
   relocate(Monitor, `Closest Refinery`, `Normal Avg Daily Average`, `Disaster Avg Daily Average`)
 
 table1_kable <- knitr::kable(table1, format = 'latex', digits = 2)
-writeLines(table1_kable, 'figures/table1.tex')
+writeLines(table1_kable, '../figures/table1.tex')
 
 knitr::kable(table1, format = 'html', digits = 2)
 ```
@@ -1268,14 +1268,14 @@ control <- trainControl(method="cv",
                         search='grid',
                         savePredictions = 'final')
 
-fit.xgb_da <- readRDS('rfiles/fit.xgb_da.rds')
+fit.xgb_da <- readRDS('../rfiles/fit.xgb_da.rds')
 # fit.xgb_da <- train(H2S_daily_avg~.,
 #                  method = 'xgbTree',
 #                  data = train,
 #                  trControl=control,
 #                  tuneGrid = tune_grid,
 #                  tuneLength = 10, importance=TRUE, verbosity = 0, verbose=FALSE)
-# saveRDS(fit.xgb_da, 'rfiles/fit.xgb_da.rds')
+# saveRDS(fit.xgb_da, '../rfiles/fit.xgb_da.rds')
 ```
 
 
@@ -1445,14 +1445,14 @@ test <- fastDummies::dummy_cols(test %>%
                         dist_wrp = 1/(dist_wrp^2)),
                  remove_selected_columns = TRUE)
 
-fit.xgb_da_8020 <- readRDS('rfiles/fit.xgb_da_8020.rds')
+fit.xgb_da_8020 <- readRDS('../rfiles/fit.xgb_da_8020.rds')
 # fit.xgb_da_8020 <- train(H2S_daily_avg~.,
 #                  method = 'xgbTree',
 #                  data = train,
 #                  trControl=control,
 #                  tuneGrid = tune_grid,
 #                  tuneLength = 10, importance=TRUE, verbosity = 0, verbose=FALSE)
-# saveRDS(fit.xgb_da_8020, 'rfiles/fit.xgb_da_8020.rds')
+# saveRDS(fit.xgb_da_8020, '../rfiles/fit.xgb_da_8020.rds')
 ```
 
 ```{r}
@@ -1577,7 +1577,7 @@ monitor_names <- unique(post2022feb$Monitor)
 #                  tuneGrid = tune_grid,
 #                  tuneLength = 10, importance=TRUE, verbosity = 0, verbose=FALSE)
 # 
-#   saveRDS(fit.xgb_da, paste0('rfiles/fit.xgb_da_', monitor_names[i], '.rds'))
+#   saveRDS(fit.xgb_da, paste0('../rfiles/fit.xgb_da_', monitor_names[i], '.rds'))
 # }
 ```
 
@@ -1592,7 +1592,7 @@ monitor_names <- unique(post2022feb$Monitor)
 # 
 # for (i in setdiff(1:length(monitor_names), c(9))) {
 # 
-#   fit.xgb_da <- readRDS(paste0('rfiles/fit.xgb_da_', monitor_names[i], '.rds'))
+#   fit.xgb_da <- readRDS(paste0('../rfiles/fit.xgb_da_', monitor_names[i], '.rds'))
 # 
 #   test <- post2022feb %>%
 #     filter(Monitor == monitor_names[i])
@@ -1656,14 +1656,14 @@ train <- fastDummies::dummy_cols(train %>%
                           dist_wrp = 1/(dist_wrp^2)),
                    remove_selected_columns = TRUE)
 
-fit.xgb_da_dis <- readRDS('rfiles/fit.xgb_da_dis.rds')
+fit.xgb_da_dis <- readRDS('../rfiles/fit.xgb_da_dis.rds')
 # fit.xgb_da_dis <- train(H2S_daily_avg~.,
 #                  method = 'xgbTree',
 #                  data = train,
 #                  trControl=control,
 #                  tuneGrid = tune_grid,
 #                  tuneLength = 10, importance=TRUE, verbosity = 0, verbose=FALSE)
-# saveRDS(fit.xgb_da_dis, 'rfiles/fit.xgb_da_dis.rds')
+# saveRDS(fit.xgb_da_dis, '../rfiles/fit.xgb_da_dis.rds')
 ```
 
 ```{r}
@@ -1792,14 +1792,14 @@ xgb.ggplot.shap.summary(data = matrix,
 #                         dist_wrp = 1/(dist_wrp^2)),
 #                  remove_selected_columns = TRUE)
 # 
-# fit.xgb_da_dis_8020 <- readRDS('rfiles/fit.xgb_da_dis_8020.rds')
+# fit.xgb_da_dis_8020 <- readRDS('../rfiles/fit.xgb_da_dis_8020.rds')
 # fit.xgb_da_dis_8020 <- train(H2S_daily_avg~.,
 #                  method = 'xgbTree',
 #                  data = train,
 #                  trControl=control,
 #                  tuneGrid = tune_grid,
 #                  tuneLength = 10, importance=TRUE, verbosity = 0, verbose=FALSE)
-# saveRDS(fit.xgb_da_dis_8020, 'rfiles/fit.xgb_da_dis_8020.rds')
+# saveRDS(fit.xgb_da_dis_8020, '../rfiles/fit.xgb_da_dis_8020.rds')
 ```
 
 ```{r}
@@ -1907,14 +1907,14 @@ train <- fastDummies::dummy_cols(train %>%
                           dist_wrp = 1/(dist_wrp^2)),
                    remove_selected_columns = TRUE)
 
-fit.xgb_da_excl_dis<- readRDS('rfiles/fit.xgb_da_excl_dis.rds')
+fit.xgb_da_excl_dis<- readRDS('../rfiles/fit.xgb_da_excl_dis.rds')
 # fit.xgb_da_excl_dis <- train(H2S_daily_avg~.,
 #                  method = 'xgbTree',
 #                  data = train,
 #                  trControl=control,
 #                  tuneGrid = tune_grid,
 #                  tuneLength = 10, importance=TRUE, verbosity = 0, verbose=FALSE)
-# saveRDS(fit.xgb_da_excl_dis, 'rfiles/fit.xgb_da_excl_dis.rds')
+# saveRDS(fit.xgb_da_excl_dis, '../rfiles/fit.xgb_da_excl_dis.rds')
 ```
 
 ```{r}
@@ -2048,14 +2048,14 @@ train <- fastDummies::dummy_cols(train %>%
                                           dist_wrp = 1/(dist_wrp^2)),
                                  remove_selected_columns = TRUE)
 
-fit.xgb_da_full_dis_ind <- readRDS('rfiles/fit.xgb_da_full_dis_ind.rds')
+fit.xgb_da_full_dis_ind <- readRDS('../rfiles/fit.xgb_da_full_dis_ind.rds')
 # fit.xgb_da_full_dis_ind <- train(H2S_daily_avg~.,
 #                  method = 'xgbTree',
 #                  data = train,
 #                  trControl=control,
 #                  tuneGrid = tune_grid,
 #                  tuneLength = 10, importance=TRUE, verbosity = 0, verbose=FALSE)
-# saveRDS(fit.xgb_da_full_dis_ind, 'rfiles/fit.xgb_da_full_dis_ind.rds')
+# saveRDS(fit.xgb_da_full_dis_ind, '../rfiles/fit.xgb_da_full_dis_ind.rds')
 ```
 
 ```{r}
@@ -2195,14 +2195,14 @@ train <- fastDummies::dummy_cols(train %>%
                                           dist_wrp = 1/(dist_wrp^2)),
                                  remove_selected_columns = TRUE)
 
-fit.xgb_da_full <- readRDS('rfiles/fit.xgb_da_full.rds')
+fit.xgb_da_full <- readRDS('../rfiles/fit.xgb_da_full.rds')
 # fit.xgb_da_full <- train(H2S_daily_avg~.,
 #                  method = 'xgbTree',
 #                  data = train,
 #                  trControl=control,
 #                  tuneGrid = tune_grid,
 #                  tuneLength = 10, importance=TRUE, verbosity = 0, verbose=FALSE)
-# saveRDS(fit.xgb_da_full, 'rfiles/fit.xgb_da_full.rds')
+# saveRDS(fit.xgb_da_full, '../rfiles/fit.xgb_da_full.rds')
 ```
 
 ```{r}
@@ -2343,14 +2343,14 @@ xgb.ggplot.shap.summary(data = matrix,
 #                         dist_wrp = 1/(dist_wrp^2)),
 #                  remove_selected_columns = TRUE)
 # 
-# fit.xgb_da_full_8020 <- readRDS('rfiles/fit.xgb_da_full_8020.rds')
+# fit.xgb_da_full_8020 <- readRDS('../rfiles/fit.xgb_da_full_8020.rds')
 # fit.xgb_da_full_8020 <- train(H2S_daily_avg~.,
 #                  method = 'xgbTree',
 #                  data = train,
 #                  trControl=control,
 #                  tuneGrid = tune_grid,
 #                  tuneLength = 10, importance=TRUE, verbosity = 0, verbose=FALSE)
-# saveRDS(fit.xgb_da_full_8020, 'rfiles/fit.xgb_da_full_8020.rds')
+# saveRDS(fit.xgb_da_full_8020, '../rfiles/fit.xgb_da_full_8020.rds')
 ```
 
 ```{r}
@@ -2516,7 +2516,7 @@ model_perf_table <- tibble(Model = c('Since Feb 2022',
                select(-c('10CV Train R-Sq'))
 
 model_perf_latex <- knitr::kable(model_perf_table, digits = 3, format = 'latex')
-writeLines(model_perf_latex, 'figures/model_perf.tex')
+writeLines(model_perf_latex, '../figures/model_perf.tex')
 
 knitr::kable(model_perf_table, digits = 3, format = 'html')
 ```

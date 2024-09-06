@@ -4,7 +4,7 @@ library(caret)
 library(fastDummies)
 select <- dplyr::select
 
-daily_full <- readRDS('../../data/daily_full.rds') %>%
+daily_full <- readRDS('../data/daily_full.rds') %>%
   mutate(Refinery = str_replace_all(str_replace_all(Refinery, '[()]', ''), ' ', '_'),
          Monitor = str_replace_all(Monitor, ' ', '_'),
          weekday = weekday,

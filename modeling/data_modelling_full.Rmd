@@ -30,8 +30,8 @@ select <- dplyr::select
 ```
 
 ```{r}
-full_data <- readRDS('data/full_data.rds')
-daily_full <- readRDS('data/daily_full.rds')
+full_data <- readRDS('../data/full_data.rds')
+daily_full <- readRDS('../data/daily_full.rds')
 ```
 
 # Explore some summary statistics
@@ -196,7 +196,7 @@ gc()
 
 ```{r}
 # Include elvation, EVI, 3D smooth, odor, dist to dom channel, temp, hum, precip
-h2s_model_e <- readRDS('rfiles/h2s_model_e.rds')
+h2s_model_e <- readRDS('../rfiles/h2s_model_e.rds')
 # h2s_model_e <- gam(H2S ~ 
 #                      s(as.numeric(month),bs='cc') + year + as.factor(weekday) +
 #                      wd_sec + ws + downwind_ref + downwind_wrp +
@@ -208,7 +208,7 @@ h2s_model_e <- readRDS('rfiles/h2s_model_e.rds')
 #                      num_odor_complaints + I(1/dist_dc^2) + avg_temp + avg_hum + precip
 #                      , 
 #                    data = full_data %>% filter(day >= '2022-02-01'))
-#saveRDS(h2s_model_e, 'rfiles/h2s_model_e.rds')
+#saveRDS(h2s_model_e, '../rfiles/h2s_model_e.rds')
 summary(h2s_model_e)
 plot(h2s_model_e)
 gc()
@@ -216,7 +216,7 @@ gc()
 
 ```{r}
 # Model only the month of the event, October 2021
-h2s_model_f <- readRDS('rfiles/h2s_model_f.rds')
+h2s_model_f <- readRDS('../rfiles/h2s_model_f.rds')
 # h2s_model_f <- gam(H2S ~ wd_sec + ws + downwind_ref + downwind_wrp +
 #                      I(1/MinDist^2) + I(1/dist_wrp^2) + capacity + wrp_angle +
 #                      Converted_Angle + elevation + EVI + 
@@ -225,7 +225,7 @@ h2s_model_f <- readRDS('rfiles/h2s_model_f.rds')
 #                      monthly_oil_1km + monthly_gas_1km + active_1km +
 #                      num_odor_complaints + I(1/dist_dc^2) + avg_temp + avg_hum + precip, 
 #                    data = full_data %>% filter(year == '2021', month == '10'))
-# saveRDS(h2s_model_f, 'rfiles/h2s_model_f.rds')
+# saveRDS(h2s_model_f, '../rfiles/h2s_model_f.rds')
 summary(h2s_model_f)
 plot(h2s_model_f)
 gc()
@@ -233,7 +233,7 @@ gc()
 
 ```{r}
 # Model data excluding the months of the event
-h2s_model_g <- readRDS('rfiles/h2s_model_g.rds')
+h2s_model_g <- readRDS('../rfiles/h2s_model_g.rds')
 # h2s_model_g <- gam(H2S ~ s(as.numeric(month),bs='cc') + year + as.factor(weekday) +
 #                      wd_sec + ws + downwind_ref + downwind_wrp +
 #                      I(1/MinDist^2) + I(1/dist_wrp^2) + capacity + wrp_angle +
@@ -244,7 +244,7 @@ h2s_model_g <- readRDS('rfiles/h2s_model_g.rds')
 #                      num_odor_complaints + I(1/dist_dc^2) + avg_temp + avg_hum + precip
 #                      , 
 #                    data = full_data %>% filter(!(year == '2021' & month %in% c('10', '11', '12'))))
-# saveRDS(h2s_model_g, 'rfiles/h2s_model_g.rds')
+# saveRDS(h2s_model_g, '../rfiles/h2s_model_g.rds')
 summary(h2s_model_g)
 plot(h2s_model_g)
 gc()
@@ -1455,14 +1455,14 @@ control <- trainControl(method="cv",
                         verboseIter=TRUE, 
                         search='grid')
 
-fit.xgb_da <- readRDS('rfiles/fit.xgb_da.rds')
+fit.xgb_da <- readRDS('../rfiles/fit.xgb_da.rds')
 # fit.xgb_da <- train(H2S_daily_avg~.,
 #                  method = 'xgbTree',
 #                  data = train,
 #                  trControl=control,
 #                  tuneGrid = tune_grid,
 #                  tuneLength = 10, importance=TRUE, verbosity = 0, verbose=FALSE)
-# saveRDS(fit.xgb_da, 'rfiles/fit.xgb_da.rds')
+# saveRDS(fit.xgb_da, '../rfiles/fit.xgb_da.rds')
 ```
 
 ```{r}
@@ -1575,14 +1575,14 @@ control <- trainControl(method="cv",
                         verboseIter=TRUE, 
                         search='grid')
 
-fit.xgb_da_8020 <- readRDS('rfiles/fit.xgb_da_8020.rds')
+fit.xgb_da_8020 <- readRDS('../rfiles/fit.xgb_da_8020.rds')
 # fit.xgb_da_8020 <- train(H2S_daily_avg~.,
 #                  method = 'xgbTree',
 #                  data = train,
 #                  trControl=control,
 #                  tuneGrid = tune_grid,
 #                  tuneLength = 10, importance=TRUE, verbosity = 0, verbose=FALSE)
-# saveRDS(fit.xgb_da_8020, 'rfiles/fit.xgb_da_8020.rds')
+# saveRDS(fit.xgb_da_8020, '../rfiles/fit.xgb_da_8020.rds')
 ```
 
 ```{r}
@@ -1677,7 +1677,7 @@ monitor_names <- unique(post2022feb$Monitor)
 #                  tuneGrid = tune_grid,
 #                  tuneLength = 10, importance=TRUE, verbosity = 0, verbose=FALSE)
 # 
-#   saveRDS(fit.xgb_da, paste0('rfiles/fit.xgb_da_', monitor_names[i], '.rds'))
+#   saveRDS(fit.xgb_da, paste0('../rfiles/fit.xgb_da_', monitor_names[i], '.rds'))
 # }
 ```
 
@@ -1692,7 +1692,7 @@ add_cols <- function(df, cols) {
 
 for (i in setdiff(1:length(monitor_names), c(9))) {
 
-  fit.xgb_da <- readRDS(paste0('rfiles/fit.xgb_da_', monitor_names[i], '.rds'))
+  fit.xgb_da <- readRDS(paste0('../rfiles/fit.xgb_da_', monitor_names[i], '.rds'))
 
   test <- post2022feb %>%
     filter(Monitor == monitor_names[i])
@@ -1756,14 +1756,14 @@ train <- fastDummies::dummy_cols(train %>%
                           dist_wrp = 1/(dist_wrp^2)),
                    remove_selected_columns = TRUE)
 
-fit.xgb_da_dis <- readRDS('rfiles/fit.xgb_da_dis.rds')
+fit.xgb_da_dis <- readRDS('../rfiles/fit.xgb_da_dis.rds')
 # fit.xgb_da_dis <- train(H2S_daily_avg~.,
 #                  method = 'xgbTree',
 #                  data = train,
 #                  trControl=control,
 #                  tuneGrid = tune_grid,
 #                  tuneLength = 10, importance=TRUE, verbosity = 0, verbose=FALSE)
-# saveRDS(fit.xgb_da_dis, 'rfiles/fit.xgb_da_dis.rds')
+# saveRDS(fit.xgb_da_dis, '../rfiles/fit.xgb_da_dis.rds')
 ```
 
 ```{r}
@@ -1867,14 +1867,14 @@ test <- fastDummies::dummy_cols(test %>%
                         dist_wrp = 1/(dist_wrp^2)),
                  remove_selected_columns = TRUE)
 
-fit.xgb_da_dis_8020 <- readRDS('rfiles/fit.xgb_da_dis_8020.rds')
+fit.xgb_da_dis_8020 <- readRDS('../rfiles/fit.xgb_da_dis_8020.rds')
 # fit.xgb_da_dis_8020 <- train(H2S_daily_avg~.,
 #                  method = 'xgbTree',
 #                  data = train,
 #                  trControl=control,
 #                  tuneGrid = tune_grid,
 #                  tuneLength = 10, importance=TRUE, verbosity = 0, verbose=FALSE)
-# saveRDS(fit.xgb_da_dis_8020, 'rfiles/fit.xgb_da_dis_8020.rds')
+# saveRDS(fit.xgb_da_dis_8020, '../rfiles/fit.xgb_da_dis_8020.rds')
 ```
 
 ```{r}
@@ -1965,14 +1965,14 @@ train <- fastDummies::dummy_cols(train %>%
                           dist_wrp = 1/(dist_wrp^2)),
                    remove_selected_columns = TRUE)
 
-fit.xgb_da_full <- readRDS('rfiles/fit.xgb_da_full.rds')
+fit.xgb_da_full <- readRDS('../rfiles/fit.xgb_da_full.rds')
 # fit.xgb_da_full <- train(H2S_daily_avg~.,
 #                  method = 'xgbTree',
 #                  data = train,
 #                  trControl=control,
 #                  tuneGrid = tune_grid,
 #                  tuneLength = 10, importance=TRUE, verbosity = 0, verbose=FALSE)
-# saveRDS(fit.xgb_da_full, 'rfiles/fit.xgb_da_full.rds')
+# saveRDS(fit.xgb_da_full, '../rfiles/fit.xgb_da_full.rds')
 ```
 
 ```{r}
@@ -2080,14 +2080,14 @@ test <- fastDummies::dummy_cols(test %>%
                         dist_wrp = 1/(dist_wrp^2)),
                  remove_selected_columns = TRUE)
 
-fit.xgb_da_full_8020 <- readRDS('rfiles/fit.xgb_da_full_8020.rds')
+fit.xgb_da_full_8020 <- readRDS('../rfiles/fit.xgb_da_full_8020.rds')
 # fit.xgb_da_full_8020 <- train(H2S_daily_avg~.,
 #                  method = 'xgbTree',
 #                  data = train,
 #                  trControl=control,
 #                  tuneGrid = tune_grid,
 #                  tuneLength = 10, importance=TRUE, verbosity = 0, verbose=FALSE)
-# saveRDS(fit.xgb_da_full_8020, 'rfiles/fit.xgb_da_full_8020.rds')
+# saveRDS(fit.xgb_da_full_8020, '../rfiles/fit.xgb_da_full_8020.rds')
 ```
 
 ```{r}
@@ -2231,9 +2231,9 @@ daily_max_gev <- list(H2S_daily_max ~ s(month,bs='cc') + year,
                    dist_dc + avg_temp + avg_hum + precip, 
                  ~ 1)
 
-dm_gev <- readRDS('rfiles/dm_gev.rds')
+dm_gev <- readRDS('../rfiles/dm_gev.rds')
 # dm_gev <- evgam(daily_max_gev, ev_data, family = "gev")
-# saveRDS(dm_gev, 'rfiles/dm_gev.rds')
+# saveRDS(dm_gev, '../rfiles/dm_gev.rds')
 summary(dm_gev)
 ```
 
@@ -2243,7 +2243,7 @@ plot(dm_gev)
 
 ## MGCV
 ```{r}
-m1 <- readRDS('rfiles/m1.rds')
+m1 <- readRDS('../rfiles/m1.rds')
 # m1 <- gam(list(H2S_daily_max ~ s(month,bs='cc') + year,
 #                ~ s(month,bs='cc') + year +
 #                    weekday + wd_avg + ws_avg + daily_downwind_ref +
@@ -2257,7 +2257,7 @@ m1 <- readRDS('rfiles/m1.rds')
 #                ~ 1),
 #           data = ev_data, method = "REML",
 #           family = gevlss(link = list("identity", "identity", "identity")))
-# saveRDS(m1, 'rfiles/m1.rds')
+# saveRDS(m1, '../rfiles/m1.rds')
 summary(m1)
 ```
 

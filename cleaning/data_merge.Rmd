@@ -415,9 +415,9 @@ gc()
 
 # Well production data
 ```{r}
-well_prod <- read_csv('data/LA well prod Dec2023 Well Monthly Production.CSV', show_col_types = FALSE)
-full_well_info <- read_csv('data/well_active_inactive_prod_since_2000.CSV', show_col_types = FALSE)
-active_well_info <- read_csv('data/LA well prod Dec2023 Well Headers.CSV', show_col_types = FALSE)
+well_prod <- read_csv('../data/LA well prod Dec2023 Well Monthly Production.CSV', show_col_types = FALSE)
+full_well_info <- read_csv('../data/well_active_inactive_prod_since_2000.CSV', show_col_types = FALSE)
+active_well_info <- read_csv('../data/LA well prod Dec2023 Well Headers.CSV', show_col_types = FALSE)
 ```
 
 ```{r}
@@ -623,7 +623,7 @@ monitors <- cbind(monitors, extract(elevation, monitors_coord)) %>%
 # Load in EVI data
 ```{r}
 #evi <- raster('shapefiles/MOD13Q1.061__250m_16_days_EVI_doy2023145_aid0001.tif')
-evi <- raster('shapefiles/MOD13Q1.006__250m_16_days_EVI_doy2022177_aid0001.tif')
+evi <- raster('../shapefiles/MOD13Q1.006__250m_16_days_EVI_doy2022177_aid0001.tif')
 monitors <- cbind(monitors, extract(evi, monitors_coord) * 0.0001) %>%
   as.data.frame() %>%
   rename(EVI = 3)
