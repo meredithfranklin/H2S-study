@@ -1330,7 +1330,8 @@ names <- c("Longitude" = "mon_utm_x", "Latitude" = "mon_utm_y",
         "Thursday" = "weekday_Thu",
         "Friday" = "weekday_Fri",
         "Saturday" = "weekday_Sat",
-        "Sunday" = "weekday_Sun")
+        "Sunday" = "weekday_Sun",
+        "Disaster" = "disaster")
 
 imp<-varImp(fit.xgb_da,scale=FALSE)
 

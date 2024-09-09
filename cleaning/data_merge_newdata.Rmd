@@ -518,7 +518,7 @@ daily_full <- full_data %>%
          angle_ref, closest_ref, year, month, day, weekday, 
          active_2km, monthly_oil_2km, monthly_gas_2km, inactive_2km,
          dist_wrp, closest_wrp_capacity, angle_wrp, dist_dc,
-         daily_temp, daily_precip) %>%
+         daily_temp, daily_hum, daily_precip) %>%
   group_by(Monitor, day) %>%
   mutate(ws_avg = mean(`Wind Speed`, na.rm=TRUE),
          wd_avg = as.numeric(mean(circular(`Wind Direction`, units = 'degrees'), na.rm=TRUE))) %>%
@@ -708,10 +708,18 @@ odor_graph_b <- odor %>%
 ggplotly(odor_graph_b) %>% layout(dragmode = 'pan')
 ```
 
+```{r}
+# save data until September 2023 due to missing odor data
+full_data <- full_data %>%
+  filter(day < '2023-10-01')
+
+daily_full <- daily_full %>%
+  filter(day < '2023-10-01')
+```
 
 ```{r}
-saveRDS(full_data, '../data/full_data_20240905.rds')
-saveRDS(daily_full, '../data/daily_full_20240905.rds')
+saveRDS(full_data, '../data/full_data_20230930.rds')
+saveRDS(daily_full, '../data/daily_full_20230930.rds')
 ```
 
 ```{r}

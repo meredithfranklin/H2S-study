@@ -4,49 +4,49 @@ library(caret)
 library(fastDummies)
 select <- dplyr::select
 
-daily_full <- readRDS('../data/daily_full.rds') %>%
-  mutate(Refinery = str_replace_all(str_replace_all(Refinery, '[()]', ''), ' ', '_'),
-         Monitor = str_replace_all(Monitor, ' ', '_'),
+daily_full <- readRDS('../data/daily_full_20230930.rds')
+
+daily_full <- daily_full %>%
+  mutate(Monitor = str_replace_all(Monitor, ' ', '_'),
          weekday = weekday,
          daily_downwind_ref = as.integer(daily_downwind_ref),
          daily_downwind_wrp = as.integer(daily_downwind_wrp),
-         MinDist = 1/(MinDist^2),
+         dist_ref = 1/(dist_ref^2),
          dist_wrp = 1/(dist_wrp^2),
          dist_dc = 1/(dist_dc^2))
 
-predictors <- c('H2S_daily_avg', 'month', 'year', 'weekday', 'wd_avg', 'ws_avg', 
-                'daily_downwind_ref', 'dist_wrp', 'MinDist',
+predictors <- c('month', 'year', 'weekday', 'wd_avg', 'ws_avg', 
+                'daily_downwind_ref', 'dist_wrp', 'dist_ref',
                 'mon_utm_x', 'mon_utm_y', 'day', 'monthly_oil_2km', 'monthly_gas_2km', 
                 'active_2km', 'inactive_2km', 'daily_downwind_wrp', 'elevation', 'EVI', 'num_odor_complaints',
-                'dist_dc', 'capacity', 'avg_temp', 'avg_hum', 'precip') 
+                'dist_dc', 'closest_wrp_capacity', 'daily_temp', 'daily_hum', 'daily_precip') 
 
-predictors_no_met <- c('H2S_daily_avg', 'month', 'year', 'weekday', 'dist_wrp', 'MinDist',
+predictors_no_met <- c('month', 'year', 'weekday', 'dist_wrp', 'dist_ref',
                 'mon_utm_x', 'mon_utm_y', 'day', 'monthly_oil_2km', 'monthly_gas_2km', 
                 'active_2km', 'inactive_2km', 'elevation', 'EVI', 'num_odor_complaints',
-                'dist_dc', 'capacity') 
+                'dist_dc', 'closest_wrp_capacity') 
 
-predictors_no_hum <- c('H2S_daily_avg', 'month', 'year', 'weekday', 'wd_avg', 'ws_avg', 
-                       'daily_downwind_ref', 'dist_wrp', 'MinDist',
+predictors_no_hum <- c('month', 'year', 'weekday', 'wd_avg', 'ws_avg', 
+                       'daily_downwind_ref', 'dist_wrp', 'dist_ref',
                        'mon_utm_x', 'mon_utm_y', 'day', 'monthly_oil_2km', 'monthly_gas_2km', 
                        'active_2km', 'inactive_2km', 'daily_downwind_wrp', 'elevation', 'EVI', 'num_odor_complaints',
-                       'dist_dc', 'capacity', 'avg_temp', 'precip') 
+                       'dist_dc', 'closest_wrp_capacity', 'daily_temp', 'daily_precip') 
 
+# Daily Average
 # Since Feb 2022
 train <- daily_full %>%
   filter(day >= '2022-01-31') %>%
   filter(complete.cases(.))
 
-train <- fastDummies::dummy_cols(train %>%
-                                   select(-c(Refinery, Monitor, day, H2S_daily_max, H2S_monthly_average,
-                                             monitor_lat, monitor_lon, county, dist_213)),
+train <- fastDummies::dummy_cols(train %>% select(all_of(predictors)),
                                  remove_selected_columns = TRUE)
 
 # Try for a continuous month
-tune_grid <- expand.grid(nrounds = c(100, 200, 500),
-                         max_depth = c(3, 4, 5),
+tune_grid <- expand.grid(nrounds = c(300, 500, 700),
+                         max_depth = c(4, 5, 6),
                          eta = c(0.1, 0.3),
                          gamma = c(0.01, 0.001),
-                         colsample_bytree = c(0.5, 1),
+                         colsample_bytree = c(0.5, 0.75, 1),
                          min_child_weight = 0,
                          subsample = c(0.5, 0.75, 1))
 

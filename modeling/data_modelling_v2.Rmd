@@ -1,0 +1,3481 @@
+---
+title: "Data Modelling V2 202310"
+author: "Jerry Wu"
+date: "2024-09-08"
+output:
+  html_document:
+    df_print: paged
+  pdf_document: default
+abstract: ''
+subtitle: ''
+editor_options: 
+  chunk_output_type: inline
+---
+
+```{r setup, include=FALSE}
+library(tidyverse)
+library(mgcv)
+library(mgcViz)
+library(gam)
+library(caret)
+library(xgboost)
+library(fastDummies)
+library(circular)
+library(raster)
+library(terra)
+library(rgl)
+library(sf)
+library(evgam)
+library(ggpubr)
+library(ggpmisc)
+select <- dplyr::select
+```
+
+```{r}
+full_data <- readRDS('../data/full_data_20230930.rds')
+daily_full <- readRDS('../data/daily_full_20230930.rds')
+```
+
+# Explore some summary statistics
+```{r}
+daily_full <- daily_full %>%
+  filter(!is.na(H2S_daily_avg))
+```
+
+## Fixed Monitor stats
+```{r}
+monitor_names <- c("ElSegundo" = "El Segundo", 
+                   "StAnthony" = "St. Anthony",
+                   "Manhattan" = "Manhattan",
+                   "WestHS" = "West HS",
+                   "ElmAve" = "Elm Ave",
+                   "NorthHS" = "North HS",
+                   "GuenserPark" = "Guenser Park",
+                   "Chico" = "213th & Chico",
+                   "Judson" = "Judson",
+                   "HarborPark" = "Harbor Park",
+                   "FirstMethodist" = "First Methodist",
+                   "GStreet" = "G Street",
+                   "StLuke" = "St. Luke",
+                   "Hudson" = "Hudson",
+                   "InnerPort" = "Inner Port")
+
+base_monitor_stat <- daily_full %>%
+  group_by(Monitor) %>%
+  summarise('Start Date' = strftime(min(day), '%Y-%m-%d'),
+            'End Date' = strftime(max(day), '%Y-%m-%d'),
+            'Closest Refinery' = unique(closest_ref),
+            'Distance to Nearest Refinery (m)' = round(unique(dist_ref)),
+            'Angle to Refinery' = unique(angle_ref),
+            'Distance to Nearest WRP (m)' = round(unique(dist_wrp)),
+            'Capacity of Nearest WRP' = unique(closest_wrp_capacity),
+            'Angle to WRP' = round(unique(angle_wrp)),
+            'Distance to Dominguez Channel (m)' = round(unique(dist_dc)),
+            'Elevation' = unique(elevation),
+            'Enhanced Vegetation Index' = unique(EVI)) %>%
+  mutate(`Closest Refinery` = case_when(`Closest Refinery` == "Phillips 66 (Wilmington)" ~ "Phillips 66",
+                                        `Closest Refinery` == "Torrance Refinery" ~ "Torrance",
+                                        `Closest Refinery` == "Valero Refinery" ~ "Valero",
+                                        `Closest Refinery` == "Marathon (Carson)" ~ "Marathon Carson",
+                                        `Closest Refinery` == "Marathon (Wilmington)" ~ "Marathon Wilmington",
+                                        .default = `Closest Refinery`)) %>%
+  mutate(Monitor = str_replace_all(Monitor, monitor_names)) %>%
+  arrange(factor(Monitor, levels = unname(monitor_names)))
+
+knitr::kable(base_monitor_stat, digits = 2, format = 'html')
+```
+
+## Since Feb 2022
+```{r}
+sincefeb2022_stat <- daily_full %>%
+  filter(day > '2022-01-31') %>%
+  group_by(Monitor) %>%
+  summarise('Daily observations' = n(),
+            'Max Daily Max' = max(H2S_daily_max, na.rm=T),
+            'Max Daily Average' = max(H2S_daily_avg, na.rm=T),
+            'Avg Daily Max' = mean(H2S_daily_max, na.rm=T),
+            'Avg Daily Average' = mean(H2S_daily_avg, na.rm=T),
+            'Average Wind Speed' = mean(ws_avg, na.rm=T),
+            'Average Wind Direction' = as.numeric(mean(circular(wd_avg, 
+                                                                units = 'degrees'), 
+                                                       na.rm=T)),
+            'Average daily odor complaints within county' = mean(num_odor_complaints, na.rm=T),
+            'Active wells 2km' = mean(active_2km, na.rm=T)) %>%
+  mutate('Average Wind Direction' = if_else(`Average Wind Direction` < 0, 
+                                            `Average Wind Direction`+360, 
+                                            `Average Wind Direction`)) %>%
+  mutate(Monitor = str_replace_all(Monitor, monitor_names)) %>%
+  arrange(factor(Monitor, levels = unname(monitor_names)))
+
+knitr::kable(sincefeb2022_stat, digits = 2, format = 'html')
+```
+
+## During Disaster (October 2021 - December 2021)
+```{r}
+disaster_stat <- daily_full %>%
+  filter(year == '2021', month %in% c('10', '11', '12')) %>%
+  group_by(Monitor) %>%
+  summarise('Daily observations' = n(),
+            'Max Daily Max' = max(H2S_daily_max, na.rm=T),
+            'Max Daily Average' = max(H2S_daily_avg, na.rm=T),
+            'Avg Daily Max' = mean(H2S_daily_max, na.rm=T),
+            'Avg Daily Average' = mean(H2S_daily_avg, na.rm=T),
+            'Average Wind Speed' = mean(ws_avg, na.rm=T),
+            'Average Wind Direction' = as.numeric(mean(circular(wd_avg, 
+                                                                units = 'degrees'), 
+                                                       na.rm=T)),
+            'Average daily odor complaints within county' = mean(num_odor_complaints, na.rm=T),
+            'Active wells 2km' = mean(active_2km, na.rm=T)) %>%
+  mutate('Average Wind Direction' = if_else(`Average Wind Direction` < 0, 
+                                            `Average Wind Direction`+360, 
+                                            `Average Wind Direction`)) %>%
+  mutate(Monitor = str_replace_all(Monitor, monitor_names)) %>%
+  arrange(factor(Monitor, levels = unname(monitor_names)))
+
+knitr::kable(disaster_stat, digits = 2, format = 'html')
+```
+
+```{r}
+# Try only the october for the prediction map
+disaster_oct_stat <- daily_full %>%
+  filter(year == '2021', month == '10') %>%
+  group_by(Monitor) %>%
+  summarise('Daily observations' = n(),
+            'Max Daily Max' = max(H2S_daily_max, na.rm=T),
+            'Max Daily Average' = max(H2S_daily_avg, na.rm=T),
+            'Avg Daily Max' = mean(H2S_daily_max, na.rm=T),
+            'Avg Daily Average' = mean(H2S_daily_avg, na.rm=T),
+            'Average Wind Speed' = mean(ws_avg, na.rm=T),
+            'Average Wind Direction' = as.numeric(mean(circular(wd_avg, 
+                                                                units = 'degrees'), 
+                                                       na.rm=T)),
+            'Average daily odor complaints within county' = mean(num_odor_complaints, na.rm=T),
+            'Active wells 2km' = mean(active_2km, na.rm=T)) %>%
+  mutate('Average Wind Direction' = if_else(`Average Wind Direction` < 0, 
+                                            `Average Wind Direction`+360, 
+                                            `Average Wind Direction`)) %>%
+  mutate(Monitor = str_replace_all(Monitor, monitor_names)) %>%
+  arrange(factor(Monitor, levels = unname(monitor_names)))
+
+knitr::kable(disaster_oct_stat, digits = 2, format = 'html')
+```
+
+## Normal Period (Jan 2020- May 2023) excluding disaster
+```{r}
+normal_stat <- daily_full %>%
+  filter(!(year == '2021' & month %in% c('10', '11', '12'))) %>%
+  group_by(Monitor) %>%
+  summarise('Daily observations' = n(),
+            'Max Daily Max' = max(H2S_daily_max, na.rm=T),
+            'Max Daily Average' = max(H2S_daily_avg, na.rm=T),
+            'Avg Daily Max' = mean(H2S_daily_max, na.rm=T),
+            'Avg Daily Average' = mean(H2S_daily_avg, na.rm=T),
+            'Average Wind Speed' = mean(ws_avg, na.rm=T),
+            'Average Wind Direction' = as.numeric(mean(circular(wd_avg, 
+                                                                units = 'degrees'), 
+                                                       na.rm=T)),
+            'Average daily odor complaints within county' = mean(num_odor_complaints, na.rm=T),
+            'Active wells 2km' = mean(active_2km, na.rm=T)) %>%
+  mutate('Average Wind Direction' = if_else(`Average Wind Direction` < 0, 
+                                            `Average Wind Direction`+360, 
+                                            `Average Wind Direction`)) %>%
+  mutate(Monitor = str_replace_all(Monitor, monitor_names)) %>%
+  arrange(factor(Monitor, levels = unname(monitor_names)))
+
+knitr::kable(normal_stat, digits = 2, format = 'html')
+```
+
+```{r}
+# Try only the Oct 2022
+normal_oct_stat <- daily_full %>%
+  filter(year == '2022' & month == '10') %>%
+  group_by(Monitor) %>%
+  summarise('Daily observations' = n(),
+            'Max Daily Max' = max(H2S_daily_max, na.rm=T),
+            'Max Daily Average' = max(H2S_daily_avg, na.rm=T),
+            'Avg Daily Max' = mean(H2S_daily_max, na.rm=T),
+            'Avg Daily Average' = mean(H2S_daily_avg, na.rm=T),
+            'Average Wind Speed' = mean(ws_avg, na.rm=T),
+            'Average Wind Direction' = as.numeric(mean(circular(wd_avg, 
+                                                                units = 'degrees'), 
+                                                       na.rm=T)),
+            'Average daily odor complaints within county' = mean(num_odor_complaints, na.rm=T),
+            'Active wells 2km' = mean(active_2km, na.rm=T)) %>%
+  mutate('Average Wind Direction' = if_else(`Average Wind Direction` < 0, 
+                                            `Average Wind Direction`+360, 
+                                            `Average Wind Direction`)) %>%
+  mutate(Monitor = str_replace_all(Monitor, monitor_names)) %>%
+  arrange(factor(Monitor, levels = unname(monitor_names)))
+
+knitr::kable(normal_oct_stat, digits = 2, format = 'html')
+```
+
+## Table 1: Monitor statistics
+```{r}
+table1 <- base_monitor_stat %>%
+  select(-c(`Angle to Refinery`, `Angle to WRP`, `Capacity of Nearest WRP`)) %>%
+  left_join(disaster_stat %>% 
+              select(Monitor, `Avg Daily Average`) %>% 
+              rename(`Disaster Avg Daily Average` = `Avg Daily Average`), 
+            join_by(Monitor)) %>%
+  left_join(normal_stat %>% 
+              select(Monitor, `Avg Daily Average`) %>%
+              rename(`Normal Avg Daily Average` = `Avg Daily Average`), 
+            join_by(Monitor)) %>%
+  relocate(Monitor, `Start Date`, `End Date`, `Closest Refinery`, `Normal Avg Daily Average`, `Disaster Avg Daily Average`)
+
+table1_kable <- knitr::kable(table1, format = 'latex', digits = 2)
+writeLines(table1_kable, '../figures/table1.tex')
+
+knitr::kable(table1, format = 'html', digits = 2)
+```
+
+
+# GAM
+```{r}
+# prepare stepwise equations
+```
+
+## Daily Average
+### Since Feb 2022
+```{r}
+# Since feb 2022
+h2s_da_model_sincefeb2022 <- gam(H2S_daily_avg~s(as.numeric(month),bs='cc') + year + weekday +
+                         wd_avg + ws_avg + daily_downwind_ref + closest_wrp_capacity +
+                          I(1/dist_wrp^2) + I(1/dist_ref^2) + 
+                         s(I(mon_utm_x/10^3), I(mon_utm_y/10^3), bs='tp', k = 10) + 
+                        te(I(mon_utm_x/10^3), I(mon_utm_y/10^3), as.numeric(day),
+                           k=c(10,10),d=c(2,1),bs=c('tp','cc')) +
+                         monthly_oil_2km + monthly_gas_2km + active_2km + inactive_2km + 
+                        daily_downwind_wrp + elevation + EVI + num_odor_complaints +
+                        I(1/dist_dc^2) + daily_temp + daily_hum + daily_precip, 
+                      data = daily_full %>% filter(day > '2022-01-31'))
+summary(h2s_da_model_sincefeb2022)
+```
+```{r}
+h2s_da_model_sincefeb2022_b <- gam(H2S_daily_avg~s(as.numeric(month),bs='cc') + year + weekday +
+                         wd_avg + ws_avg + daily_downwind_ref + closest_wrp_capacity +
+                          I(1/dist_wrp^2) + I(1/dist_ref^2) + 
+                         s(I(mon_utm_x/10^3), I(mon_utm_y/10^3), bs='ts', k = 10) + 
+                        te(I(mon_utm_x/10^3), I(mon_utm_y/10^3), as.numeric(day),
+                           k=c(10,10),d=c(2,1),bs=c('ts','cc')) +
+                         monthly_oil_2km + monthly_gas_2km + active_2km + inactive_2km + 
+                        daily_downwind_wrp + elevation + EVI + num_odor_complaints +
+                        I(1/dist_dc^2) + daily_temp + daily_hum + daily_precip, 
+                      data = daily_full %>% filter(day > '2022-01-31'))
+summary(h2s_da_model_sincefeb2022_b)
+```
+
+```{r}
+h2s_da_model_sincefeb2022_c <- gam(H2S_daily_avg~s(as.numeric(month),bs='cc') + year + weekday +
+                         wd_avg + ws_avg + daily_downwind_ref + closest_wrp_capacity +
+                          I(1/dist_wrp^2) + I(1/dist_ref^2) + 
+                         s(I(mon_utm_x/10^3), I(mon_utm_y/10^3), bs='tp', k = 10) + 
+                        te(I(mon_utm_x/10^3), I(mon_utm_y/10^3), as.numeric(day),
+                           k=c(10,10),d=c(2,1),bs=c('tp','cc')) +
+                         monthly_oil_2km + monthly_gas_2km + active_2km + inactive_2km + 
+                        daily_downwind_wrp + elevation + EVI + num_odor_complaints +
+                        I(1/dist_dc^2) + daily_temp + daily_hum + daily_precip, 
+                      data = daily_full %>% filter(day > '2022-01-31'),
+                      select = T)
+summary(h2s_da_model_sincefeb2022_c)
+```
+
+### Disaster Only
+```{r}
+# Disaster only
+h2s_da_model_dis <- gam(H2S_daily_avg ~ month + weekday +
+                         wd_avg + ws_avg + daily_downwind_ref + closest_wrp_capacity +
+                          I(1/dist_wrp^2) + I(1/dist_ref^2) + 
+                         s(I(mon_utm_x/10^3), I(mon_utm_y/10^3), bs='tp', k = 10) + 
+                        te(I(mon_utm_x/10^3), I(mon_utm_y/10^3),as.numeric(day),
+                           k=c(10,10),d=c(2,1),bs=c('tp','cc')) +
+                         monthly_oil_2km + monthly_gas_2km + active_2km + inactive_2km + 
+                        daily_downwind_wrp + elevation + EVI + num_odor_complaints +
+                        I(1/dist_dc^2) + daily_temp + daily_hum + daily_precip, 
+                      data = daily_full %>% filter(year == '2021', month %in% c('10', '11', '12')))
+summary(h2s_da_model_dis)
+plot(h2s_da_model_dis)
+```
+
+### Exclude Disaster	
+```{r}
+# Exclude disaster
+h2s_da_model_excl_dis <- gam(H2S_daily_avg ~ s(as.numeric(month),bs='cc') + year + weekday +
+                         wd_avg + ws_avg + daily_downwind_ref + closest_wrp_capacity +
+                          I(1/dist_wrp^2) + I(1/dist_ref^2) + 
+                         s(I(mon_utm_x/10^3), I(mon_utm_y/10^3), bs='tp', k = 10) + 
+                        te(I(mon_utm_x/10^3), I(mon_utm_y/10^3),as.numeric(day),
+                           k=c(10,10),d=c(2,1),bs=c('tp','cc')) +
+                         monthly_oil_2km + monthly_gas_2km + active_2km + inactive_2km + 
+                        daily_downwind_wrp + elevation + EVI + num_odor_complaints +
+                        I(1/dist_dc^2) + daily_temp + daily_hum + daily_precip, 
+                      data = daily_full %>% filter(!(year == '2021' & month %in% c('10', '11', '12'))))
+summary(h2s_da_model_excl_dis)
+plot(h2s_da_model_excl_dis)
+```
+
+### Everything w Disaster Indicator	
+```{r}
+# Disaster indicator
+h2s_da_model_dis_ind <- gam(H2S_daily_avg~s(as.numeric(month),bs='cc') + year + weekday +
+                         wd_avg + ws_avg + daily_downwind_ref + closest_wrp_capacity +
+                          I(1/dist_wrp^2) + I(1/dist_ref^2) + 
+                         s(I(mon_utm_x/10^3), I(mon_utm_y/10^3), bs='tp', k = 10) + 
+                        te(I(mon_utm_x/10^3), I(mon_utm_y/10^3),as.numeric(day),
+                           k=c(10,10),d=c(2,1),bs=c('tp','cc')) +
+                         monthly_oil_2km + monthly_gas_2km + active_2km + inactive_2km + 
+                        daily_downwind_wrp + elevation + EVI + num_odor_complaints +
+                        I(1/dist_dc^2) + daily_temp + daily_hum + daily_precip + disaster, 
+                      data = daily_full %>% mutate(disaster = if_else(year == '2021', 
+                                                                      month %in% c('10', '11', '12'), 1, 0)))
+summary(h2s_da_model_dis_ind)
+plot(h2s_da_model_dis_ind)
+```
+
+### Everything w.o Disaster Indicator	
+```{r}
+# Everything
+h2s_da_model_full <- gam(H2S_daily_avg~s(as.numeric(month),bs='cc') + year + weekday +
+                         wd_avg + ws_avg + daily_downwind_ref + closest_wrp_capacity +
+                          I(1/dist_wrp^2) + I(1/dist_ref^2) + 
+                         s(I(mon_utm_x/10^3), I(mon_utm_y/10^3), bs='tp', k = 10) + 
+                        te(I(mon_utm_x/10^3), I(mon_utm_y/10^3),as.numeric(day),
+                           k=c(10,10),d=c(2,1),bs=c('tp','cc')) +
+                         monthly_oil_2km + monthly_gas_2km + active_2km + inactive_2km + 
+                        daily_downwind_wrp + elevation + EVI + num_odor_complaints +
+                        I(1/dist_dc^2) + daily_temp + daily_hum + daily_precip, 
+                      data = daily_full)
+summary(h2s_da_model_full)
+plot(h2s_da_model_full)
+```
+
+## Model Statistics
+```{r}
+knitr::kable(tibble(Model = c('Since Feb 2022',
+                              'Disaster Only',
+                              'Exclude Disaster',
+                              'Everything w Disaster Indicator',
+                              'Everything w.o Disaster Indicator'),
+                    'R-Sq' = c(round(summary(h2s_da_model_sincefeb2022)$r.sq, 2),
+                                    round(summary(h2s_da_model_dis)$r.sq, 2),
+                                    round(summary(h2s_da_model_excl_dis)$r.sq, 2),
+                                    round(summary(h2s_da_model_dis_ind)$r.sq, 2),
+                                    round(summary(h2s_da_model_full)$r.sq, 2))))
+```
+
+## Helper Function
+```{r}
+adj_r2 <- function(r2, n, p){
+  return(1 - (1-r2)*(n - 1)/(n - p - 1))
+}
+```
+
+
+### 80/20 CV
+
+```{r}
+result <- tibble(Model = character(),
+                 '80/20 Train R-Sq' = numeric(),
+                 '80/20 Test R-Sq' = numeric())
+
+validation_result_8020 <- tibble(Model = character(),
+                            'Coef' = numeric(),
+                            'R-Sq' = numeric())
+
+predictors <- c('H2S_daily_avg', 'month', 'year', 'weekday', 'wd_avg', 'ws_avg', 
+                'daily_downwind_ref', 'dist_wrp', 'dist_ref',
+                'mon_utm_x', 'mon_utm_y', 'day', 'monthly_oil_2km', 'monthly_gas_2km', 
+                'active_2km', 'daily_downwind_wrp', 'elevation', 'EVI', 'num_odor_complaints',
+                'dist_dc', 'capacity', 'daily_temp', 'daily_hum', 'daily_precip', 'inactive_2km') 
+
+set.seed(123)
+
+# model 1: since Feb 2022
+train <- daily_full %>% 
+  filter(day > '2022-01-31') %>% 
+  select(all_of(predictors)) %>% 
+  filter(complete.cases(.)) %>% 
+  slice_sample(prop = 0.8)
+
+test <- anti_join(daily_full %>% 
+                  filter(day > '2022-01-31') %>% 
+                  select(all_of(predictors)) %>% 
+                  filter(complete.cases(.)), train)
+
+h2s_da_model_f2 <- gam(H2S_daily_avg~s(as.numeric(month),bs='cc') + year + weekday +
+                         wd_avg + ws_avg + daily_downwind_ref + I(1/dist_wrp^2) + I(1/dist_ref^2) +
+                         s(I(mon_utm_x/10^3), I(mon_utm_y/10^3), bs='tp', k = 10) + 
+                         te(I(mon_utm_x/10^3), I(mon_utm_y/10^3), as.numeric(day),
+                            k = c(10,10), d = c(2,1), bs = c('tp','cc')) +
+                         monthly_oil_2km + monthly_gas_2km + active_2km + inactive_2km + 
+                         daily_downwind_wrp + elevation + EVI + num_odor_complaints +
+                         closest_wrp_capacity + dist_dc + daily_temp + daily_hum + daily_precip, 
+                        data = train)
+
+predictions <- predict(h2s_da_model_f2, newdata = test)
+r2_test <- R2(test$H2S_daily_avg, predictions)
+adj_r2_test <- adj_r2(r2_test, summary(h2s_da_model_f2)$n,summary(h2s_da_model_f2)$np)
+
+result <- rbind(result, tibble(Model = 'Since Feb 2022',
+                               '80/20 Train R-Sq' = summary(h2s_da_model_f2)$r.sq,
+                               '80/20 Test R-Sq' = adj_r2_test))
+
+f2_obs_vs_pred_plot <- ggplot(tibble(obs = test %>% pull(H2S_daily_avg), pred = predictions),
+                             aes(x = pred, y = obs)) +
+                        geom_point() +
+                        stat_poly_line() +
+                        stat_poly_eq(use_label(c("eq", "R2", "n"))) +
+                        labs(y = 'Observed', x = 'Predicted', 
+                             title = 'Observed vs Predicted for Since 2022 GAM') +
+                        theme_bw()
+
+validation_result_8020 <- rbind(validation_result_8020, 
+                           tibble(Model = 'Since Feb 2022',
+                                  'Coef' = summary(lm(test %>% pull(H2S_daily_avg) ~
+                                                        predictions))$coefficients[2, 1], 
+                                  'R-Sq' = summary(lm(test %>% pull(H2S_daily_avg) ~
+                                                        predictions))$r.squared))
+
+# Model 2: Disaster (Oct-Dec 2021) only
+train <- daily_full %>% 
+  filter(year == '2021', month %in% c('10', '11', '12')) %>% 
+  select(all_of(predictors)) %>% 
+  filter(complete.cases(.)) %>% 
+  slice_sample(prop = 0.8)
+
+test <- anti_join(daily_full %>% 
+                  filter(year == '2021', month %in% c('10', '11', '12')) %>% 
+                  select(all_of(predictors)) %>% 
+                  filter(complete.cases(.)), train)
+
+h2s_da_model_f3 <- gam(H2S_daily_avg ~ month + weekday +
+                       wd_avg + ws_avg + daily_downwind_ref + I(1/dist_wrp^2) + I(1/dist_ref^2) +
+                       s(I(mon_utm_x/10^3), I(mon_utm_y/10^3), bs='tp', k = 10) + 
+                       te(I(mon_utm_x/10^3), I(mon_utm_y/10^3), as.numeric(day),
+                          k = c(10,10), d = c(2,1), bs = c('tp','cc')) +
+                       monthly_oil_2km + monthly_gas_2km + active_2km + inactive_2km + 
+                       daily_downwind_wrp + elevation + EVI + num_odor_complaints +
+                       closest_wrp_capacity + dist_dc + daily_temp + daily_hum + daily_precip, 
+                      data = train)
+
+predictions <- predict(h2s_da_model_f3, newdata = test)
+r2_test <- R2(test$H2S_daily_avg, predictions)
+adj_r2_test <- adj_r2(r2_test, summary(h2s_da_model_f3)$n,summary(h2s_da_model_f3)$np)
+
+result <- rbind(result, tibble(Model = 'Disaster Only',
+                               '80/20 Train R-Sq' = summary(h2s_da_model_f3)$r.sq,
+                               '80/20 Test R-Sq' = adj_r2_test))
+
+f3_obs_vs_pred_plot <- ggplot(tibble(obs = test %>% pull(H2S_daily_avg), pred = predictions),
+                             aes(x = pred, y = obs)) +
+                        geom_point() +
+                        stat_poly_line() +
+                        stat_poly_eq(use_label(c("eq", "R2", "n"))) +
+                        labs(y = 'Observed', x = 'Predicted', 
+                             title = 'Observed vs Predicted for Disaster Only GAM') +
+                        theme_bw()
+
+validation_result_8020 <- rbind(validation_result_8020, 
+                           tibble(Model = 'Disaster Only',
+                                  'Coef' = summary(lm(test %>% pull(H2S_daily_avg) ~
+                                                        predictions))$coefficients[2, 1], 
+                                  'R-Sq' = summary(lm(test %>% pull(H2S_daily_avg) ~
+                                                        predictions))$r.squared))
+
+# Model 3: Excluding Disaster
+train <- daily_full %>% 
+  filter(!(year == '2021' & month %in% c('10', '11', '12'))) %>% 
+  select(all_of(predictors)) %>% 
+  filter(complete.cases(.)) %>% 
+  slice_sample(prop = 0.8)
+
+test <- anti_join(daily_full %>% 
+                  filter(!(year == '2021' & month %in% c('10', '11', '12'))) %>% 
+                  select(all_of(predictors)) %>% 
+                  filter(complete.cases(.)), train)
+
+h2s_da_model_f4 <- gam(H2S_daily_avg ~ s(as.numeric(month),bs='cc') + year + weekday +
+                         wd_avg + ws_avg + daily_downwind_ref + I(1/dist_wrp^2) + I(1/dist_ref^2) +
+                         s(I(mon_utm_x/10^3), I(mon_utm_y/10^3), bs='tp', k = 10) + 
+                         te(I(mon_utm_x/10^3), I(mon_utm_y/10^3), as.numeric(day),
+                            k = c(10,10), d = c(2,1), bs = c('tp','cc')) +
+                         monthly_oil_2km + monthly_gas_2km + active_2km + inactive_2km + 
+                         daily_downwind_wrp + elevation + EVI + num_odor_complaints +
+                         closest_wrp_capacity + dist_dc + daily_temp + daily_hum + daily_precip, 
+                        data = train)
+
+predictions <- predict(h2s_da_model_f4, newdata = test)
+r2_test <- R2(test$H2S_daily_avg, predictions)
+adj_r2_test <- adj_r2(r2_test, summary(h2s_da_model_f4)$n,summary(h2s_da_model_f4)$np)
+
+result <- rbind(result, tibble(Model = 'Exclude Disaster',
+                               '80/20 Train R-Sq' = summary(h2s_da_model_f4)$r.sq,
+                               '80/20 Test R-Sq' = adj_r2_test))
+
+# Model 4: Everything with Disaster Indicator
+train <- daily_full %>% 
+  select(all_of(predictors)) %>% 
+  mutate(disaster = if_else(year == '2021' & month %in% c('10', '11', '12'), 1, 0)) %>% 
+  filter(complete.cases(.)) 
+
+train <- rbind(
+  train %>% filter(disaster==1) %>% slice_sample(prop = 0.8),
+  train %>% filter(disaster==0) %>% slice_sample(prop = 0.8)
+)
+
+test <- anti_join(daily_full %>% 
+                  select(all_of(predictors)) %>% 
+                    mutate(disaster = if_else(year == '2021' & month %in% c('10', '11', '12'), 1, 0)) %>% 
+                  filter(complete.cases(.)), train)
+
+h2s_da_model_f5 <- gam(H2S_daily_avg ~ s(as.numeric(month),bs='cc') + year + weekday +
+                         wd_avg + ws_avg + daily_downwind_ref + I(1/dist_wrp^2) + I(1/dist_ref^2) +
+                         s(I(mon_utm_x/10^3), I(mon_utm_y/10^3), bs='tp', k = 10) + 
+                         te(I(mon_utm_x/10^3), I(mon_utm_y/10^3), as.numeric(day),
+                            k = c(10,10), d = c(2,1), bs = c('tp','cc')) +
+                         monthly_oil_2km + monthly_gas_2km + active_2km + inactive_2km + 
+                         daily_downwind_wrp + elevation + EVI + num_odor_complaints +
+                         disaster +
+                         closest_wrp_capacity + dist_dc + daily_temp + daily_hum + daily_precip, 
+                        data = train)
+
+predictions <- predict(h2s_da_model_f5, newdata = test)
+r2_test <- R2(test$H2S_daily_avg, predictions)
+adj_r2_test <- adj_r2(r2_test, summary(h2s_da_model_f5)$n,summary(h2s_da_model_f5)$np)
+
+result <- rbind(result, tibble(Model = 'Everything w. Disaster Indicator',
+                               '80/20 Train R-Sq' = summary(h2s_da_model_f5)$r.sq,
+                               '80/20 Test R-Sq' = adj_r2_test))
+
+# Model 5: Everything
+train <- daily_full %>% 
+  select(all_of(predictors)) %>% 
+  filter(complete.cases(.)) %>% 
+  slice_sample(prop = 0.8)
+
+train <- rbind(
+  train %>% filter(year == '2021' & month %in% c('10', '11', '12')) %>% slice_sample(prop = 0.8),
+  train %>% filter(!(year == '2021' & month %in% c('10', '11', '12'))) %>% slice_sample(prop = 0.8)
+  )
+
+test <- anti_join(daily_full %>% 
+                  select(all_of(predictors)) %>% 
+                  filter(complete.cases(.)), train)
+
+h2s_da_model_f6 <- gam(H2S_daily_avg ~ s(as.numeric(month),bs='cc') + year + weekday +
+                         wd_avg + ws_avg + daily_downwind_ref + I(1/dist_wrp^2) + I(1/dist_ref^2) +
+                         s(I(mon_utm_x/10^3), I(mon_utm_y/10^3), bs='tp', k = 10) + 
+                         te(I(mon_utm_x/10^3), I(mon_utm_y/10^3), as.numeric(day),
+                            k = c(10,10), d = c(2,1), bs = c('tp','cc')) +
+                         monthly_oil_2km + monthly_gas_2km + active_2km + inactive_2km + 
+                         daily_downwind_wrp + elevation + EVI + num_odor_complaints +
+                         closest_wrp_capacity + dist_dc + daily_temp + daily_hum + daily_precip, 
+                        data = train)
+
+predictions <- predict(h2s_da_model_f6, newdata = test)
+r2_test <- R2(test$H2S_daily_avg, predictions)
+adj_r2_test <- adj_r2(r2_test, summary(h2s_da_model_f6)$n,summary(h2s_da_model_f6)$np)
+
+result <- rbind(result, tibble(Model = 'Everything w.o Disaster Indicator',
+                               '80/20 Train R-Sq' = summary(h2s_da_model_f6)$r.sq,
+                               '80/20 Test R-Sq' = adj_r2_test))
+
+f6_obs_vs_pred_plot <- ggplot(tibble(obs = test %>% pull(H2S_daily_avg), pred = predictions),
+                             aes(x = pred, y = obs)) +
+                        geom_point() +
+                        stat_poly_line() +
+                        stat_poly_eq(use_label(c("eq", "R2", "n"))) +
+                        labs(y = 'Observed', x = 'Predicted', 
+                             title = 'Everything w.o Disaster Indicator Gam') +
+                        theme_bw()
+
+f6_obs_vs_pred_plot_zoom <- ggplot(tibble(obs = test %>% pull(H2S_daily_avg), pred = predictions),
+                             aes(x = pred, y = obs)) +
+                        geom_point() +
+                        stat_poly_line() +
+                        stat_poly_eq(use_label(c("eq", "R2", "n"))) +
+                        labs(y = 'Observed', x = 'Predicted', 
+                             title = 'Zoomed In') +
+                        coord_cartesian(xlim = c(NA, 4), ylim = c(NA, 4)) +
+                        theme_bw()
+
+validation_result_8020 <- rbind(validation_result_8020, 
+                           tibble(Model = 'Everything',
+                                  'Coef' = summary(lm(test %>% pull(H2S_daily_avg) ~
+                                                        predictions))$coefficients[2, 1], 
+                                  'R-Sq' = summary(lm(test %>% pull(H2S_daily_avg) ~
+                                                        predictions))$r.squared))
+```
+
+```{r}
+knitr::kable(tibble(Model = c('Since Feb 2022',
+                              'Disaster Only',
+                              'Exclude Disaster',
+                              'Everything w Disaster Indicator',
+                              'Everything w.o Disaster Indicator'),
+                    'R-Sq' = c(round(summary(h2s_da_model_f)$r.sq, 2),
+                                    round(summary(h2s_da_model_g)$r.sq, 2),
+                                    round(summary(h2s_da_model_h)$r.sq, 2),
+                                    round(summary(h2s_da_model_i)$r.sq, 2),
+                                    round(summary(h2s_da_model_j)$r.sq, 2))) %>% 
+               left_join(result, join_by(Model)))
+```
+
+
+
+
+### CV on each Monitor
+```{r}
+result_cv <- tibble(Model = character(),
+                 'CV Avg Train R-Sq' = numeric(),
+                 'CV Avg Test R-Sq' = numeric())
+
+# model 1: since Feb 2022
+post2022feb <- daily_full %>% 
+  filter(day > '2022-01-31') %>% 
+  select(all_of(predictors), Monitor) %>% 
+  filter(complete.cases(.))
+
+monitors <- unique(post2022feb$Monitor)
+
+cv1_result <- tibble(Monitor = character(),
+                     'Train Adj-R2' = numeric(),
+                     'Train N' = numeric(),
+                     'Test Adj-R2' = numeric(),
+                     'Test B' = numeric()
+                     )
+
+for (i in 1:length(monitors)) {
+  train <- post2022feb %>%
+    filter(Monitor != monitors[i])
+  
+  test <- post2022feb %>%
+    filter(Monitor == monitors[i])
+  
+  h2s_da_model_f2b <- gam(H2S_daily_avg~s(as.numeric(month),bs='cc') + year + weekday +
+                         wd_avg + ws_avg + daily_downwind_ref + I(1/dist_wrp^2) + I(1/dist_ref^2) +
+                         s(I(mon_utm_x/10^3), I(mon_utm_y/10^3), bs='tp', k = 10) + 
+                         te(I(mon_utm_x/10^3), I(mon_utm_y/10^3), as.numeric(day),
+                            k = c(10,10), d = c(2,1), bs = c('tp','cc')) +
+                         monthly_oil_2km + monthly_gas_2km + active_2km + inactive_2km + 
+                         daily_downwind_wrp + elevation + EVI + num_odor_complaints +
+                         closest_wrp_capacity + dist_dc + daily_temp + daily_hum + daily_precip, 
+                        data = train)
+  
+  predictions <- predict(h2s_da_model_f2b, newdata = test)
+  r2_test <- R2(test$H2S_daily_avg, predictions)
+  adj_r2_test <- adj_r2(r2_test, summary(h2s_da_model_f2b)$n,summary(h2s_da_model_f2b)$np)
+  
+  cv1_result <- rbind(cv1_result, tibble(monitors[i],
+                                         summary(h2s_da_model_f2b)$r.sq, 
+                                         summary(h2s_da_model_f2b)$n, 
+                                         adj_r2_test, 
+                                         nrow(test)))
+}
+
+result_cv <- rbind(result_cv, tibble(tibble(Model = 'Since Feb 2022',
+                                           'CV Avg Train R-Sq' = mean(cv1_result$`summary(h2s_da_model_f2b)$r.sq`),
+                                           'CV Avg Test R-Sq' = mean(cv1_result$adj_r2_test))))
+
+# model 2: Disaster only
+disaster <- daily_full %>% 
+  filter(year == '2021', month %in% c('10', '11', '12')) %>% 
+  select(all_of(predictors), Monitor) %>% 
+  filter(complete.cases(.))
+
+monitors <- unique(disaster$Monitor)
+
+cv2_result <- tibble(Monitor = character(),
+                     'Train Adj-R2' = numeric(),
+                     'Train N' = numeric(),
+                     'Test Adj-R2' = numeric(),
+                     'Test B' = numeric()
+                     )
+
+for (i in 1:length(monitors)) {
+  train <- disaster %>%
+    filter(Monitor != monitors[i])
+  
+  test <- disaster %>%
+    filter(Monitor == monitors[i])
+  
+  h2s_da_model_f3b <- gam(H2S_daily_avg~ month + weekday +
+                         wd_avg + ws_avg + daily_downwind_ref + I(1/dist_wrp^2) + I(1/dist_ref^2) +
+                         s(I(mon_utm_x/10^3), I(mon_utm_y/10^3), bs='tp', k = 10) + 
+                         te(I(mon_utm_x/10^3), I(mon_utm_y/10^3), as.numeric(day),
+                            k = c(10,10), d = c(2,1), bs = c('tp','cc')) +
+                         monthly_oil_2km + monthly_gas_2km + active_2km + inactive_2km + 
+                         daily_downwind_wrp + elevation + EVI + num_odor_complaints +
+                         closest_wrp_capacity + dist_dc + daily_temp + daily_hum + daily_precip, 
+                        data = train)
+  
+  predictions <- predict(h2s_da_model_f3b, newdata = test)
+  r2_test <- R2(test$H2S_daily_avg, predictions)
+  adj_r2_test <- adj_r2(r2_test, summary(h2s_da_model_f3b)$n,summary(h2s_da_model_f3b)$np)
+  
+  cv2_result <- rbind(cv2_result, tibble(monitors[i],
+                                         summary(h2s_da_model_f3b)$r.sq, 
+                                         summary(h2s_da_model_f3b)$n, 
+                                         adj_r2_test, 
+                                         nrow(test)))
+}
+
+result_cv <- rbind(result_cv, tibble(tibble(Model = 'Disaster Only',
+                                           'CV Avg Train R-Sq' = mean(cv2_result$`summary(h2s_da_model_f3b)$r.sq`),
+                                           'CV Avg Test R-Sq' = mean(cv2_result$adj_r2_test))))
+
+# model 3: Exclude Disaster
+exclude_disaster <- daily_full %>% 
+  filter(!(year == '2021' & month %in% c('10', '11', '12'))) %>% 
+  select(all_of(predictors), Monitor) %>% 
+  filter(complete.cases(.))
+
+monitors <- unique(exclude_disaster$Monitor)
+
+cv3_result <- tibble(Monitor = character(),
+                     'Train Adj-R2' = numeric(),
+                     'Train N' = numeric(),
+                     'Test Adj-R2' = numeric(),
+                     'Test B' = numeric()
+                     )
+
+for (i in 1:length(monitors)) {
+  train <- exclude_disaster %>%
+    filter(Monitor != monitors[i])
+  
+  test <- exclude_disaster %>%
+    filter(Monitor == monitors[i])
+  
+  h2s_da_model_f4b <- gam(H2S_daily_avg~ s(as.numeric(month),bs='cc') + year + weekday +
+                         wd_avg + ws_avg + daily_downwind_ref + I(1/dist_wrp^2) + I(1/dist_ref^2) +
+                         s(I(mon_utm_x/10^3), I(mon_utm_y/10^3), bs='tp', k = 10) + 
+                         te(I(mon_utm_x/10^3), I(mon_utm_y/10^3), as.numeric(day),
+                            k = c(10,10), d = c(2,1), bs = c('tp','cc')) +
+                         monthly_oil_2km + monthly_gas_2km + active_2km + inactive_2km + 
+                         daily_downwind_wrp + elevation + EVI + num_odor_complaints +
+                         closest_wrp_capacity + dist_dc + daily_temp + daily_hum + daily_precip, 
+                        data = train)
+  
+  predictions <- predict(h2s_da_model_f4b, newdata = test)
+  r2_test <- R2(test$H2S_daily_avg, predictions)
+  adj_r2_test <- adj_r2(r2_test, summary(h2s_da_model_f4b)$n,summary(h2s_da_model_f4b)$np)
+  
+  cv3_result <- rbind(cv3_result, tibble(monitors[i],
+                                         summary(h2s_da_model_f4b)$r.sq, 
+                                         summary(h2s_da_model_f4b)$n, 
+                                         adj_r2_test, 
+                                         nrow(test)))
+}
+
+result_cv <- rbind(result_cv, tibble(tibble(Model = 'Exclude Disaster',
+                                           'CV Avg Train R-Sq' = mean(cv3_result$`summary(h2s_da_model_f4b)$r.sq`),
+                                           'CV Avg Test R-Sq' = mean(cv3_result$adj_r2_test))))
+
+# model 4: Everything w Disaster Indicator 
+full_complete <- daily_full %>% 
+  select(all_of(predictors), Monitor) %>% 
+  filter(complete.cases(.)) %>%
+  mutate(disaster = if_else(year == '2021' &  month %in% c('10', '11', '12'), 1, 0))
+
+monitors <- unique(full_complete$Monitor)
+
+cv4_result <- tibble(Monitor = character(),
+                     'Train Adj-R2' = numeric(),
+                     'Train N' = numeric(),
+                     'Test Adj-R2' = numeric(),
+                     'Test B' = numeric()
+                     )
+
+for (i in 1:length(monitors)) {
+  train <- full_complete %>%
+    filter(Monitor != monitors[i])
+  
+  test <- full_complete %>%
+    filter(Monitor == monitors[i])
+  
+  h2s_da_model_f5b <- gam(H2S_daily_avg~ s(as.numeric(month),bs='cc') + year + weekday +
+                         wd_avg + ws_avg + daily_downwind_ref + I(1/dist_wrp^2) + I(1/dist_ref^2) +
+                         s(I(mon_utm_x/10^3), I(mon_utm_y/10^3), bs='tp', k = 10) + 
+                         te(I(mon_utm_x/10^3), I(mon_utm_y/10^3), as.numeric(day),
+                            k = c(10,10), d = c(2,1), bs = c('tp','cc')) +
+                         monthly_oil_2km + monthly_gas_2km + active_2km + inactive_2km + 
+                         daily_downwind_wrp + elevation + EVI + num_odor_complaints +
+                         disaster + closest_wrp_capacity + dist_dc + daily_temp + daily_hum + daily_precip + disaster, 
+                        data = train)
+  
+  predictions <- predict(h2s_da_model_f5b, newdata = test)
+  r2_test <- R2(test$H2S_daily_avg, predictions)
+  adj_r2_test <- adj_r2(r2_test, summary(h2s_da_model_f5b)$n,summary(h2s_da_model_f5b)$np)
+  
+  cv4_result <- rbind(cv4_result, tibble(monitors[i],
+                                         summary(h2s_da_model_f5b)$r.sq, 
+                                         summary(h2s_da_model_f5b)$n, 
+                                         adj_r2_test, 
+                                         nrow(test)))
+}
+
+result_cv <- rbind(result_cv, tibble(tibble(Model = 'Everything w. Disaster Indicator',
+                                           'CV Avg Train R-Sq' = mean(cv4_result$`summary(h2s_da_model_f5b)$r.sq`),
+                                           'CV Avg Test R-Sq' = mean(cv4_result$adj_r2_test))))
+
+# model 5: Everything w.o Disaster Indicator 
+full_complete <- daily_full %>% 
+  select(all_of(predictors), Monitor) %>% 
+  filter(complete.cases(.))
+
+monitors <- unique(full_complete$Monitor)
+
+cv5_result <- tibble(Monitor = character(),
+                     'Train Adj-R2' = numeric(),
+                     'Train N' = numeric(),
+                     'Test Adj-R2' = numeric(),
+                     'Test B' = numeric()
+                     )
+
+for (i in 1:length(monitors)) {
+  train <- full_complete %>%
+    filter(Monitor != monitors[i])
+  
+  test <- full_complete %>%
+    filter(Monitor == monitors[i])
+  
+  h2s_da_model_f6b <- gam(H2S_daily_avg~ s(as.numeric(month),bs='cc') + year + weekday +
+                         wd_avg + ws_avg + daily_downwind_ref + I(1/dist_wrp^2) + I(1/dist_ref^2) +
+                         s(I(mon_utm_x/10^3), I(mon_utm_y/10^3), bs='tp', k = 10) + 
+                         te(I(mon_utm_x/10^3), I(mon_utm_y/10^3), as.numeric(day),
+                            k = c(10,10), d = c(2,1), bs = c('tp','cc')) +
+                         monthly_oil_2km + monthly_gas_2km + active_2km + inactive_2km + 
+                         daily_downwind_wrp + elevation + EVI + num_odor_complaints +
+                         closest_wrp_capacity + dist_dc + daily_temp + daily_hum + daily_precip, 
+                        data = train)
+  
+  predictions <- predict(h2s_da_model_f6b, newdata = test)
+  r2_test <- R2(test$H2S_daily_avg, predictions)
+  adj_r2_test <- adj_r2(r2_test, summary(h2s_da_model_f6b)$n,summary(h2s_da_model_f6b)$np)
+  
+  cv5_result <- rbind(cv5_result, tibble(monitors[i],
+                                         summary(h2s_da_model_f6b)$r.sq, 
+                                         summary(h2s_da_model_f6b)$n, 
+                                         adj_r2_test, 
+                                         nrow(test)))
+}
+
+result_cv <- rbind(result_cv, tibble(tibble(Model = 'Everything w.o Disaster Indicator',
+                                           'CV Avg Train R-Sq' = mean(cv5_result$`summary(h2s_da_model_f6b)$r.sq`),
+                                           'CV Avg Test R-Sq' = mean(cv5_result$adj_r2_test))))
+
+cv1_result
+cv2_result
+cv3_result
+cv4_result
+cv5_result
+```
+ 
+### 10-fold CV
+```{r}
+set.seed(1)
+random_seeds <- floor(runif(4, min=0, max=1)*100)
+```
+
+```{r}
+result_10cv <- tibble(Model = character(),
+                 '10CV AVG Train R-Sq' = numeric(),
+                 '10CV AVG Test R-Sq' = numeric(),
+                 'Test RMSE' = numeric())
+
+validation_result_10cv <- tibble(Model = character(),
+                            'Coef' = numeric(),
+                            'R-Sq' = numeric())
+
+# model 1: since Feb 2022
+obs_10cv_sincefeb2022 <- c()
+pred_10cv_sincefeb2022 <- c()
+adj_r2_sincefeb2022 <- c()
+adj_r2_test_sincefeb2022 <- c()
+rmse_sincefeb2022 <- c()
+
+sincefeb2022 <- daily_full %>% 
+  filter(day >= '2022-01-31') %>% 
+  select(all_of(predictors)) %>% 
+  filter(complete.cases(.))
+
+set.seed(random_seeds[1])
+folds <- createFolds(seq(1, nrow(sincefeb2022)), k = 10)
+  
+for (fold in seq(1, 10)) {
+  test <- sincefeb2022[folds[[fold]], ]
+  train <- anti_join(sincefeb2022, test, by = join_by(dist_dc, day))
+  
+  h2s_da_model_10cv <- gam(H2S_daily_avg~s(as.numeric(month),bs='cc') + year + weekday +
+                           wd_avg + ws_avg + daily_downwind_ref + I(1/dist_wrp^2) + I(1/dist_ref^2) +
+                           s(I(mon_utm_x/10^3), I(mon_utm_y/10^3), bs='tp', k = 10) + 
+                           te(I(mon_utm_x/10^3), I(mon_utm_y/10^3), as.numeric(day),
+                              k = c(10,10), d = c(2,1), bs = c('tp','cc')) +
+                           monthly_oil_2km + monthly_gas_2km + active_2km + inactive_2km + 
+                           daily_downwind_wrp + elevation + EVI + num_odor_complaints +
+                           closest_wrp_capacity + dist_dc + daily_temp + daily_hum + daily_precip, 
+                          data = train)
+
+  predictions <- predict(h2s_da_model_10cv, newdata = test)
+  r2_test <- R2(test$H2S_daily_avg, predictions)
+  adj_r2_test <- adj_r2(r2_test, summary(h2s_da_model_10cv)$n, summary(h2s_da_model_10cv)$np)
+  
+  obs_10cv_sincefeb2022 <- append(obs_10cv_sincefeb2022, test %>% pull(H2S_daily_avg))
+  pred_10cv_sincefeb2022 <- append(pred_10cv_sincefeb2022, predictions)
+  adj_r2_sincefeb2022 <- append(adj_r2_sincefeb2022, summary(h2s_da_model_10cv)$r.sq)
+  adj_r2_test_sincefeb2022 <- append(adj_r2_test_sincefeb2022, adj_r2_test)
+  rmse_sincefeb2022 <- append(rmse_sincefeb2022, RMSE(test %>% pull(H2S_daily_avg), predictions))
+}
+
+result_10cv <- rbind(result_10cv, tibble(Model = 'Since Feb 2022',
+                               '10CV AVG Train R-Sq' = mean(adj_r2_sincefeb2022),
+                               '10CV AVG Test R-Sq' = mean(adj_r2_test_sincefeb2022),
+                               'Test RMSE' = mean(rmse_sincefeb2022)))
+
+f2_10cv_obs_vs_pred_plot <- ggplot(tibble(obs = obs_10cv_sincefeb2022, pred = pred_10cv_sincefeb2022),
+                             aes(x = pred, y = obs)) +
+                        geom_point() +
+                        stat_poly_line() +
+                        stat_poly_eq(use_label(c("eq", "R2", "n"))) +
+                        labs(y = 'Observed', x = 'Predicted', 
+                             title = 'Observed vs Predicted for Since 2022 GAM 10CV') +
+                        theme_bw()
+
+validation_result_10cv <- rbind(validation_result_10cv, 
+                           tibble(Model = 'Since Feb 2022',
+                                  'Coef' = summary(lm(obs_10cv_sincefeb2022 ~
+                                                        pred_10cv_sincefeb2022))$coefficients[2, 1], 
+                                  'R-Sq' = summary(lm(obs_10cv_sincefeb2022 ~
+                                                        pred_10cv_sincefeb2022))$r.squared))
+
+# Model 2: Disaster (Oct-Dec 2021) only
+obs_10cv_disaster <- c()
+pred_10cv_disaster <- c()
+adj_r2_disaster <- c()
+adj_r2_test_disaster <- c()
+rmse_disaster <- c()
+
+disaster <- daily_full %>% 
+  filter(year == '2021', month %in% c('10', '11', '12')) %>% 
+  select(all_of(predictors)) %>% 
+  filter(complete.cases(.))
+
+set.seed(random_seeds[2])
+folds <- createFolds(seq(1, nrow(disaster)), k = 10)
+
+for (fold in seq(1, 10)) {
+  test <- disaster[folds[[fold]], ]
+  train <- anti_join(disaster, test, by = join_by(dist_dc, day))
+  
+  h2s_da_model_10cv <- gam(H2S_daily_avg ~ month + weekday +
+                         wd_avg + ws_avg + daily_downwind_ref + I(1/dist_wrp^2) + I(1/dist_ref^2) +
+                         s(I(mon_utm_x/10^3), I(mon_utm_y/10^3), bs='tp', k = 10) + 
+                         te(I(mon_utm_x/10^3), I(mon_utm_y/10^3), as.numeric(day),
+                            k = c(10,10), d = c(2,1), bs = c('tp','cc')) +
+                         monthly_oil_2km + monthly_gas_2km + active_2km + inactive_2km + 
+                         daily_downwind_wrp + elevation + EVI + num_odor_complaints +
+                         closest_wrp_capacity + dist_dc + daily_temp + daily_hum + daily_precip, 
+                        data = train)
+  
+  predictions <- predict(h2s_da_model_10cv, newdata = test)
+  r2_test <- R2(test$H2S_daily_avg, predictions)
+  adj_r2_test <- adj_r2(r2_test, summary(h2s_da_model_10cv)$n, summary(h2s_da_model_10cv)$np)
+  
+  obs_10cv_disaster <- append(obs_10cv_disaster, test %>% pull(H2S_daily_avg))
+  pred_10cv_disaster <- append(pred_10cv_disaster, predictions)
+  adj_r2_disaster <- append(adj_r2_disaster, summary(h2s_da_model_10cv)$r.sq)
+  adj_r2_test_disaster <- append(adj_r2_disaster, adj_r2_test)
+  rmse_disaster <- append(rmse_disaster, RMSE(test %>% pull(H2S_daily_avg), predictions))
+}
+
+result_10cv <- rbind(result_10cv, tibble(Model = 'Disaster Only',
+                               '10CV AVG Train R-Sq' = mean(adj_r2_disaster),
+                               '10CV AVG Test R-Sq' = mean(adj_r2_test_disaster),
+                               'Test RMSE' = mean(rmse_disaster)))
+
+f3_10cv_obs_vs_pred_plot <- ggplot(tibble(obs = obs_10cv_disaster, pred = pred_10cv_disaster),
+                             aes(x = pred, y = obs)) +
+                        geom_point() +
+                        stat_poly_line() +
+                        stat_poly_eq(use_label(c("eq", "R2", "n"))) +
+                        labs(y = 'Observed', x = 'Predicted', 
+                             title = 'Observed vs Predicted for Disaster Only GAM 10CV') +
+                        theme_bw()
+
+validation_result_10cv <- rbind(validation_result_10cv, 
+                           tibble(Model = 'Disaster Only',
+                                  'Coef' = summary(lm(obs_10cv_disaster ~
+                                                        pred_10cv_disaster))$coefficients[2, 1], 
+                                  'R-Sq' = summary(lm(obs_10cv_disaster ~
+                                                        pred_10cv_disaster))$r.squared))
+
+# Model 3: Excluding Disaster
+obs_10cv_excl_disaster <- c()
+pred_10cv_excl_disaster <- c()
+adj_r2_excl_disaster <- c()
+adj_r2_test_excl_disaster <- c()
+rmse_excl_disaster <- c()
+
+excl_disaster <- daily_full %>% 
+  filter(!(year == '2021' & month %in% c('10', '11', '12'))) %>% 
+  select(all_of(predictors)) %>% 
+  filter(complete.cases(.))
+
+set.seed(random_seeds[3])
+folds <- createFolds(seq(1, nrow(excl_disaster)), k = 10)
+
+for (fold in seq(1, 10)) {
+  test <- excl_disaster[folds[[fold]], ]
+  train <- anti_join(excl_disaster, test, by = join_by(dist_dc, day))
+  
+  h2s_da_model_10cv <- gam(H2S_daily_avg ~ s(as.numeric(month),bs='cc') + year + weekday +
+                         wd_avg + ws_avg + daily_downwind_ref + I(1/dist_wrp^2) + I(1/dist_ref^2) +
+                         s(I(mon_utm_x/10^3), I(mon_utm_y/10^3), bs='tp', k = 10) + 
+                         te(I(mon_utm_x/10^3), I(mon_utm_y/10^3), as.numeric(day),
+                            k = c(10,10), d = c(2,1), bs = c('tp','cc')) +
+                         monthly_oil_2km + monthly_gas_2km + active_2km + inactive_2km + 
+                         daily_downwind_wrp + elevation + EVI + num_odor_complaints +
+                         closest_wrp_capacity + dist_dc + daily_temp + daily_hum + daily_precip, 
+                        data = train)
+  
+  predictions <- predict(h2s_da_model_10cv, newdata = test)
+  r2_test <- R2(test$H2S_daily_avg, predictions)
+  adj_r2_test <- adj_r2(r2_test, summary(h2s_da_model_10cv)$n, summary(h2s_da_model_10cv)$np)
+  
+  obs_10cv_excl_disaster <- append(obs_10cv_excl_disaster, test %>% pull(H2S_daily_avg))
+  pred_10cv_excl_disaster <- append(pred_10cv_excl_disaster, predictions)
+  adj_r2_excl_disaster <- append(adj_r2_excl_disaster, summary(h2s_da_model_10cv)$r.sq)
+  adj_r2_test_excl_disaster <- append(adj_r2_test_excl_disaster, adj_r2_test)
+  rmse_excl_disaster <- append(rmse_excl_disaster, RMSE(test %>% pull(H2S_daily_avg), predictions))
+}
+
+result_10cv <- rbind(result_10cv, tibble(Model = 'Exclude Disaster',
+                               '10CV AVG Train R-Sq' = mean(adj_r2_excl_disaster),
+                               '10CV AVG Test R-Sq' = mean(adj_r2_test_excl_disaster),
+                               'Test RMSE' = mean(rmse_excl_disaster)))
+
+f4_10cv_obs_vs_pred_plot <- ggplot(tibble(obs = obs_10cv_excl_disaster, pred = pred_10cv_excl_disaster),
+                             aes(x = pred, y = obs)) +
+                        geom_point() +
+                        stat_poly_line() +
+                        stat_poly_eq(use_label(c("eq", "R2", "n"))) +
+                        labs(y = 'Observed', x = 'Predicted', 
+                             title = 'Exclude Disaster GAM CV') +
+                        theme_bw()
+
+# Model 4: Everything with Disaster Indicator
+obs_10cv_disaster_ind <- c()
+pred_10cv_disaster_ind <- c()
+adj_r2_disaster_ind <- c()
+adj_r2_test_disaster_ind <- c()
+disaster <- c()
+rmse_disaster_ind <- c()
+
+disaster_ind <- daily_full %>% 
+  select(all_of(predictors)) %>% 
+  mutate(disaster = if_else(year == '2021' & month %in% c('10', '11', '12'), 1, 0)) %>% 
+  filter(complete.cases(.)) 
+
+set.seed(random_seeds[4])
+folds_1 <- createFolds(which(disaster_ind$disaster == 1), k = 10)
+folds_0 <- createFolds(which(disaster_ind$disaster == 0), k = 10)
+
+for (fold in seq(1, 10)) {
+  test <- rbind(disaster_ind[which(disaster_ind$disaster == 1)[folds_1[[fold]]], ], 
+                disaster_ind[which(disaster_ind$disaster == 0)[folds_0[[fold]]], ])
+  
+  train <- anti_join(disaster_ind, test, by = join_by(dist_dc, day))
+  
+  h2s_da_model_10cv <- gam(H2S_daily_avg ~ s(as.numeric(month),bs='cc') + year + weekday +
+                         wd_avg + ws_avg + daily_downwind_ref + I(1/dist_wrp^2) + I(1/dist_ref^2) +
+                         s(I(mon_utm_x/10^3), I(mon_utm_y/10^3), bs='tp', k = 10) + 
+                         te(I(mon_utm_x/10^3), I(mon_utm_y/10^3), as.numeric(day),
+                            k = c(10,10), d = c(2,1), bs = c('tp','cc')) +
+                         monthly_oil_2km + monthly_gas_2km + active_2km + inactive_2km + 
+                         daily_downwind_wrp + elevation + EVI + num_odor_complaints +
+                         closest_wrp_capacity + dist_dc + daily_temp + daily_hum + daily_precip + disaster, 
+                        data = train)
+  
+  predictions <- predict(h2s_da_model_10cv, newdata = test)
+  r2_test <- R2(test$H2S_daily_avg, predictions)
+  adj_r2_test <- adj_r2(r2_test, summary(h2s_da_model_10cv)$n, summary(h2s_da_model_10cv)$np)
+  
+  obs_10cv_disaster_ind <- append(obs_10cv_disaster_ind, test %>% pull(H2S_daily_avg))
+  pred_10cv_disaster_ind <- append(pred_10cv_disaster_ind, predictions)
+  adj_r2_disaster_ind <- append(adj_r2_disaster_ind, summary(h2s_da_model_10cv)$r.sq)
+  adj_r2_test_disaster_ind <- append(adj_r2_test_disaster_ind, adj_r2_test)
+  disaster <- append(disaster, test$disaster)
+  rmse_disaster_ind <- append(rmse_disaster_ind, RMSE(test %>% pull(H2S_daily_avg), predictions))
+}
+
+result_10cv <- rbind(result_10cv, tibble(Model = 'Everything w. Disaster Indicator',
+                               '10CV AVG Train R-Sq' = mean(adj_r2_disaster_ind),
+                               '10CV AVG Test R-Sq' = mean(adj_r2_test_disaster_ind),
+                               'Test RMSE' = mean(rmse_disaster_ind)))
+
+f5_10cv_obs_vs_pred_plot <- ggplot(tibble(obs = obs_10cv_disaster_ind, 
+                                          pred = pred_10cv_disaster_ind,
+                                          disaster = disaster),
+                             aes(x = pred, y = obs)) +
+                        geom_point(aes(col = factor(disaster)), show.legend = FALSE) +
+                        stat_poly_line() +
+                        stat_poly_eq(use_label(c("eq", "R2", "n"))) +
+                        labs(y = 'Observed', x = 'Predicted', 
+                             title = 'Everything w. Disaster Indicator GAM CV') +
+                        theme_bw()
+
+f5_10cv_obs_vs_pred_plot_zoom <- ggplot(tibble(obs = obs_10cv_disaster_ind, 
+                                               pred = pred_10cv_disaster_ind,
+                                               disaster = disaster),
+                                        aes(x = pred, y = obs)) +
+                        geom_point(aes(col = factor(disaster)), show.legend = FALSE) +
+                        stat_poly_line() +
+                        stat_poly_eq(use_label(c("eq", "R2", "n"))) +
+                        labs(y = 'Observed', x = 'Predicted', 
+                             title = 'Everything w. Disaster Indicator GAM CV') +
+                        coord_cartesian(xlim = c(NA, 15), ylim = c(NA, 50)) +
+                        theme_bw()
+
+
+# Model 5: Everything
+obs_10cv_everything <- c()
+pred_10cv_everything <- c()
+adj_r2_everything <- c()
+adj_r2_test_everything <- c()
+disaster <- c()
+rmse_everything <- c()
+
+everything <- daily_full %>% 
+  select(all_of(predictors)) %>% 
+  mutate(disaster = if_else(year == '2021' & month %in% c('10', '11', '12'), 1, 0)) %>% 
+  filter(complete.cases(.))
+
+# Use same folds as before
+
+for (fold in seq(1, 10)) {
+  test <- rbind(everything[which(everything$disaster == 1)[folds_1[[fold]]], ], 
+                everything[which(everything$disaster == 0)[folds_0[[fold]]], ])
+  
+  train <- anti_join(everything, test, by = join_by(dist_dc, day))
+  
+  h2s_da_model_10cv <- gam(H2S_daily_avg ~ s(as.numeric(month),bs='cc') + year + weekday +
+                         wd_avg + ws_avg + daily_downwind_ref + I(1/dist_wrp^2) + I(1/dist_ref^2) +
+                         s(I(mon_utm_x/10^3), I(mon_utm_y/10^3), bs='tp', k = 10) + 
+                         te(I(mon_utm_x/10^3), I(mon_utm_y/10^3), as.numeric(day),
+                            k = c(10,10), d = c(2,1), bs = c('tp','cc')) +
+                         monthly_oil_2km + monthly_gas_2km + active_2km + inactive_2km + 
+                         daily_downwind_wrp + elevation + EVI + num_odor_complaints +
+                         closest_wrp_capacity + dist_dc + daily_temp + daily_hum + daily_precip, 
+                        data = train)
+  
+  predictions <- predict(h2s_da_model_10cv, newdata = test)
+  r2_test <- R2(test$H2S_daily_avg, predictions)
+  adj_r2_test <- adj_r2(r2_test, summary(h2s_da_model_10cv)$n, summary(h2s_da_model_10cv)$np)
+  
+  obs_10cv_everything <- append(obs_10cv_everything, test %>% pull(H2S_daily_avg))
+  pred_10cv_everything <- append(pred_10cv_everything, predictions)
+  adj_r2_everything <- append(adj_r2_everything, summary(h2s_da_model_10cv)$r.sq)
+  adj_r2_test_everything <- append(adj_r2_test_everything, adj_r2_test)
+  disaster <- append(disaster, test$disaster)
+  rmse_everything <- append(rmse_everything, RMSE(test %>% pull(H2S_daily_avg), predictions))
+}
+
+result_10cv <- rbind(result_10cv, tibble(Model = 'Everything w.o Disaster Indicator',
+                               '10CV AVG Train R-Sq' = mean(adj_r2_everything),
+                               '10CV AVG Test R-Sq' = mean(adj_r2_test_everything),
+                               'Test RMSE' = mean(rmse_everything)))
+
+f6_10cv_obs_vs_pred_plot <- ggplot(tibble(obs = obs_10cv_everything, 
+                                          pred = pred_10cv_everything,
+                                          disaster = disaster),
+                             aes(x = pred, y = obs)) +
+                        geom_point(aes(col = factor(disaster)), show.legend = FALSE) +
+                        stat_poly_line() +
+                        stat_poly_eq(use_label(c("eq", "R2", "n"))) +
+                        labs(y = 'Observed', x = 'Predicted', 
+                             title = 'Everything w.o Disaster Indicator GAM CV') +
+                        theme_bw()
+
+f6_10cv_obs_vs_pred_plot_zoom <- ggplot(tibble(obs = obs_10cv_everything,
+                                               pred = pred_10cv_everything,
+                                               disaster = disaster),
+                             aes(x = pred, y = obs)) +
+                        geom_point(aes(col = factor(disaster)), show.legend = FALSE) +
+                        stat_poly_line() +
+                        stat_poly_eq(use_label(c("eq", "R2", "n"))) +
+                        labs(y = 'Observed', x = 'Predicted', 
+                             title = 'Zoomed In') +
+                        coord_cartesian(xlim = c(NA, 15), ylim = c(NA, 50)) +
+                        theme_bw()
+
+validation_result_10cv <- rbind(validation_result_10cv, 
+                           tibble(Model = 'Everything',
+                                  'Coef' = summary(lm(obs_10cv_everything ~
+                                                        pred_10cv_everything))$coefficients[2, 1], 
+                                  'R-Sq' = summary(lm(obs_10cv_everything ~
+                                                        pred_10cv_everything))$r.squared))
+```
+
+## Daily Average Log
+### Since Feb 2022
+```{r}
+# Since feb 2022
+log_h2s_da_model_sincefeb2022 <- gam(log(H2S_daily_avg)~s(as.numeric(month),bs='cc') + year + weekday +
+                         wd_avg + ws_avg + daily_downwind_ref + closest_wrp_capacity +
+                          I(1/dist_wrp^2) + I(1/dist_ref^2) + 
+                         s(I(mon_utm_x/10^3), I(mon_utm_y/10^3), bs='tp', k = 10) + 
+                        te(I(mon_utm_x/10^3), I(mon_utm_y/10^3), as.numeric(day),
+                           k=c(10,10),d=c(2,1),bs=c('tp','cc')) +
+                         monthly_oil_2km + monthly_gas_2km + active_2km + inactive_2km + 
+                        daily_downwind_wrp + elevation + EVI + num_odor_complaints +
+                        I(1/dist_dc^2) + daily_temp + daily_hum + daily_precip, 
+                      data = daily_full %>% filter(day > '2022-01-31'))
+summary(log_h2s_da_model_sincefeb2022)
+plot(log_h2s_da_model_sincefeb2022)
+```
+
+### Disaster Only
+```{r}
+# Disaster only
+log_h2s_da_model_dis <- gam(log(H2S_daily_avg) ~ month + weekday +
+                         wd_avg + ws_avg + daily_downwind_ref + closest_wrp_capacity +
+                          I(1/dist_wrp^2) + I(1/dist_ref^2) + 
+                         s(I(mon_utm_x/10^3), I(mon_utm_y/10^3), bs='tp', k = 10) + 
+                        te(I(mon_utm_x/10^3), I(mon_utm_y/10^3),as.numeric(day),
+                           k=c(10,10),d=c(2,1),bs=c('tp','cc')) +
+                         monthly_oil_2km + monthly_gas_2km + active_2km + inactive_2km + 
+                        daily_downwind_wrp + elevation + EVI + num_odor_complaints +
+                        I(1/dist_dc^2) + daily_temp + daily_hum + daily_precip, 
+                      data = daily_full %>% filter(year == '2021', month %in% c('10', '11', '12')))
+summary(log_h2s_da_model_dis)
+plot(log_h2s_da_model_dis)
+```
+
+### Exclude Disaster	
+```{r}
+# Exclude disaster
+log_h2s_da_model_excl_dis <- gam(log(H2S_daily_avg) ~ s(as.numeric(month),bs='cc') + year + weekday +
+                         wd_avg + ws_avg + daily_downwind_ref + closest_wrp_capacity +
+                          I(1/dist_wrp^2) + I(1/dist_ref^2) + 
+                         s(I(mon_utm_x/10^3), I(mon_utm_y/10^3), bs='tp', k = 10) + 
+                        te(I(mon_utm_x/10^3), I(mon_utm_y/10^3),as.numeric(day),
+                           k=c(10,10),d=c(2,1),bs=c('tp','cc')) +
+                         monthly_oil_2km + monthly_gas_2km + active_2km + inactive_2km + 
+                        daily_downwind_wrp + elevation + EVI + num_odor_complaints +
+                        I(1/dist_dc^2) + daily_temp + daily_hum + daily_precip, 
+                      data = daily_full %>% filter(!(year == '2021' & month %in% c('10', '11', '12'))))
+summary(log_h2s_da_model_excl_dis)
+plot(log_h2s_da_model_excl_dis)
+```
+
+### Everything w Disaster Indicator	
+```{r}
+# Disaster indicator
+log_h2s_da_model_dis_ind <- gam(log(H2S_daily_avg)~s(as.numeric(month),bs='cc') + year + weekday +
+                         wd_avg + ws_avg + daily_downwind_ref + closest_wrp_capacity +
+                          I(1/dist_wrp^2) + I(1/dist_ref^2) + 
+                         s(I(mon_utm_x/10^3), I(mon_utm_y/10^3), bs='tp', k = 10) + 
+                        te(I(mon_utm_x/10^3), I(mon_utm_y/10^3),as.numeric(day),
+                           k=c(10,10),d=c(2,1),bs=c('tp','cc')) +
+                         monthly_oil_2km + monthly_gas_2km + active_2km + inactive_2km + 
+                        daily_downwind_wrp + elevation + EVI + num_odor_complaints +
+                        I(1/dist_dc^2) + daily_temp + daily_hum + daily_precip + disaster, 
+                      data = daily_full %>% mutate(disaster = if_else(year == '2021', 
+                                                                      month %in% c('10', '11', '12'), 1, 0)))
+summary(log_h2s_da_model_dis_ind)
+plot(log_h2s_da_model_dis_ind)
+```
+
+### Everything w.o Disaster Indicator	
+```{r}
+# Everything
+log_h2s_da_model_full <- gam(log(H2S_daily_avg)~s(as.numeric(month),bs='cc') + year + weekday +
+                         wd_avg + ws_avg + daily_downwind_ref + closest_wrp_capacity +
+                          I(1/dist_wrp^2) + I(1/dist_ref^2) + 
+                         s(I(mon_utm_x/10^3), I(mon_utm_y/10^3), bs='tp', k = 10) + 
+                        te(I(mon_utm_x/10^3), I(mon_utm_y/10^3),as.numeric(day),
+                           k=c(10,10),d=c(2,1),bs=c('tp','cc')) +
+                         monthly_oil_2km + monthly_gas_2km + active_2km + inactive_2km + 
+                        daily_downwind_wrp + elevation + EVI + num_odor_complaints +
+                        I(1/dist_dc^2) + daily_temp + daily_hum + daily_precip, 
+                      data = daily_full)
+summary(log_h2s_da_model_full)
+plot(log_h2s_da_model_full)
+```
+
+## Model Statistics
+```{r}
+knitr::kable(tibble(Model = c('Since Feb 2022',
+                              'Disaster Only',
+                              'Exclude Disaster',
+                              'Everything w Disaster Indicator',
+                              'Everything w.o Disaster Indicator'),
+                    'R-Sq' = c(round(summary(log_h2s_da_model_sincefeb2022)$r.sq, 2),
+                                    round(summary(log_h2s_da_model_dis)$r.sq, 2),
+                                    round(summary(log_h2s_da_model_excl_dis)$r.sq, 2),
+                                    round(summary(log_h2s_da_model_dis_ind)$r.sq, 2),
+                                    round(summary(log_h2s_da_model_full)$r.sq, 2))))
+```
+
+
+# GAM result
+```{r}
+knitr::kable(tibble(Model = c('Since Feb 2022',
+                              'Disaster Only',
+                              'Exclude Disaster',
+                              'Everything w. Disaster Indicator',
+                              'Everything w.o Disaster Indicator'),
+                    'Train R-sq' = c(round(summary(h2s_da_model_f)$r.sq, 2),
+                                    round(summary(h2s_da_model_g)$r.sq, 2),
+                                    round(summary(h2s_da_model_h)$r.sq, 2),
+                                    round(summary(h2s_da_model_i)$r.sq, 2),
+                                    round(summary(h2s_da_model_j)$r.sq, 2))) %>% 
+               left_join(result, join_by(Model)) %>%
+               left_join(result_cv, join_by(Model)) %>%
+               left_join(result_10cv, join_by(Model)),
+             digits = 3)
+```
+
+## Observed vs. Predicted plots
+```{r}
+ggarrange(f2_obs_vs_pred_plot, 
+          f3_obs_vs_pred_plot,
+          ggarrange(f6_obs_vs_pred_plot, f6_obs_vs_pred_plot_zoom, ncol = 2, labels = c("3", "4")), 
+          labels = c("1", "2"),
+          nrow = 3)
+```
+
+```{r}
+knitr::kable(validation_result_8020, digits = 3)
+```
+
+```{r}
+ggarrange(f2_10cv_obs_vs_pred_plot, 
+          f3_10cv_obs_vs_pred_plot,
+          ggarrange(f6_10cv_obs_vs_pred_plot, f6_10cv_obs_vs_pred_plot_zoom, ncol = 2, labels = c("3", "4")), 
+          labels = c("1", "2"),
+          nrow = 3)
+```
+
+```{r}
+knitr::kable(validation_result_10cv, digits = 3)
+```
+
+# XGBoost (Daily Average)
+
+## Since 2022 Feb
+
+### GridSearch + 10-fold CV
+```{r echo = T, results = 'hide'}
+validation_result_da <- tibble(Model = character(),
+                            'Coef' = character(),
+                            'R-Sq' = numeric(),
+                            'Disaster RMSE' = numeric(),
+                            'Normal RMSE' = numeric())
+
+xgb_result_da <- tibble(Model = character(),
+                 '10CV Train R-Sq' = numeric(),
+                 '10CV Test R-Sq' = numeric(),
+                 '10CV Test RMSE' = numeric())
+
+fit.xgb_da <- readRDS('../rfiles/xgboost_v2/fit.xgb_da.rds')
+```
+
+
+```{r}
+getTrainPerf(fit.xgb_da)
+```
+
+```{r}
+fit.xgb_da$finalModel
+```
+
+```{r}
+names <- c("Longitude" = "mon_utm_x", 
+           "Latitude" = "mon_utm_y",
+           "Distance to Refinery" = "dist_ref", 
+           "Angle to Refinery" = "angle_ref",
+           "Active Wells within 2km" = "active_2km", 
+           "Inactive Wells within 2km" = "inactive_2km",
+           "Monthly Oil Production 2km" = "monthly_oil_2km",
+           "Monthly Gas Production 2km" = "monthly_gas_2km",
+           "Distance to WRP" = "dist_wrp",
+           "WRP Capacity" = "closest_wrp_capacity",
+           "Angle to WRP" = "angle_wrp",
+           "Distance to Dominguez Channel" = "dist_dc",
+           "Average Daily Temperature" = "daily_temp",
+           "Average Daily Humidity" = "daily_hum",
+           "Daily Precipitation" = "daily_precip",
+           "Average Daily Wind Speed" = "ws_avg",
+           "Average Daily Wind Direction" = "wd_avg",
+           "Downwind Refinery" = "daily_downwind_ref",
+           "Downwind WRP" = "daily_downwind_wrp",
+           "Elevation" = "elevation",
+           "Enhanced Vegetation Index" = "EVI",
+           "Number of Daily Odor Complaints" = "num_odor_complaints",
+           "2020" = "year_2020",
+           "2021" = "year_2021",
+           "2022" = "year_2022",
+           "2023" = "year_2023",
+           "January" = "month_01",
+           "February" = "month_02",
+           "March" = "month_03",
+           "April" = "month_04",
+           "May" = "month_05",
+           "June" = "month_06", 
+           "July" = "month_07",
+           "August" = "month_08",
+           "September" = "month_09",
+           "October" = "month_10",
+           "November" = "month_11",
+           "December" = "month_12",
+           "Monday" = "weekday_Mon",
+           "Tuesday" = "weekday_Tue",
+           "Wednesday" = "weekday_Wed",
+           "Thursday" = "weekday_Thu",
+           "Friday" = "weekday_Fri",
+           "Saturday" = "weekday_Sat",
+           "Sunday" = "weekday_Sun",
+           "Disaster" = "disaster")
+
+imp<-varImp(fit.xgb_da,scale=FALSE)
+
+# rename variables
+imp <- tibble(variable = rownames(imp$importance), importance = imp$importance$Overall) %>%
+    pivot_wider(names_from = variable, 
+                values_from = importance) %>%
+    rename(any_of(names)) %>%
+    pivot_longer(cols = everything(),names_to = 'variable', values_to = 'importance')
+
+imp %>%
+  top_n(15, importance) %>%
+  ggplot(aes(x=reorder(variable, importance), y=importance)) + 
+  geom_point() +
+  geom_segment(aes(x=variable,xend=variable,y=0,yend=importance)) +
+  ylab("importance") +
+  xlab("Variable") +
+  coord_flip() +
+  theme_minimal()
+```
+
+### Fold Performance
+```{r}
+# we use savePredictions = 'final' to store the predictions on the test set at each fold
+
+# Here, we compute the R2 and RMSE for each fold and take the average
+fold_stat <- fit.xgb_da$pred %>% group_by(Resample) %>% 
+  summarise(R2 = R2(pred, obs), RMSE = RMSE(pred, obs))
+test_r2 <- mean(fold_stat$R2)
+test_rmse <- mean(fold_stat$RMSE)
+```
+
+```{r}
+xgb_sincefeb2022_obs_vs_pred_plot <- ggplot(tibble(obs = fit.xgb_da$pred$obs, pred = fit.xgb_da$pred$pred),
+                             aes(x = pred, y = obs)) +
+                        geom_point() +
+                        labs(y = 'Observed', x = 'Predicted', 
+                             title = 'Observed vs Predicted for Since 2022 XGBoost') +
+                        stat_poly_line() +
+                        stat_poly_eq(use_label(c("eq", "R2", "n"))) +
+                        theme_bw()
+```
+
+```{r}
+validation_result_da <- rbind(validation_result_da, 
+                           tibble(Model = 'Since Feb 2022',
+                                  'Coef' = summary(lm(fit.xgb_da$pred$obs ~
+                                                        fit.xgb_da$pred$pred))$coefficients[2, 1], 
+                                  'R-Sq' = summary(lm(fit.xgb_da$pred$obs ~
+                                                        fit.xgb_da$pred$pred))$r.squared,
+                                  'Disaster RMSE' = NA,
+                                  'Normal RMSE' = NA))
+```
+
+```{r}
+train_adj_r2 <- adj_r2(getTrainPerf(fit.xgb_da)$TrainRsquared,
+                       nrow(fit.xgb_da$trainingData),
+                       fit.xgb_da$finalModel$nfeatures)
+test_adj_r2 <- adj_r2(test_r2,
+                       nrow(fit.xgb_da$trainingData),
+                       fit.xgb_da$finalModel$nfeatures)
+
+xgb_result_da <- rbind(xgb_result_da,
+                    tibble(Model = 'Since Feb 2022',
+                           '10CV Train R-Sq' = train_adj_r2,
+                           '10CV Test R-Sq' = test_adj_r2,
+                           '10CV Test RMSE' = test_rmse))
+```
+
+## Disaster 
+
+### GridSearch + 10-fold CV
+```{r echo = T, results = 'hide'}
+fit.xgb_da_dis <- readRDS('../rfiles/xgboost_v2/fit.xgb_da_dis.rds')
+```
+
+```{r}
+getTrainPerf(fit.xgb_da_dis)
+```
+
+```{r}
+fit.xgb_da_dis$finalModel
+```
+
+
+```{r}
+imp<-varImp(fit.xgb_da_dis,scale=FALSE)
+# rename variables
+imp <- tibble(variable = rownames(imp$importance), importance = imp$importance$Overall) %>%
+    pivot_wider(names_from = variable, 
+                values_from = importance) %>%
+    rename(any_of(names)) %>%
+    pivot_longer(cols = everything(),names_to = 'variable', values_to = 'importance')
+
+imp %>%
+  top_n(15, importance) %>%
+  ggplot(aes(x=reorder(variable, importance), y=importance)) + 
+  geom_point() +
+  geom_segment(aes(x=variable,xend=variable,y=0,yend=importance)) +
+  ylab("importance") +
+  xlab("Variable") +
+  coord_flip() +
+  theme_minimal()
+```
+
+### Fold Performance
+```{r}
+test_r2 <- fold_stat <- fit.xgb_da_dis$pred %>% group_by(Resample) %>% 
+  summarise(R2 = R2(pred, obs), RMSE = RMSE(pred, obs))
+test_r2 <- mean(fold_stat$R2)
+test_rmse <- mean(fold_stat$RMSE)
+```
+
+```{r}
+xgb_disaster_obs_vs_pred_plot <- ggplot(tibble(obs = fit.xgb_da_dis$pred$obs, pred = fit.xgb_da_dis$pred$pred),
+                             aes(x = pred, y = obs)) +
+                        geom_point() +
+                        # geom_abline(intercept = 0, slope = 1, color = 'red') +
+                        # geom_smooth(method = 'lm', formula = y ~ x, geom = 'smooth') +
+                        labs(y = 'Observed', x = 'Predicted', 
+                             title = 'Observed vs Predicted for Disaster Only XGBoost') +
+                        stat_poly_line() +
+                        stat_poly_eq(use_label(c("eq", "R2", "n"))) +
+                        theme_bw()
+
+xgb_disaster_obs_vs_pred_plot_zoom <- ggplot(tibble(obs = fit.xgb_da_dis$pred$obs, pred = fit.xgb_da_dis$pred$pred),
+                             aes(x = pred, y = obs)) +
+                        geom_point() +
+                        geom_abline(intercept = 0, slope = 1, color = 'red') +
+                        geom_smooth(method = 'lm', formula = y ~ x, geom = 'smooth') +
+                        labs(y = 'Observed', x = 'Predicted', 
+                             title = 'Zoomed In') +
+                        coord_cartesian(xlim = c(0, 50), ylim = c(0, 50)) +
+                        theme_bw()
+```
+
+```{r}
+validation_result_da <- rbind(validation_result_da, 
+                           tibble(Model = 'Disaster Only',
+                                  'Coef' = summary(lm(fit.xgb_da_dis$pred$obs ~
+                                                        fit.xgb_da_dis$pred$pred))$coefficients[2, 1], 
+                                  'R-Sq' = summary(lm(fit.xgb_da_dis$pred$obs ~
+                                                        fit.xgb_da_dis$pred$pred))$r.squared,
+                                  'Disaster RMSE' = NA,
+                                  'Normal RMSE' = NA))
+```
+
+```{r}
+train_adj_r2 <- adj_r2(getTrainPerf(fit.xgb_da_dis)$TrainRsquared,
+                       nrow(fit.xgb_da_dis$trainingData),
+                       fit.xgb_da_dis$finalModel$nfeatures)
+test_adj_r2 <- adj_r2(test_r2,
+                       nrow(fit.xgb_da_dis$trainingData),
+                       fit.xgb_da_dis$finalModel$nfeatures)
+
+xgb_result_da <- rbind(xgb_result_da,
+                    tibble(Model = 'Disaster Only',
+                           '10CV Train R-Sq' = train_adj_r2,
+                           '10CV Test R-Sq' = test_adj_r2,
+                           '10CV Test RMSE' = test_rmse))
+```
+## Exclude Disaster
+
+### GridSearch + 10-fold CV
+```{r echo = T, results = 'hide'}
+fit.xgb_da_excl_dis<- readRDS('../rfiles/xgboost_v2/fit.xgb_da_excl_dis.rds')
+```
+
+```{r}
+getTrainPerf(fit.xgb_da_excl_dis)
+```
+
+```{r}
+fit.xgb_da_excl_dis$finalModel
+```
+
+
+```{r}
+imp<-varImp(fit.xgb_da_excl_dis,scale=FALSE)
+# rename variables
+imp <- tibble(variable = rownames(imp$importance), importance = imp$importance$Overall) %>%
+    pivot_wider(names_from = variable, 
+                values_from = importance) %>%
+    rename(any_of(names)) %>%
+    pivot_longer(cols = everything(),names_to = 'variable', values_to = 'importance')
+
+imp %>%
+  top_n(15, importance) %>%
+  ggplot(aes(x=reorder(variable, importance), y=importance)) + 
+  geom_point() +
+  geom_segment(aes(x=variable,xend=variable,y=0,yend=importance)) +
+  ylab("importance") +
+  xlab("Variable") +
+  coord_flip() +
+  theme_minimal()
+```
+
+### Fold Performance
+```{r}
+fold_stat <- fit.xgb_da_excl_dis$pred %>% group_by(Resample) %>% 
+  summarise(R2 = R2(pred, obs), RMSE = RMSE(pred, obs))
+test_r2 <- mean(fold_stat$R2)
+test_rmse <- mean(fold_stat$RMSE)
+```
+
+```{r}
+xgb_excl_dis_obs_vs_pred_plot <- ggplot(tibble(obs = fit.xgb_da_excl_dis$pred$obs, 
+                                               pred = fit.xgb_da_excl_dis$pred$pred),
+                             aes(x = pred, y = obs)) +
+                        geom_point() +
+                        labs(y = 'Observed', x = 'Predicted', 
+                             title = 'Observed vs Predicted for exclude disaster XGBoost') +
+                        stat_poly_line() +
+                        stat_poly_eq(use_label(c("eq", "R2", "n"))) +
+                        theme_bw()
+
+xgb_excl_dis_obs_vs_pred_plot
+```
+
+```{r}
+validation_result_da <- rbind(validation_result_da,  
+                           tibble(Model = 'Exclude Disaster',
+                                  'Coef' = summary(lm(fit.xgb_da_excl_dis$pred$obs ~
+                                                        fit.xgb_da_excl_dis$pred$pred))$coefficients[2, 1], 
+                                  'R-Sq' = summary(lm(fit.xgb_da_excl_dis$pred$obs ~
+                                                        fit.xgb_da_excl_dis$pred$pred))$r.squared,
+                                  'Disaster RMSE' = NA,
+                                  'Normal RMSE' = NA))
+```
+
+```{r}
+train_adj_r2 <- adj_r2(getTrainPerf(fit.xgb_da_excl_dis)$TrainRsquared, 
+                       nrow(fit.xgb_da_excl_dis$trainingData), 
+                       fit.xgb_da_excl_dis$finalModel$nfeatures)
+test_adj_r2 <- adj_r2(test_r2, 
+                       nrow(fit.xgb_da_excl_dis$trainingData), 
+                       fit.xgb_da_excl_dis$finalModel$nfeatures)
+
+xgb_result_da <- rbind(xgb_result_da, 
+                    tibble(Model = 'Exclude Disaster',
+                           '10CV Train R-Sq' = train_adj_r2,
+                           '10CV Test R-Sq' = test_adj_r2,
+                           '10CV Test RMSE' = test_rmse))
+```
+
+## Everything w Disaster Indicator	
+
+### GridSearch + 10-fold CV
+```{r echo = T, results = 'hide'}
+fit.xgb_da_full_dis_ind <- readRDS('../rfiles/xgboost_v2/fit.xgb_da_full_dis_ind.rds')
+```
+
+```{r}
+getTrainPerf(fit.xgb_da_full_dis_ind)
+```
+
+```{r}
+fit.xgb_da_full_dis_ind$finalModel
+```
+
+
+```{r}
+imp<-varImp(fit.xgb_da_full_dis_ind,scale=FALSE)
+# rename variables
+imp <- tibble(variable = rownames(imp$importance), importance = imp$importance$Overall) %>%
+    pivot_wider(names_from = variable, 
+                values_from = importance) %>%
+    rename(any_of(names)) %>%
+    pivot_longer(cols = everything(),names_to = 'variable', values_to = 'importance')
+
+imp %>%
+  top_n(15, importance) %>%
+  ggplot(aes(x=reorder(variable, importance), y=importance)) + 
+  geom_point() +
+  geom_segment(aes(x=variable,xend=variable,y=0,yend=importance)) +
+  ylab("importance") +
+  xlab("Variable") +
+  coord_flip() +
+  theme_minimal()
+```
+
+### Fold Performance
+```{r}
+test_result_data <- tibble(obs = fit.xgb_da_full_dis_ind$pred$obs, 
+                           pred = fit.xgb_da_full_dis_ind$pred$pred,
+                           disaster = fit.xgb_da_full_dis_ind$trainingData$disaster[fit.xgb_da_full_dis_ind$pred$rowIndex])
+
+fold_stat <- fit.xgb_da_full_dis_ind$pred %>% group_by(Resample) %>% 
+  summarise(R2 = R2(pred, obs), RMSE = RMSE(pred, obs))
+test_r2 <- mean(fold_stat$R2)
+test_rmse <- mean(fold_stat$RMSE)
+```
+
+```{r}
+xgb_full_dis_ind_obs_vs_pred_plot <- ggplot(tibble(obs = test_result_data$obs, 
+                                                   pred = test_result_data$pred,
+                                            disaster = test_result_data$disaster),
+                             aes(x = pred, y = obs)) +
+                        geom_point(aes(col = factor(disaster)), show.legend = FALSE) +
+                        labs(y = 'Observed', x = 'Predicted', 
+                             title = 'Observed vs Predicted for everything with disaster indicator XGBoost') +
+                        stat_poly_line() +
+                        stat_poly_eq(use_label(c("eq", "R2", "n"))) +
+                        theme_bw()
+
+xgb_full_dis_ind_obs_vs_pred_plot_zoom <- ggplot(tibble(obs = test_result_data$obs, 
+                                                   pred = test_result_data$pred,
+                                            disaster = test_result_data$disaster),
+                             aes(x = pred, y = obs)) +
+                        geom_point(aes(col = factor(disaster)), show.legend = FALSE) +
+                        stat_poly_line() +
+                        stat_poly_eq(use_label(c("eq", "R2", "n"))) +
+                        labs(y = 'Observed', x = 'Predicted', 
+                             title = 'Zoomed In') +
+                        coord_cartesian(xlim = c(0, 30), ylim = c(0, 30)) +
+                        theme_bw()
+```
+
+```{r}
+validation_result_da <- rbind(validation_result_da,  
+                           tibble(Model = 'Everything w. Disaster Indicator',
+                                  'Coef' = summary(lm(fit.xgb_da_full_dis_ind$pred$obs ~
+                                                        fit.xgb_da_full_dis_ind$pred$pred))$coefficients[2, 1], 
+                                  'R-Sq' = summary(lm(fit.xgb_da_full_dis_ind$pred$obs ~
+                                                        fit.xgb_da_full_dis_ind$pred$pred))$r.squared,
+                                  'Disaster RMSE' = RMSE(test_result_data$pred[which(test_result_data$disaster == 1)],
+                                                         test_result_data$obs[which(test_result_data$disaster == 1)]),
+                                  'Normal RMSE' = RMSE(test_result_data$pred[which(test_result_data$disaster == 0)],
+                                                         test_result_data$obs[which(test_result_data$disaster == 0)])))
+```
+
+```{r}
+train_adj_r2 <- adj_r2(getTrainPerf(fit.xgb_da_full_dis_ind)$TrainRsquared, 
+                       nrow(fit.xgb_da_full_dis_ind$trainingData), 
+                       fit.xgb_da_full_dis_ind$finalModel$nfeatures)
+test_adj_r2 <- adj_r2(test_r2, 
+                       nrow(fit.xgb_da_full_dis_ind$trainingData), 
+                       fit.xgb_da_full_dis_ind$finalModel$nfeatures)
+
+xgb_result_da <- rbind(xgb_result_da, 
+                    tibble(Model = 'Everything w. Disaster Indicator',
+                           '10CV Train R-Sq' = train_adj_r2,
+                           '10CV Test R-Sq' = test_adj_r2,
+                           '10CV Test RMSE' = test_rmse))
+```
+## Everything w.o Disaster Indicator	
+
+### GridSearch + 10-fold CV
+```{r echo = T, results = 'hide'}
+fit.xgb_da_full <- readRDS('../rfiles/xgboost_v2/fit.xgb_da_full.rds')
+```
+
+```{r}
+getTrainPerf(fit.xgb_da_full)
+```
+
+```{r}
+fit.xgb_da_full$finalModel
+```
+
+
+```{r}
+imp<-varImp(fit.xgb_da_full,scale=FALSE)
+# rename variables
+imp <- tibble(variable = rownames(imp$importance), importance = imp$importance$Overall) %>%
+    pivot_wider(names_from = variable, 
+                values_from = importance) %>%
+    rename(any_of(names)) %>%
+    pivot_longer(cols = everything(),names_to = 'variable', values_to = 'importance')
+
+imp %>%
+  top_n(15, importance) %>%
+  ggplot(aes(x=reorder(variable, importance), y=importance)) + 
+  geom_point() +
+  geom_segment(aes(x=variable,xend=variable,y=0,yend=importance)) +
+  ylab("importance") +
+  xlab("Variable") +
+  coord_flip() +
+  theme_minimal()
+```
+
+### Fold Performance
+```{r}
+test_result_data <- tibble(obs = fit.xgb_da_full$pred$obs, 
+                           pred = fit.xgb_da_full$pred$pred,
+                           disaster = if_else(fit.xgb_da_full$trainingData[fit.xgb_da_full$pred$rowIndex, ]$year_2021 == 1 &
+                                                (fit.xgb_da_full$trainingData[fit.xgb_da_full$pred$rowIndex, ]$month_10 == 1 |
+                                                 fit.xgb_da_full$trainingData[fit.xgb_da_full$pred$rowIndex, ]$month_11 == 1 |
+                                                 fit.xgb_da_full$trainingData[fit.xgb_da_full$pred$rowIndex, ]$month_12 == 1), 1, 0))
+
+fold_stat <- fit.xgb_da_full$pred %>% group_by(Resample) %>% 
+  summarise(R2 = R2(pred, obs), RMSE = RMSE(pred, obs))
+test_r2 <- mean(fold_stat$R2)
+test_rmse <- mean(fold_stat$RMSE)
+```
+
+```{r}
+xgb_everything_obs_vs_pred_plot <- ggplot(test_result_data,
+                             aes(x = pred, y = obs)) +
+                        geom_point(aes(col = factor(disaster)), show.legend = FALSE) +
+                        stat_poly_line() +
+                        stat_poly_eq(use_label(c("eq", "R2", "n"))) +
+                        labs(y = 'Observed', x = 'Predicted', 
+                             title = 'Observed vs Predicted for everything XGBoost') +
+                        theme_bw()
+
+xgb_everything_obs_vs_pred_plot_zoom <- ggplot(test_result_data,
+                             aes(x = pred, y = obs)) +
+                        geom_point(aes(col = factor(disaster)), show.legend = FALSE) +
+                        stat_poly_line() +
+                        stat_poly_eq(use_label(c("eq", "R2", "n"))) +
+                        labs(y = 'Observed', x = 'Predicted', 
+                             title = 'Zoomed In') +
+                        coord_cartesian(xlim = c(0, 30), ylim = c(0, 30)) +
+                        theme_bw()
+```
+
+```{r}
+validation_result_da <- rbind(validation_result_da,  
+                           tibble(Model = 'Everything w.o Disaster Indicator',
+                                  'Coef' = summary(lm(test_result_data$obs ~
+                                                        test_result_data$pred))$coefficients[2, 1], 
+                                  'R-Sq' = summary(lm(test_result_data$obs ~
+                                                        test_result_data$pred))$r.squared,
+                                  'Disaster RMSE' = RMSE(test_result_data$pred[which(test_result_data$disaster == 1)],
+                                                         test_result_data$obs[which(test_result_data$disaster == 1)]),
+                                  'Normal RMSE' = RMSE(test_result_data$pred[which(test_result_data$disaster == 0)],
+                                                         test_result_data$obs[which(test_result_data$disaster == 0)])))
+```
+
+
+```{r}
+train_adj_r2 <- adj_r2(getTrainPerf(fit.xgb_da_full)$TrainRsquared,
+                       nrow(fit.xgb_da_full$trainingData),
+                       fit.xgb_da_full$finalModel$nfeatures)
+test_adj_r2 <- adj_r2(test_r2,
+                       nrow(fit.xgb_da_full$trainingData),
+                       fit.xgb_da_full$finalModel$nfeatures)
+xgb_result_da <- rbind(xgb_result_da,
+                    tibble(Model = 'Everything w.o Disaster Indicator',
+                           '10CV Train R-Sq' = train_adj_r2,
+                           '10CV Test R-Sq' = test_adj_r2,
+                           '10CV Test RMSE' = test_rmse))
+```
+
+
+## Observed Vs. Predicted Plots 10-fold CV
+```{r}
+ggarrange(xgb_sincefeb2022_obs_vs_pred_plot, 
+          ggarrange(xgb_disaster_obs_vs_pred_plot, xgb_disaster_obs_vs_pred_plot_zoom,  
+                    ncol = 2, labels = c("2", "3")),
+          ggarrange(xgb_everything_obs_vs_pred_plot, xgb_everything_obs_vs_pred_plot_zoom, 
+                    ncol = 2, labels = c("4", "5")), 
+                    labels = c("1"),
+                    nrow = 3)
+ggarrange(xgb_excl_dis_obs_vs_pred_plot,
+          ggarrange(xgb_full_dis_ind_obs_vs_pred_plot, xgb_full_dis_ind_obs_vs_pred_plot_zoom,  
+                    ncol = 2, labels = c("3", "4")), 
+                    labels = c("1"),
+                    nrow = 2)
+```
+
+```{r}
+knitr::kable(validation_result_da, digits = 3)
+```
+
+## Model Perf Table
+```{r}
+model_perf_table <- tibble(Model = c('Since Feb 2022',
+                              'Disaster Only',
+                              'Exclude Disaster',
+                              'Everything w. Disaster Indicator',
+                              'Everything w.o Disaster Indicator'),
+                              n = c(nrow(fit.xgb_da$trainingData),
+                                    nrow(fit.xgb_da_dis$trainingData),
+                                    nrow(fit.xgb_da_excl_dis$trainingData),
+                                    nrow(fit.xgb_da_full_dis_ind$trainingData),
+                                    nrow(fit.xgb_da_full$trainingData))) %>%
+               left_join(result_10cv, join_by(Model)) %>%
+               left_join(xgb_result_da, join_by(Model)) %>%
+               select(-c('10CV Train R-Sq'))
+
+model_perf_latex <- knitr::kable(model_perf_table, digits = 3, format = 'latex')
+writeLines(model_perf_latex, '../figures/model_perf.tex')
+
+knitr::kable(model_perf_table, digits = 3, format = 'html')
+```
+
+# XGBoost: log(H2S)
+## Since Feb 2022
+```{r}
+fit.xgb_da_log_h2s_sincefeb2022 <- readRDS('../rfiles/xgboost_v2/fit.xgb_da_log_h2s_sincefeb2022.rds')
+```
+
+```{r}
+getTrainPerf(fit.xgb_da_log_h2s_sincefeb2022)
+```
+
+```{r}
+fit.xgb_da_log_h2s_sincefeb2022$finalModel
+```
+
+```{r}
+imp<-varImp(fit.xgb_da_log_h2s_sincefeb2022,scale=FALSE)
+
+# rename variables
+imp <- tibble(variable = rownames(imp$importance), importance = imp$importance$Overall) %>%
+    pivot_wider(names_from = variable, 
+                values_from = importance) %>%
+    rename(any_of(names)) %>%
+    pivot_longer(cols = everything(),names_to = 'variable', values_to = 'importance')
+
+imp %>%
+  top_n(15, importance) %>%
+  ggplot(aes(x=reorder(variable, importance), y=importance)) + 
+  geom_point() +
+  geom_segment(aes(x=variable,xend=variable,y=0,yend=importance)) +
+  ylab("importance") +
+  xlab("Variable") +
+  coord_flip() +
+  theme_minimal()
+```
+
+### Fold Performance
+```{r}
+# Here, we compute the R2 and RMSE for each fold and take the average
+fold_stat <- fit.xgb_da_log_h2s_sincefeb2022$pred %>% group_by(Resample) %>% 
+  summarise(R2 = R2(pred, obs), RMSE = RMSE(pred, obs),
+            R2_BT = R2(exp(pred), exp(obs)), RMSE_BT = RMSE(exp(pred), exp(obs)))
+test_r2 <- mean(fold_stat$R2)
+test_r2_bt <- mean(fold_stat$R2_BT)
+test_rmse <- mean(fold_stat$RMSE)
+test_rmse_bt <- mean(fold_stat$RMSE_BT)
+```
+
+```{r}
+log_h2s_xgb_sincefeb2022_obs_vs_pred_plot <- ggplot(tibble(obs = exp(fit.xgb_da_log_h2s_sincefeb2022$pred$obs), 
+                                                              pred = exp(fit.xgb_da_log_h2s_sincefeb2022$pred$pred)),
+                             aes(x = pred, y = obs)) +
+                        geom_abline(slope = 1, intercept = 0, linetype = 'dashed') +                                                         geom_point() +
+                        labs(y = 'Observed', x = 'Predicted', 
+                             title = 'Since Februrary 2022') +
+                        stat_poly_line() +
+                        stat_poly_eq(use_label(c("eq")), label.x = "right", label.y = 0.05) +                                                stat_poly_eq(use_label(c("R2")), label.x = "right", label.y = 0.1) +                                                 stat_poly_eq(use_label(c("n")), label.x = "right", label.y = 0.15) +
+                        theme_bw()
+```
+
+```{r}
+validation_result_da <- rbind(validation_result_da, 
+                           tibble(Model = 'Since Feb 2022 Log Transform',
+                                  'Coef' = summary(lm(fit.xgb_da_log_h2s_sincefeb2022$pred$obs ~
+                                                        fit.xgb_da_log_h2s_sincefeb2022$pred$pred))$coefficients[2, 1], 
+                                  'R-Sq' = summary(lm(fit.xgb_da_log_h2s_sincefeb2022$pred$obs ~
+                                                        fit.xgb_da_log_h2s_sincefeb2022$pred$pred))$r.squared))
+```
+
+```{r}
+train_adj_r2 <- adj_r2(getTrainPerf(fit.xgb_da_log_h2s_sincefeb2022)$TrainRsquared, 
+                       nrow(fit.xgb_da_log_h2s_sincefeb2022$trainingData), 
+                       fit.xgb_da_log_h2s_sincefeb2022$finalModel$nfeatures)
+BT_adj_r2 <- adj_r2(test_r2_bt,
+                       nrow(fit.xgb_da_log_h2s_sincefeb2022$trainingData), 
+                       fit.xgb_da_log_h2s_sincefeb2022$finalModel$nfeatures)
+
+xgb_result_da <- rbind(xgb_result_da, 
+                    tibble(Model = 'Since Feb 2022 Log Transform',
+                           'XGB R-Sq' = train_adj_r2,
+                           'XGB BT R-Sq' = BT_adj_r2,
+                           'XGB RMSE' = test_rmse,
+                           'XGB BT RMSE' = test_rmse_bt))
+```
+
+## Disaster Only
+```{r}
+fit.xgb_da_log_h2s_dis <- readRDS('../rfiles/xgboost_v2/fit.xgb_da_log_h2s_dis.rds')
+```
+
+```{r}
+getTrainPerf(fit.xgb_da_log_h2s_dis)
+```
+
+```{r}
+fit.xgb_da_log_h2s_dis$finalModel
+```
+
+```{r}
+imp<-varImp(fit.xgb_da_log_h2s_dis,scale=FALSE)
+
+# rename variables
+imp <- tibble(variable = rownames(imp$importance), importance = imp$importance$Overall) %>%
+    pivot_wider(names_from = variable, 
+                values_from = importance) %>%
+    rename(any_of(names)) %>%
+    pivot_longer(cols = everything(),names_to = 'variable', values_to = 'importance')
+
+imp %>%
+  top_n(15, importance) %>%
+  ggplot(aes(x=reorder(variable, importance), y=importance)) + 
+  geom_point() +
+  geom_segment(aes(x=variable,xend=variable,y=0,yend=importance)) +
+  ylab("importance") +
+  xlab("Variable") +
+  coord_flip() +
+  theme_minimal()
+```
+
+### Fold Performance
+```{r}
+# Here, we compute the R2 and RMSE for each fold and take the average
+fold_stat <- fit.xgb_da_log_h2s_dis$pred %>% group_by(Resample) %>% 
+  summarise(R2 = R2(pred, obs), RMSE = RMSE(pred, obs),
+            R2_BT = R2(exp(pred), exp(obs)), RMSE_BT = RMSE(exp(pred), exp(obs)))
+test_r2 <- mean(fold_stat$R2)
+test_r2_bt <- mean(fold_stat$R2_BT)
+test_rmse <- mean(fold_stat$RMSE)
+test_rmse_bt <- mean(fold_stat$RMSE_BT)
+```
+
+```{r}
+log_h2s_xgb_dis_obs_vs_pred_plot <- ggplot(tibble(obs = exp(fit.xgb_da_log_h2s_dis$pred$obs), 
+                                                              pred = exp(fit.xgb_da_log_h2s_dis$pred$pred)),
+                             aes(x = pred, y = obs)) +
+                        geom_abline(slope = 1, intercept = 0, linetype = 'dashed') +                                                         geom_point() +
+                        labs(y = 'Observed', x = 'Predicted', 
+                             title = 'Disaster Only') +
+                        stat_poly_line() +
+                        stat_poly_eq(use_label(c("eq")), label.x = "right", label.y = 0.03) +                                                stat_poly_eq(use_label(c("R2")), label.x = "right", label.y = 0.1) +                                                 stat_poly_eq(use_label(c("n")), label.x = "right", label.y = 0.18) +
+                        theme_bw()
+```
+
+```{r}
+validation_result_da <- rbind(validation_result_da, 
+                           tibble(Model = 'Disaster Only Log Transform',
+                                  'Coef' = summary(lm(fit.xgb_da_log_h2s_dis$pred$obs ~
+                                                        fit.xgb_da_log_h2s_dis$pred$pred))$coefficients[2, 1], 
+                                  'R-Sq' = summary(lm(fit.xgb_da_log_h2s_dis$pred$obs ~
+                                                        fit.xgb_da_log_h2s_dis$pred$pred))$r.squared))
+```
+
+```{r}
+train_adj_r2 <- adj_r2(getTrainPerf(fit.xgb_da_log_h2s_dis)$TrainRsquared, 
+                       nrow(fit.xgb_da_log_h2s_dis$trainingData), 
+                       fit.xgb_da_log_h2s_dis$finalModel$nfeatures)
+BT_adj_r2 <- adj_r2(test_r2_bt,
+                       nrow(fit.xgb_da_log_h2s_dis$trainingData), 
+                       fit.xgb_da_log_h2s_dis$finalModel$nfeatures)
+
+xgb_result_da <- rbind(xgb_result_da, 
+                    tibble(Model = 'Disaster Only Log Transform',
+                           'XGB R-Sq' = train_adj_r2,
+                           'XGB BT R-Sq' = BT_adj_r2,
+                           'XGB RMSE' = test_rmse,
+                           'XGB BT RMSE' = test_rmse_bt))
+```
+
+
+## Exclude Disaster
+```{r}
+fit.xgb_da_log_h2s_excl_dis <- readRDS('../rfiles/xgboost_v2/fit.xgb_da_log_h2s_excl_dis.rds')
+```
+
+```{r}
+getTrainPerf(fit.xgb_da_log_h2s_excl_dis)
+```
+
+```{r}
+fit.xgb_da_log_h2s_excl_dis$finalModel
+```
+
+```{r}
+imp<-varImp(fit.xgb_da_log_h2s_excl_dis,scale=FALSE)
+
+# rename variables
+imp <- tibble(variable = rownames(imp$importance), importance = imp$importance$Overall) %>%
+    pivot_wider(names_from = variable, 
+                values_from = importance) %>%
+    rename(any_of(names)) %>%
+    pivot_longer(cols = everything(),names_to = 'variable', values_to = 'importance')
+
+imp %>%
+  top_n(15, importance) %>%
+  ggplot(aes(x=reorder(variable, importance), y=importance)) + 
+  geom_point() +
+  geom_segment(aes(x=variable,xend=variable,y=0,yend=importance)) +
+  ylab("importance") +
+  xlab("Variable") +
+  coord_flip() +
+  theme_minimal()
+```
+
+### Fold Performance
+```{r}
+# Here, we compute the R2 and RMSE for each fold and take the average
+fold_stat <- fit.xgb_da_log_h2s_excl_dis$pred %>% group_by(Resample) %>% 
+  summarise(R2 = R2(pred, obs), RMSE = RMSE(pred, obs),
+            R2_BT = R2(exp(pred), exp(obs)), RMSE_BT = RMSE(exp(pred), exp(obs)))
+test_r2 <- mean(fold_stat$R2)
+test_r2_bt <- mean(fold_stat$R2_BT)
+test_rmse <- mean(fold_stat$RMSE)
+test_rmse_bt <- mean(fold_stat$RMSE_BT)
+```
+
+```{r}
+log_h2s_xgb_excl_dis_obs_vs_pred_plot <- ggplot(tibble(obs = exp(fit.xgb_da_log_h2s_excl_dis$pred$obs), 
+                                                              pred = exp(fit.xgb_da_log_h2s_excl_dis$pred$pred)),
+                             aes(x = pred, y = obs)) +
+                        geom_abline(slope = 1, intercept = 0, linetype = 'dashed') +                                                         geom_point() +
+                        labs(y = 'Observed', x = 'Predicted', 
+                             title = 'Exclude Disaster') +
+                        stat_poly_line() +
+                        stat_poly_eq(use_label(c("eq")), label.x = "right", label.y = 0.15) +                                                stat_poly_eq(use_label(c("R2")), label.x = "right", label.y = 0.1) +                                                 stat_poly_eq(use_label(c("n")), label.x = "right", label.y = 0.05) +
+                        theme_bw()
+```
+
+```{r}
+validation_result_da <- rbind(validation_result_da, 
+                           tibble(Model = 'Exclude Disaster Log Transform',
+                                  'Coef' = summary(lm(fit.xgb_da_log_h2s_excl_dis$pred$obs ~
+                                                        fit.xgb_da_log_h2s_excl_dis$pred$pred))$coefficients[2, 1], 
+                                  'R-Sq' = summary(lm(fit.xgb_da_log_h2s_excl_dis$pred$obs ~
+                                                        fit.xgb_da_log_h2s_excl_dis$pred$pred))$r.squared))
+```
+
+
+```{r}
+train_adj_r2 <- adj_r2(getTrainPerf(fit.xgb_da_log_h2s_excl_dis)$TrainRsquared, 
+                       nrow(fit.xgb_da_log_h2s_excl_dis$trainingData), 
+                       fit.xgb_da_log_h2s_excl_dis$finalModel$nfeatures)
+BT_adj_r2 <- adj_r2(test_r2_bt,
+                       nrow(fit.xgb_da_log_h2s_excl_dis$trainingData), 
+                       fit.xgb_da_log_h2s_excl_dis$finalModel$nfeatures)
+
+xgb_result_da <- rbind(xgb_result_da, 
+                    tibble(Model = 'Exclude Disaster Log Transform',
+                           'XGB R-Sq' = train_adj_r2,
+                           'XGB BT R-Sq' = BT_adj_r2,
+                           'XGB RMSE' = test_rmse,
+                           'XGB BT RMSE' = test_rmse_bt))
+```
+
+## Everything w. Disaster Indicator
+```{r}
+fit.xgb_da_log_h2s_dis_ind <- readRDS('../rfiles/xgboost_v2/fit.xgb_da_log_h2s_dis_ind.rds')
+```
+
+```{r}
+getTrainPerf(fit.xgb_da_log_h2s_dis_ind)
+```
+
+```{r}
+fit.xgb_da_log_h2s_dis_ind$finalModel
+```
+
+```{r}
+imp<-varImp(fit.xgb_da_log_h2s_dis_ind,scale=FALSE)
+
+# rename variables
+imp <- tibble(variable = rownames(imp$importance), importance = imp$importance$Overall) %>%
+    pivot_wider(names_from = variable, 
+                values_from = importance) %>%
+    rename(any_of(names)) %>%
+    pivot_longer(cols = everything(),names_to = 'variable', values_to = 'importance')
+
+imp %>%
+  top_n(15, importance) %>%
+  ggplot(aes(x=reorder(variable, importance), y=importance)) + 
+  geom_point() +
+  geom_segment(aes(x=variable,xend=variable,y=0,yend=importance)) +
+  ylab("importance") +
+  xlab("Variable") +
+  coord_flip() +
+  theme_minimal()
+```
+
+### Fold Performance
+```{r}
+# Here, we compute the R2 and RMSE for each fold and take the average
+fold_stat <- fit.xgb_da_log_h2s_dis_ind$pred %>% group_by(Resample) %>% 
+  summarise(R2 = R2(pred, obs), RMSE = RMSE(pred, obs),
+            R2_BT = R2(exp(pred), exp(obs)), RMSE_BT = RMSE(exp(pred), exp(obs)))
+test_r2 <- mean(fold_stat$R2)
+test_r2_bt <- mean(fold_stat$R2_BT)
+test_rmse <- mean(fold_stat$RMSE)
+test_rmse_bt <- mean(fold_stat$RMSE_BT)
+```
+
+```{r}
+log_h2s_xgb_dis_ind_obs_vs_pred_plot <- ggplot(tibble(obs = exp(fit.xgb_da_log_h2s_dis_ind$pred$obs), 
+                                                              pred = exp(fit.xgb_da_log_h2s_dis_ind$pred$pred)),
+                             aes(x = pred, y = obs)) +
+                        geom_abline(slope = 1, intercept = 0, linetype = 'dashed') +
+                        geom_point() +
+                        labs(y = 'Observed', x = 'Predicted', 
+                             title = 'Everything w. Disaster Indicator') +
+                        stat_poly_line() +
+                        stat_poly_eq(use_label(c("eq")), label.x = "right", label.y = 0.03) + 
+                        stat_poly_eq(use_label(c("R2")), label.x = "right", label.y = 0.08) + 
+                        stat_poly_eq(use_label(c("n")), label.x = "right", label.y = 0.17) +
+                        theme_bw()
+```
+
+```{r}
+validation_result_da <- rbind(validation_result_da, 
+                           tibble(Model = 'Everything w. Disaster Indicator Log Transform',
+                                  'Coef' = summary(lm(fit.xgb_da_log_h2s_dis_ind$pred$obs ~
+                                                        fit.xgb_da_log_h2s_dis_ind$pred$pred))$coefficients[2, 1], 
+                                  'R-Sq' = summary(lm(fit.xgb_da_log_h2s_dis_ind$pred$obs ~
+                                                        fit.xgb_da_log_h2s_dis_ind$pred$pred))$r.squared))
+```
+
+```{r}
+train_adj_r2 <- adj_r2(getTrainPerf(fit.xgb_da_log_h2s_dis_ind)$TrainRsquared, 
+                       nrow(fit.xgb_da_log_h2s_dis_ind$trainingData), 
+                       fit.xgb_da_log_h2s_dis_ind$finalModel$nfeatures)
+BT_adj_r2 <- adj_r2(test_r2_bt,
+                       nrow(fit.xgb_da_log_h2s_dis_ind$trainingData), 
+                       fit.xgb_da_log_h2s_dis_ind$finalModel$nfeatures)
+
+xgb_result_da <- rbind(xgb_result_da, 
+                    tibble(Model = 'Everything w. Disaster Indicator Log Transform',
+                           'XGB R-Sq' = train_adj_r2,
+                           'XGB BT R-Sq' = BT_adj_r2,
+                           'XGB RMSE' = test_rmse,
+                           'XGB BT RMSE' = test_rmse_bt))
+```
+
+## Everything w.o Disaster Indicator
+```{r}
+fit.xgb_da_log_h2s_full <- readRDS('../rfiles/xgboost_v2/fit.xgb_da_log_h2s_full.rds')
+```
+
+```{r}
+getTrainPerf(fit.xgb_da_log_h2s_full)
+```
+
+```{r}
+fit.xgb_da_log_h2s_full$finalModel
+```
+
+```{r}
+imp<-varImp(fit.xgb_da_log_h2s_full,scale=FALSE)
+
+# rename variables
+imp <- tibble(variable = rownames(imp$importance), importance = imp$importance$Overall) %>%
+    pivot_wider(names_from = variable, 
+                values_from = importance) %>%
+    rename(any_of(names)) %>%
+    pivot_longer(cols = everything(),names_to = 'variable', values_to = 'importance')
+
+imp %>%
+  top_n(15, importance) %>%
+  ggplot(aes(x=reorder(variable, importance), y=importance)) + 
+  geom_point() +
+  geom_segment(aes(x=variable,xend=variable,y=0,yend=importance)) +
+  ylab("importance") +
+  xlab("Variable") +
+  coord_flip() +
+  theme_minimal()
+```
+
+### Fold Performance
+```{r}
+# Here, we compute the R2 and RMSE for each fold and take the average
+fold_stat <- fit.xgb_da_log_h2s_full$pred %>% group_by(Resample) %>% 
+  summarise(R2 = R2(pred, obs), RMSE = RMSE(pred, obs),
+            R2_BT = R2(exp(pred), exp(obs)), RMSE_BT = RMSE(exp(pred), exp(obs)))
+test_r2 <- mean(fold_stat$R2)
+test_r2_bt <- mean(fold_stat$R2_BT)
+test_rmse <- mean(fold_stat$RMSE)
+test_rmse_bt <- mean(fold_stat$RMSE_BT)
+```
+
+```{r}
+log_h2s_xgb_full_obs_vs_pred_plot <- ggplot(tibble(obs = exp(fit.xgb_da_log_h2s_full$pred$obs), 
+                                                              pred = exp(fit.xgb_da_log_h2s_full$pred$pred)),
+                             aes(x = pred, y = obs)) +
+                        geom_abline(slope = 1, intercept = 0, linetype = 'dashed') +                                                         
+                        geom_point() +
+                        labs(y = 'Observed', x = 'Predicted', 
+                             title = 'Everything w.o Disaster Indicator') +
+                        stat_poly_line() +
+                        stat_poly_eq(use_label(c("eq")), label.x = "right", label.y = 0.15) + 
+                        stat_poly_eq(use_label(c("R2")), label.x = "right", label.y = 0.1) +                                                 
+                        stat_poly_eq(use_label(c("n")), label.x = "right", label.y = 0.05) +
+                        theme_bw()
+```
+
+```{r}
+validation_result_da <- rbind(validation_result_da, 
+                           tibble(Model = 'Everything w.o Disaster Indicator Log Transform',
+                                  'Coef' = summary(lm(fit.xgb_da_log_h2s_full$pred$obs ~
+                                                        fit.xgb_da_log_h2s_full$pred$pred))$coefficients[2, 1], 
+                                  'R-Sq' = summary(lm(fit.xgb_da_log_h2s_full$pred$obs ~
+                                                        fit.xgb_da_log_h2s_full$pred$pred))$r.squared))
+```
+
+```{r}
+train_adj_r2 <- adj_r2(getTrainPerf(fit.xgb_da_log_h2s_full)$TrainRsquared, 
+                       nrow(fit.xgb_da_log_h2s_full$trainingData), 
+                       fit.xgb_da_log_h2s_full$finalModel$nfeatures)
+BT_adj_r2 <- adj_r2(test_r2_bt, 
+                       nrow(fit.xgb_da_log_h2s_full$trainingData), 
+                       fit.xgb_da_log_h2s_full$finalModel$nfeatures)
+
+xgb_result_da <- rbind(xgb_result_da, 
+                    tibble(Model = 'Everything w.o Disaster Indicator Log Transform',
+                           'XGB R-Sq' = train_adj_r2,
+                           'XGB BT R-Sq' = BT_adj_r2,
+                           'XGB RMSE' = test_rmse,
+                           'XGB BT RMSE' = test_rmse_bt))
+```
+
+# Result Comparison
+# Comparison
+```{r}
+log_model_perf_table <- tibble(Model = c('Since Feb 2022 Log Transform',
+                              'Disaster Only Log Transform',
+                              'Exclude Disaster Log Transform',
+                              'Everything w. Disaster Indicator Log Transform',
+                              'Everything w.o Disaster Indicator Log Transform'),
+                    n = c(nrow(fit.xgb_da_log_h2s_sincefeb2022$trainingData),
+                          nrow(fit.xgb_da_log_h2s_dis$trainingData),
+                          nrow(fit.xgb_da_log_h2s_excl_dis$trainingData),
+                          nrow(fit.xgb_da_log_h2s_dis_ind$trainingData),
+                          nrow(fit.xgb_da_log_h2s_full$trainingData))) %>% 
+               left_join(rbind(result_10cv)) %>%
+               left_join(rbind(xgb_result_da))
+
+log_model_perf_latex <- knitr::kable(log_model_perf_table, digits = 3, format = 'latex')
+writeLines(log_model_perf_latex, 'figures/log_model_perf.tex')
+
+knitr::kable(log_model_perf_table, digits = 3, format = 'html')
+```
+
+```{r}
+# Gam Models
+ggarrange(logh2s_10cv_ovp_plot_sincefeb2022, 
+          logh2s_10cv_ovp_plot_dis_only,
+          logh2s_10cv_ovp_plot_excl_dis,
+          labels = c("1", "2", "3"),
+          nrow = 3)
+
+ggarrange(logh2s_10cv_ovp_plot_dis_ind,
+          logh2s_10cv_ovp_plot_full,
+          labels = c("4", "5"),
+          nrow = 2)
+```
+
+```{r}
+ggarrange(log_h2s_xgb_sincefeb2022_obs_vs_pred_plot, 
+          log_h2s_xgb_dis_obs_vs_pred_plot,
+          log_h2s_xgb_excl_dis_obs_vs_pred_plot, 
+          labels = c("1", "2", "3"),
+          nrow = 3)
+ggarrange(log_h2s_xgb_dis_ind_obs_vs_pred_plot, 
+          log_h2s_xgb_full_obs_vs_pred_plot,
+          labels = c("4", "5"),
+          nrow = 2)
+```
+
+# For Figures
+```{r}
+ggarrange(logh2s_10cv_ovp_plot_sincefeb2022 + labs(title = 'GAM'),
+          log_h2s_xgb_sincefeb2022_obs_vs_pred_plot + labs(title = 'XGBoost'),
+          nrow = 1)
+```
+
+```{r}
+ggarrange(log_h2s_xgb_dis_obs_vs_pred_plot + labs(title = ''),
+          log_h2s_xgb_dis_obs_vs_pred_plot + 
+            labs(title = '') + 
+            coord_cartesian(xlim = c(0, 15), ylim = c(0, 15)),
+          nrow = 1)
+```
+
+```{r}
+ggarrange(log_h2s_xgb_dis_ind_obs_vs_pred_plot + labs(title = ''),
+          log_h2s_xgb_dis_ind_obs_vs_pred_plot + 
+            labs(title = '') + 
+            coord_cartesian(xlim = c(0, 15), ylim = c(0, 15)),
+          nrow = 1)
+```
+
+# XGBoost (Daily Max)
+
+## Since 2022 Feb
+
+### GridSearch + 10-fold CV
+```{r echo = T, results = 'hide'}
+validation_result_dm <- tibble(Model = character(),
+                            'Coef' = character(),
+                            'R-Sq' = numeric(),
+                            'Disaster RMSE' = numeric(),
+                            'Normal RMSE' = numeric())
+
+xgb_result_dm <- tibble(Model = character(),
+                 '10CV Train R-Sq' = numeric(),
+                 '10CV Test R-Sq' = numeric(),
+                 '10CV Test RMSE' = numeric())
+
+
+fit.xgb_dm <- readRDS('../rfiles/xgboost_v2/fit.xgb_dm.rds')
+```
+
+```{r}
+getTrainPerf(fit.xgb_dm)
+```
+
+```{r}
+fit.xgb_dm$finalModel
+```
+
+```{r}
+names <- c("Longitude" = "mon_utm_x", 
+           "Latitude" = "mon_utm_y",
+           "Distance to Refinery" = "dist_ref", 
+           "Angle to Refinery" = "angle_ref",
+           "Active Wells within 2km" = "active_2km", 
+           "Inactive Wells within 2km" = "inactive_2km",
+           "Monthly Oil Production 2km" = "monthly_oil_2km",
+           "Monthly Gas Production 2km" = "monthly_gas_2km",
+           "Distance to WRP" = "dist_wrp",
+           "WRP Capacity" = "closest_wrp_capacity",
+           "Angle to WRP" = "angle_wrp",
+           "Distance to Dominguez Channel" = "dist_dc",
+           "Average Daily Temperature" = "daily_temp",
+           "Average Daily Humidity" = "daily_hum",
+           "Daily Precipitation" = "daily_precip",
+           "Average Daily Wind Speed" = "ws_avg",
+           "Average Daily Wind Direction" = "wd_avg",
+           "Downwind Refinery" = "daily_downwind_ref",
+           "Downwind WRP" = "daily_downwind_wrp",
+           "Elevation" = "elevation",
+           "Enhanced Vegetation Index" = "EVI",
+           "Number of Daily Odor Complaints" = "num_odor_complaints",
+           "2020" = "year_2020",
+           "2021" = "year_2021",
+           "2022" = "year_2022",
+           "2023" = "year_2023",
+           "January" = "month_01",
+           "February" = "month_02",
+           "March" = "month_03",
+           "April" = "month_04",
+           "May" = "month_05",
+           "June" = "month_06", 
+           "July" = "month_07",
+           "August" = "month_08",
+           "September" = "month_09",
+           "October" = "month_10",
+           "November" = "month_11",
+           "December" = "month_12",
+           "Monday" = "weekday_Mon",
+           "Tuesday" = "weekday_Tue",
+           "Wednesday" = "weekday_Wed",
+           "Thursday" = "weekday_Thu",
+           "Friday" = "weekday_Fri",
+           "Saturday" = "weekday_Sat",
+           "Sunday" = "weekday_Sun",
+           "Disaster" = "disaster")
+
+imp<-varImp(fit.xgb_dm,scale=FALSE)
+
+# rename variables
+imp <- tibble(variable = rownames(imp$importance), importance = imp$importance$Overall) %>%
+    pivot_wider(names_from = variable, 
+                values_from = importance) %>%
+    rename(any_of(names)) %>%
+    pivot_longer(cols = everything(),names_to = 'variable', values_to = 'importance')
+
+imp %>%
+  top_n(15, importance) %>%
+  ggplot(aes(x=reorder(variable, importance), y=importance)) + 
+  geom_point() +
+  geom_segment(aes(x=variable,xend=variable,y=0,yend=importance)) +
+  ylab("importance") +
+  xlab("Variable") +
+  coord_flip() +
+  theme_minimal()
+```
+
+### Fold Performance
+```{r}
+# we use savePredictions = 'final' to store the predictions on the test set at each fold
+
+# Here, we compute the R2 and RMSE for each fold and take the average
+fold_stat <- fit.xgb_dm$pred %>% group_by(Resample) %>% 
+  summarise(R2 = R2(pred, obs), RMSE = RMSE(pred, obs))
+test_r2 <- mean(fold_stat$R2)
+test_rmse <- mean(fold_stat$RMSE)
+```
+
+```{r}
+xgb_sincefeb2022_obs_vs_pred_plot <- ggplot(tibble(obs = fit.xgb_dm$pred$obs, pred = fit.xgb_dm$pred$pred),
+                             aes(x = pred, y = obs)) +
+                        geom_point() +
+                        labs(y = 'Observed', x = 'Predicted', 
+                             title = 'Observed vs Predicted for Since 2022 XGBoost') +
+                        stat_poly_line() +
+                        stat_poly_eq(use_label(c("eq", "R2", "n"))) +
+                        theme_bw()
+```
+
+```{r}
+validation_result_dm <- rbind(validation_result_dm, 
+                           tibble(Model = 'Since Feb 2022',
+                                  'Coef' = summary(lm(fit.xgb_dm$pred$obs ~
+                                                        fit.xgb_dm$pred$pred))$coefficients[2, 1], 
+                                  'R-Sq' = summary(lm(fit.xgb_dm$pred$obs ~
+                                                        fit.xgb_dm$pred$pred))$r.squared,
+                                  'Disaster RMSE' = NA,
+                                  'Normal RMSE' = NA))
+```
+
+```{r}
+train_adj_r2 <- adj_r2(getTrainPerf(fit.xgb_dm)$TrainRsquared,
+                       nrow(fit.xgb_dm$trainingData),
+                       fit.xgb_dm$finalModel$nfeatures)
+test_adj_r2 <- adj_r2(test_r2,
+                       nrow(fit.xgb_dm$trainingData),
+                       fit.xgb_dm$finalModel$nfeatures)
+
+xgb_result_dm <- rbind(xgb_result_dm,
+                    tibble(Model = 'Since Feb 2022',
+                           '10CV Train R-Sq' = train_adj_r2,
+                           '10CV Test R-Sq' = test_adj_r2,
+                           '10CV Test RMSE' = test_rmse))
+```
+
+## Disaster 
+
+### GridSearch + 10-fold CV
+```{r echo = T, results = 'hide'}
+fit.xgb_dm_dis <- readRDS('../rfiles/xgboost_v2/fit.xgb_dm_dis.rds')
+```
+
+```{r}
+getTrainPerf(fit.xgb_dm_dis)
+```
+
+```{r}
+fit.xgb_dm_dis$finalModel
+```
+
+
+```{r}
+imp<-varImp(fit.xgb_dm_dis,scale=FALSE)
+# rename variables
+imp <- tibble(variable = rownames(imp$importance), importance = imp$importance$Overall) %>%
+    pivot_wider(names_from = variable, 
+                values_from = importance) %>%
+    rename(any_of(names)) %>%
+    pivot_longer(cols = everything(),names_to = 'variable', values_to = 'importance')
+
+imp %>%
+  top_n(15, importance) %>%
+  ggplot(aes(x=reorder(variable, importance), y=importance)) + 
+  geom_point() +
+  geom_segment(aes(x=variable,xend=variable,y=0,yend=importance)) +
+  ylab("importance") +
+  xlab("Variable") +
+  coord_flip() +
+  theme_minimal()
+```
+
+### Fold Performance
+```{r}
+test_r2 <- fold_stat <- fit.xgb_dm_dis$pred %>% group_by(Resample) %>% 
+  summarise(R2 = R2(pred, obs), RMSE = RMSE(pred, obs))
+test_r2 <- mean(fold_stat$R2)
+test_rmse <- mean(fold_stat$RMSE)
+```
+
+```{r}
+xgb_disaster_obs_vs_pred_plot <- ggplot(tibble(obs = fit.xgb_dm_dis$pred$obs, pred = fit.xgb_dm_dis$pred$pred),
+                             aes(x = pred, y = obs)) +
+                        geom_point() +
+                        # geom_abline(intercept = 0, slope = 1, color = 'red') +
+                        # geom_smooth(method = 'lm', formula = y ~ x, geom = 'smooth') +
+                        labs(y = 'Observed', x = 'Predicted', 
+                             title = 'Observed vs Predicted for Disaster Only XGBoost') +
+                        stat_poly_line() +
+                        stat_poly_eq(use_label(c("eq", "R2", "n"))) +
+                        theme_bw()
+
+xgb_disaster_obs_vs_pred_plot_zoom <- ggplot(tibble(obs = fit.xgb_dm_dis$pred$obs, pred = fit.xgb_dm_dis$pred$pred),
+                             aes(x = pred, y = obs)) +
+                        geom_point() +
+                        geom_abline(intercept = 0, slope = 1, color = 'red') +
+                        geom_smooth(method = 'lm', formula = y ~ x, geom = 'smooth') +
+                        labs(y = 'Observed', x = 'Predicted', 
+                             title = 'Zoomed In') +
+                        coord_cartesian(xlim = c(0, 50), ylim = c(0, 50)) +
+                        theme_bw()
+```
+
+```{r}
+validation_result_dm <- rbind(validation_result_dm, 
+                           tibble(Model = 'Disaster Only',
+                                  'Coef' = summary(lm(fit.xgb_dm_dis$pred$obs ~
+                                                        fit.xgb_dm_dis$pred$pred))$coefficients[2, 1], 
+                                  'R-Sq' = summary(lm(fit.xgb_dm_dis$pred$obs ~
+                                                        fit.xgb_dm_dis$pred$pred))$r.squared,
+                                  'Disaster RMSE' = NA,
+                                  'Normal RMSE' = NA))
+```
+
+```{r}
+train_adj_r2 <- adj_r2(getTrainPerf(fit.xgb_dm_dis)$TrainRsquared,
+                       nrow(fit.xgb_dm_dis$trainingData),
+                       fit.xgb_dm_dis$finalModel$nfeatures)
+test_adj_r2 <- adj_r2(test_r2,
+                       nrow(fit.xgb_dm_dis$trainingData),
+                       fit.xgb_dm_dis$finalModel$nfeatures)
+
+xgb_result_dm <- rbind(xgb_result_dm,
+                    tibble(Model = 'Disaster Only',
+                           '10CV Train R-Sq' = train_adj_r2,
+                           '10CV Test R-Sq' = test_adj_r2,
+                           '10CV Test RMSE' = test_rmse))
+```
+## Exclude Disaster
+
+### GridSearch + 10-fold CV
+```{r echo = T, results = 'hide'}
+fit.xgb_dm_excl_dis<- readRDS('../rfiles/xgboost_v2/fit.xgb_dm_excl_dis.rds')
+```
+
+```{r}
+getTrainPerf(fit.xgb_dm_excl_dis)
+```
+
+```{r}
+fit.xgb_dm_excl_dis$finalModel
+```
+
+
+```{r}
+imp<-varImp(fit.xgb_dm_excl_dis,scale=FALSE)
+# rename variables
+imp <- tibble(variable = rownames(imp$importance), importance = imp$importance$Overall) %>%
+    pivot_wider(names_from = variable, 
+                values_from = importance) %>%
+    rename(any_of(names)) %>%
+    pivot_longer(cols = everything(),names_to = 'variable', values_to = 'importance')
+
+imp %>%
+  top_n(15, importance) %>%
+  ggplot(aes(x=reorder(variable, importance), y=importance)) + 
+  geom_point() +
+  geom_segment(aes(x=variable,xend=variable,y=0,yend=importance)) +
+  ylab("importance") +
+  xlab("Variable") +
+  coord_flip() +
+  theme_minimal()
+```
+
+### Fold Performance
+```{r}
+fold_stat <- fit.xgb_dm_excl_dis$pred %>% group_by(Resample) %>% 
+  summarise(R2 = R2(pred, obs), RMSE = RMSE(pred, obs))
+test_r2 <- mean(fold_stat$R2)
+test_rmse <- mean(fold_stat$RMSE)
+```
+
+```{r}
+xgb_excl_dis_obs_vs_pred_plot <- ggplot(tibble(obs = fit.xgb_dm_excl_dis$pred$obs, 
+                                               pred = fit.xgb_dm_excl_dis$pred$pred),
+                             aes(x = pred, y = obs)) +
+                        geom_point() +
+                        labs(y = 'Observed', x = 'Predicted', 
+                             title = 'Observed vs Predicted for exclude disaster XGBoost') +
+                        stat_poly_line() +
+                        stat_poly_eq(use_label(c("eq", "R2", "n"))) +
+                        theme_bw()
+
+xgb_excl_dis_obs_vs_pred_plot
+```
+
+```{r}
+validation_result_dm <- rbind(validation_result_dm,  
+                           tibble(Model = 'Exclude Disaster',
+                                  'Coef' = summary(lm(fit.xgb_dm_excl_dis$pred$obs ~
+                                                        fit.xgb_dm_excl_dis$pred$pred))$coefficients[2, 1], 
+                                  'R-Sq' = summary(lm(fit.xgb_dm_excl_dis$pred$obs ~
+                                                        fit.xgb_dm_excl_dis$pred$pred))$r.squared,
+                                  'Disaster RMSE' = NA,
+                                  'Normal RMSE' = NA))
+```
+
+```{r}
+train_adj_r2 <- adj_r2(getTrainPerf(fit.xgb_dm_excl_dis)$TrainRsquared, 
+                       nrow(fit.xgb_dm_excl_dis$trainingData), 
+                       fit.xgb_dm_excl_dis$finalModel$nfeatures)
+test_adj_r2 <- adj_r2(test_r2, 
+                       nrow(fit.xgb_dm_excl_dis$trainingData), 
+                       fit.xgb_dm_excl_dis$finalModel$nfeatures)
+
+xgb_result_dm <- rbind(xgb_result_dm, 
+                    tibble(Model = 'Exclude Disaster',
+                           '10CV Train R-Sq' = train_adj_r2,
+                           '10CV Test R-Sq' = test_adj_r2,
+                           '10CV Test RMSE' = test_rmse))
+```
+
+## Everything w Disaster Indicator	
+
+### GridSearch + 10-fold CV
+```{r echo = T, results = 'hide'}
+fit.xgb_dm_full_dis_ind <- readRDS('../rfiles/xgboost_v2/fit.xgb_dm_full_dis_ind.rds')
+```
+
+```{r}
+getTrainPerf(fit.xgb_dm_full_dis_ind)
+```
+
+```{r}
+fit.xgb_dm_full_dis_ind$finalModel
+```
+
+
+```{r}
+imp<-varImp(fit.xgb_dm_full_dis_ind,scale=FALSE)
+# rename variables
+imp <- tibble(variable = rownames(imp$importance), importance = imp$importance$Overall) %>%
+    pivot_wider(names_from = variable, 
+                values_from = importance) %>%
+    rename(any_of(names)) %>%
+    pivot_longer(cols = everything(),names_to = 'variable', values_to = 'importance')
+
+imp %>%
+  top_n(15, importance) %>%
+  ggplot(aes(x=reorder(variable, importance), y=importance)) + 
+  geom_point() +
+  geom_segment(aes(x=variable,xend=variable,y=0,yend=importance)) +
+  ylab("importance") +
+  xlab("Variable") +
+  coord_flip() +
+  theme_minimal()
+```
+
+### Fold Performance
+```{r}
+test_result_data <- tibble(obs = fit.xgb_dm_full_dis_ind$pred$obs, 
+                           pred = fit.xgb_dm_full_dis_ind$pred$pred,
+                           disaster = fit.xgb_dm_full_dis_ind$trainingData$disaster[fit.xgb_dm_full_dis_ind$pred$rowIndex])
+
+fold_stat <- fit.xgb_dm_full_dis_ind$pred %>% group_by(Resample) %>% 
+  summarise(R2 = R2(pred, obs), RMSE = RMSE(pred, obs))
+test_r2 <- mean(fold_stat$R2)
+test_rmse <- mean(fold_stat$RMSE)
+```
+
+```{r}
+xgb_full_dis_ind_obs_vs_pred_plot <- ggplot(tibble(obs = test_result_data$obs, 
+                                                   pred = test_result_data$pred,
+                                            disaster = test_result_data$disaster),
+                             aes(x = pred, y = obs)) +
+                        geom_point(aes(col = factor(disaster)), show.legend = FALSE) +
+                        labs(y = 'Observed', x = 'Predicted', 
+                             title = 'Observed vs Predicted for everything with disaster indicator XGBoost') +
+                        stat_poly_line() +
+                        stat_poly_eq(use_label(c("eq", "R2", "n"))) +
+                        theme_bw()
+
+xgb_full_dis_ind_obs_vs_pred_plot_zoom <- ggplot(tibble(obs = test_result_data$obs, 
+                                                   pred = test_result_data$pred,
+                                            disaster = test_result_data$disaster),
+                             aes(x = pred, y = obs)) +
+                        geom_point(aes(col = factor(disaster)), show.legend = FALSE) +
+                        stat_poly_line() +
+                        stat_poly_eq(use_label(c("eq", "R2", "n"))) +
+                        labs(y = 'Observed', x = 'Predicted', 
+                             title = 'Zoomed In') +
+                        coord_cartesian(xlim = c(0, 30), ylim = c(0, 30)) +
+                        theme_bw()
+```
+
+```{r}
+validation_result_dm <- rbind(validation_result,  
+                           tibble(Model = 'Everything w. Disaster Indicator',
+                                  'Coef' = summary(lm(fit.xgb_dm_full_dis_ind$pred$obs ~
+                                                        fit.xgb_dm_full_dis_ind$pred$pred))$coefficients[2, 1], 
+                                  'R-Sq' = summary(lm(fit.xgb_dm_full_dis_ind$pred$obs ~
+                                                        fit.xgb_dm_full_dis_ind$pred$pred))$r.squared,
+                                  'Disaster RMSE' = RMSE(test_result_data$pred[which(test_result_data$disaster == 1)],
+                                                         test_result_data$obs[which(test_result_data$disaster == 1)]),
+                                  'Normal RMSE' = RMSE(test_result_data$pred[which(test_result_data$disaster == 0)],
+                                                         test_result_data$obs[which(test_result_data$disaster == 0)])))
+```
+
+```{r}
+train_adj_r2 <- adj_r2(getTrainPerf(fit.xgb_dm_full_dis_ind)$TrainRsquared, 
+                       nrow(fit.xgb_dm_full_dis_ind$trainingData), 
+                       fit.xgb_dm_full_dis_ind$finalModel$nfeatures)
+test_adj_r2 <- adj_r2(test_r2, 
+                       nrow(fit.xgb_dm_full_dis_ind$trainingData), 
+                       fit.xgb_dm_full_dis_ind$finalModel$nfeatures)
+
+xgb_result_dm <- rbind(xgb_result_dm, 
+                    tibble(Model = 'Everything w. Disaster Indicator',
+                           '10CV Train R-Sq' = train_adj_r2,
+                           '10CV Test R-Sq' = test_adj_r2,
+                           '10CV Test RMSE' = test_rmse))
+```
+## Everything w.o Disaster Indicator	
+
+### GridSearch + 10-fold CV
+```{r echo = T, results = 'hide'}
+fit.xgb_dm_full <- readRDS('../rfiles/xgboost_v2/fit.xgb_dm_full.rds')
+```
+
+```{r}
+getTrainPerf(fit.xgb_dm_full)
+```
+
+```{r}
+fit.xgb_dm_full$finalModel
+```
+
+
+```{r}
+imp<-varImp(fit.xgb_dm_full,scale=FALSE)
+# rename variables
+imp <- tibble(variable = rownames(imp$importance), importance = imp$importance$Overall) %>%
+    pivot_wider(names_from = variable, 
+                values_from = importance) %>%
+    rename(any_of(names)) %>%
+    pivot_longer(cols = everything(),names_to = 'variable', values_to = 'importance')
+
+imp %>%
+  top_n(15, importance) %>%
+  ggplot(aes(x=reorder(variable, importance), y=importance)) + 
+  geom_point() +
+  geom_segment(aes(x=variable,xend=variable,y=0,yend=importance)) +
+  ylab("importance") +
+  xlab("Variable") +
+  coord_flip() +
+  theme_minimal()
+```
+
+### Fold Performance
+```{r}
+test_result_data <- tibble(obs = fit.xgb_dm_full$pred$obs, 
+                           pred = fit.xgb_dm_full$pred$pred,
+                           disaster = if_else(fit.xgb_dm_full$trainingData[fit.xgb_dm_full$pred$rowIndex, ]$year_2021 == 1 &
+                                                (fit.xgb_dm_full$trainingData[fit.xgb_dm_full$pred$rowIndex, ]$month_10 == 1 |
+                                                 fit.xgb_dm_full$trainingData[fit.xgb_dm_full$pred$rowIndex, ]$month_11 == 1 |
+                                                 fit.xgb_dm_full$trainingData[fit.xgb_dm_full$pred$rowIndex, ]$month_12 == 1), 1, 0))
+
+fold_stat <- fit.xgb_dm_full$pred %>% group_by(Resample) %>% 
+  summarise(R2 = R2(pred, obs), RMSE = RMSE(pred, obs))
+test_r2 <- mean(fold_stat$R2)
+test_rmse <- mean(fold_stat$RMSE)
+```
+
+```{r}
+xgb_everything_obs_vs_pred_plot <- ggplot(test_result_data,
+                             aes(x = pred, y = obs)) +
+                        geom_point(aes(col = factor(disaster)), show.legend = FALSE) +
+                        stat_poly_line() +
+                        stat_poly_eq(use_label(c("eq", "R2", "n"))) +
+                        labs(y = 'Observed', x = 'Predicted', 
+                             title = 'Observed vs Predicted for everything XGBoost') +
+                        theme_bw()
+
+xgb_everything_obs_vs_pred_plot_zoom <- ggplot(test_result_data,
+                             aes(x = pred, y = obs)) +
+                        geom_point(aes(col = factor(disaster)), show.legend = FALSE) +
+                        stat_poly_line() +
+                        stat_poly_eq(use_label(c("eq", "R2", "n"))) +
+                        labs(y = 'Observed', x = 'Predicted', 
+                             title = 'Zoomed In') +
+                        coord_cartesian(xlim = c(0, 30), ylim = c(0, 30)) +
+                        theme_bw()
+```
+
+```{r}
+validation_result <- rbind(validation_result,  
+                           tibble(Model = 'Everything w.o Disaster Indicator',
+                                  'Coef' = summary(lm(test_result_data$obs ~
+                                                        test_result_data$pred))$coefficients[2, 1], 
+                                  'R-Sq' = summary(lm(test_result_data$obs ~
+                                                        test_result_data$pred))$r.squared,
+                                  'Disaster RMSE' = RMSE(test_result_data$pred[which(test_result_data$disaster == 1)],
+                                                         test_result_data$obs[which(test_result_data$disaster == 1)]),
+                                  'Normal RMSE' = RMSE(test_result_data$pred[which(test_result_data$disaster == 0)],
+                                                         test_result_data$obs[which(test_result_data$disaster == 0)])))
+```
+
+
+```{r}
+train_adj_r2 <- adj_r2(getTrainPerf(fit.xgb_dm_full)$TrainRsquared,
+                       nrow(fit.xgb_dm_full$trainingData),
+                       fit.xgb_dm_full$finalModel$nfeatures)
+test_adj_r2 <- adj_r2(test_r2,
+                       nrow(fit.xgb_dm_full$trainingData),
+                       fit.xgb_dm_full$finalModel$nfeatures)
+xgb_result_dm <- rbind(xgb_result_dm,
+                    tibble(Model = 'Everything w.o Disaster Indicator',
+                           '10CV Train R-Sq' = train_adj_r2,
+                           '10CV Test R-Sq' = test_adj_r2,
+                           '10CV Test RMSE' = test_rmse))
+```
+
+
+## Observed Vs. Predicted Plots 10-fold CV
+```{r}
+ggarrange(xgb_sincefeb2022_obs_vs_pred_plot, 
+          ggarrange(xgb_disaster_obs_vs_pred_plot, xgb_disaster_obs_vs_pred_plot_zoom,  
+                    ncol = 2, labels = c("2", "3")),
+          ggarrange(xgb_everything_obs_vs_pred_plot, xgb_everything_obs_vs_pred_plot_zoom, 
+                    ncol = 2, labels = c("4", "5")), 
+                    labels = c("1"),
+                    nrow = 3)
+ggarrange(xgb_excl_dis_obs_vs_pred_plot,
+          ggarrange(xgb_full_dis_ind_obs_vs_pred_plot, xgb_full_dis_ind_obs_vs_pred_plot_zoom,  
+                    ncol = 2, labels = c("3", "4")), 
+                    labels = c("1"),
+                    nrow = 2)
+```
+
+```{r}
+knitr::kable(validation_result, digits = 3)
+```
+
+## Model Perf Table
+```{r}
+model_perf_table <- tibble(Model = c('Since Feb 2022',
+                              'Disaster Only',
+                              'Exclude Disaster',
+                              'Everything w. Disaster Indicator',
+                              'Everything w.o Disaster Indicator'),
+                              n = c(nrow(fit.xgb_dm$trainingData),
+                                    nrow(fit.xgb_dm_dis$trainingData),
+                                    nrow(fit.xgb_dm_excl_dis$trainingData),
+                                    nrow(fit.xgb_dm_full_dis_ind$trainingData),
+                                    nrow(fit.xgb_dm_full$trainingData))) %>%
+               left_join(result_10cv, join_by(Model)) %>%
+               left_join(xgb_result_dm, join_by(Model)) %>%
+               select(-c('10CV Train R-Sq'))
+
+model_perf_latex <- knitr::kable(model_perf_table, digits = 3, format = 'latex')
+writeLines(model_perf_latex, '../figures/model_perf.tex')
+
+knitr::kable(model_perf_table, digits = 3, format = 'html')
+```
+
+# XGBoost: log(H2S)
+## Since Feb 2022
+```{r}
+fit.xgb_dm_log_h2s_sincefeb2022 <- readRDS('../rfiles/xgboost_v2/fit.xgb_dm_log_h2s_sincefeb2022.rds')
+```
+
+```{r}
+getTrainPerf(fit.xgb_dm_log_h2s_sincefeb2022)
+```
+
+```{r}
+fit.xgb_dm_log_h2s_sincefeb2022$finalModel
+```
+
+```{r}
+imp<-varImp(fit.xgb_dm_log_h2s_sincefeb2022,scale=FALSE)
+
+# rename variables
+imp <- tibble(variable = rownames(imp$importance), importance = imp$importance$Overall) %>%
+    pivot_wider(names_from = variable, 
+                values_from = importance) %>%
+    rename(any_of(names)) %>%
+    pivot_longer(cols = everything(),names_to = 'variable', values_to = 'importance')
+
+imp %>%
+  top_n(15, importance) %>%
+  ggplot(aes(x=reorder(variable, importance), y=importance)) + 
+  geom_point() +
+  geom_segment(aes(x=variable,xend=variable,y=0,yend=importance)) +
+  ylab("importance") +
+  xlab("Variable") +
+  coord_flip() +
+  theme_minimal()
+```
+
+### Fold Performance
+```{r}
+# Here, we compute the R2 and RMSE for each fold and take the average
+fold_stat <- fit.xgb_dm_log_h2s_sincefeb2022$pred %>% group_by(Resample) %>% 
+  summarise(R2 = R2(pred, obs), RMSE = RMSE(pred, obs),
+            R2_BT = R2(exp(pred), exp(obs)), RMSE_BT = RMSE(exp(pred), exp(obs)))
+test_r2 <- mean(fold_stat$R2)
+test_r2_bt <- mean(fold_stat$R2_BT)
+test_rmse <- mean(fold_stat$RMSE)
+test_rmse_bt <- mean(fold_stat$RMSE_BT)
+```
+
+```{r}
+log_h2s_xgb_sincefeb2022_obs_vs_pred_plot <- ggplot(tibble(obs = exp(fit.xgb_dm_log_h2s_sincefeb2022$pred$obs), 
+                                                              pred = exp(fit.xgb_dm_log_h2s_sincefeb2022$pred$pred)),
+                             aes(x = pred, y = obs)) +
+                        geom_abline(slope = 1, intercept = 0, linetype = 'dashed') +                                                         geom_point() +
+                        labs(y = 'Observed', x = 'Predicted', 
+                             title = 'Since Februrary 2022') +
+                        stat_poly_line() +
+                        stat_poly_eq(use_label(c("eq")), label.x = "right", label.y = 0.05) +                                                stat_poly_eq(use_label(c("R2")), label.x = "right", label.y = 0.1) +                                                 stat_poly_eq(use_label(c("n")), label.x = "right", label.y = 0.15) +
+                        theme_bw()
+```
+
+```{r}
+validation_result <- rbind(validation_result, 
+                           tibble(Model = 'Since Feb 2022 Log Transform',
+                                  'Coef' = summary(lm(fit.xgb_dm_log_h2s_sincefeb2022$pred$obs ~
+                                                        fit.xgb_dm_log_h2s_sincefeb2022$pred$pred))$coefficients[2, 1], 
+                                  'R-Sq' = summary(lm(fit.xgb_dm_log_h2s_sincefeb2022$pred$obs ~
+                                                        fit.xgb_dm_log_h2s_sincefeb2022$pred$pred))$r.squared))
+```
+
+```{r}
+train_adj_r2 <- adj_r2(getTrainPerf(fit.xgb_dm_log_h2s_sincefeb2022)$TrainRsquared, 
+                       nrow(fit.xgb_dm_log_h2s_sincefeb2022$trainingData), 
+                       fit.xgb_dm_log_h2s_sincefeb2022$finalModel$nfeatures)
+BT_adj_r2 <- adj_r2(test_r2_bt,
+                       nrow(fit.xgb_dm_log_h2s_sincefeb2022$trainingData), 
+                       fit.xgb_dm_log_h2s_sincefeb2022$finalModel$nfeatures)
+
+xgb_result_dm <- rbind(xgb_result_dm, 
+                    tibble(Model = 'Since Feb 2022 Log Transform',
+                           'XGB R-Sq' = train_adj_r2,
+                           'XGB BT R-Sq' = BT_adj_r2,
+                           'XGB RMSE' = test_rmse,
+                           'XGB BT RMSE' = test_rmse_bt))
+```
+
+## Disaster Only
+```{r}
+fit.xgb_dm_log_h2s_dis <- readRDS('../rfiles/xgboost_v2/fit.xgb_dm_log_h2s_dis.rds')
+```
+
+```{r}
+getTrainPerf(fit.xgb_dm_log_h2s_dis)
+```
+
+```{r}
+fit.xgb_dm_log_h2s_dis$finalModel
+```
+
+```{r}
+imp<-varImp(fit.xgb_dm_log_h2s_dis,scale=FALSE)
+
+# rename variables
+imp <- tibble(variable = rownames(imp$importance), importance = imp$importance$Overall) %>%
+    pivot_wider(names_from = variable, 
+                values_from = importance) %>%
+    rename(any_of(names)) %>%
+    pivot_longer(cols = everything(),names_to = 'variable', values_to = 'importance')
+
+imp %>%
+  top_n(15, importance) %>%
+  ggplot(aes(x=reorder(variable, importance), y=importance)) + 
+  geom_point() +
+  geom_segment(aes(x=variable,xend=variable,y=0,yend=importance)) +
+  ylab("importance") +
+  xlab("Variable") +
+  coord_flip() +
+  theme_minimal()
+```
+
+### Fold Performance
+```{r}
+# Here, we compute the R2 and RMSE for each fold and take the average
+fold_stat <- fit.xgb_dm_log_h2s_dis$pred %>% group_by(Resample) %>% 
+  summarise(R2 = R2(pred, obs), RMSE = RMSE(pred, obs),
+            R2_BT = R2(exp(pred), exp(obs)), RMSE_BT = RMSE(exp(pred), exp(obs)))
+test_r2 <- mean(fold_stat$R2)
+test_r2_bt <- mean(fold_stat$R2_BT)
+test_rmse <- mean(fold_stat$RMSE)
+test_rmse_bt <- mean(fold_stat$RMSE_BT)
+```
+
+```{r}
+log_h2s_xgb_dis_obs_vs_pred_plot <- ggplot(tibble(obs = exp(fit.xgb_dm_log_h2s_dis$pred$obs), 
+                                                              pred = exp(fit.xgb_dm_log_h2s_dis$pred$pred)),
+                             aes(x = pred, y = obs)) +
+                        geom_abline(slope = 1, intercept = 0, linetype = 'dashed') +                                                         geom_point() +
+                        labs(y = 'Observed', x = 'Predicted', 
+                             title = 'Disaster Only') +
+                        stat_poly_line() +
+                        stat_poly_eq(use_label(c("eq")), label.x = "right", label.y = 0.03) +                                                stat_poly_eq(use_label(c("R2")), label.x = "right", label.y = 0.1) +                                                 stat_poly_eq(use_label(c("n")), label.x = "right", label.y = 0.18) +
+                        theme_bw()
+```
+
+```{r}
+validation_result <- rbind(validation_result, 
+                           tibble(Model = 'Disaster Only Log Transform',
+                                  'Coef' = summary(lm(fit.xgb_dm_log_h2s_dis$pred$obs ~
+                                                        fit.xgb_dm_log_h2s_dis$pred$pred))$coefficients[2, 1], 
+                                  'R-Sq' = summary(lm(fit.xgb_dm_log_h2s_dis$pred$obs ~
+                                                        fit.xgb_dm_log_h2s_dis$pred$pred))$r.squared))
+```
+
+```{r}
+train_adj_r2 <- adj_r2(getTrainPerf(fit.xgb_dm_log_h2s_dis)$TrainRsquared, 
+                       nrow(fit.xgb_dm_log_h2s_dis$trainingData), 
+                       fit.xgb_dm_log_h2s_dis$finalModel$nfeatures)
+BT_adj_r2 <- adj_r2(test_r2_bt,
+                       nrow(fit.xgb_dm_log_h2s_dis$trainingData), 
+                       fit.xgb_dm_log_h2s_dis$finalModel$nfeatures)
+
+xgb_result_dm <- rbind(xgb_result_dm, 
+                    tibble(Model = 'Disaster Only Log Transform',
+                           'XGB R-Sq' = train_adj_r2,
+                           'XGB BT R-Sq' = BT_adj_r2,
+                           'XGB RMSE' = test_rmse,
+                           'XGB BT RMSE' = test_rmse_bt))
+```
+
+
+## Exclude Disaster
+```{r}
+fit.xgb_dm_log_h2s_excl_dis <- readRDS('../rfiles/xgboost_v2/fit.xgb_dm_log_h2s_excl_dis.rds')
+```
+
+```{r}
+getTrainPerf(fit.xgb_dm_log_h2s_excl_dis)
+```
+
+```{r}
+fit.xgb_dm_log_h2s_excl_dis$finalModel
+```
+
+```{r}
+imp<-varImp(fit.xgb_dm_log_h2s_excl_dis,scale=FALSE)
+
+# rename variables
+imp <- tibble(variable = rownames(imp$importance), importance = imp$importance$Overall) %>%
+    pivot_wider(names_from = variable, 
+                values_from = importance) %>%
+    rename(any_of(names)) %>%
+    pivot_longer(cols = everything(),names_to = 'variable', values_to = 'importance')
+
+imp %>%
+  top_n(15, importance) %>%
+  ggplot(aes(x=reorder(variable, importance), y=importance)) + 
+  geom_point() +
+  geom_segment(aes(x=variable,xend=variable,y=0,yend=importance)) +
+  ylab("importance") +
+  xlab("Variable") +
+  coord_flip() +
+  theme_minimal()
+```
+
+### Fold Performance
+```{r}
+# Here, we compute the R2 and RMSE for each fold and take the average
+fold_stat <- fit.xgb_dm_log_h2s_excl_dis$pred %>% group_by(Resample) %>% 
+  summarise(R2 = R2(pred, obs), RMSE = RMSE(pred, obs),
+            R2_BT = R2(exp(pred), exp(obs)), RMSE_BT = RMSE(exp(pred), exp(obs)))
+test_r2 <- mean(fold_stat$R2)
+test_r2_bt <- mean(fold_stat$R2_BT)
+test_rmse <- mean(fold_stat$RMSE)
+test_rmse_bt <- mean(fold_stat$RMSE_BT)
+```
+
+```{r}
+log_h2s_xgb_excl_dis_obs_vs_pred_plot <- ggplot(tibble(obs = exp(fit.xgb_dm_log_h2s_excl_dis$pred$obs), 
+                                                              pred = exp(fit.xgb_dm_log_h2s_excl_dis$pred$pred)),
+                             aes(x = pred, y = obs)) +
+                        geom_abline(slope = 1, intercept = 0, linetype = 'dashed') +                                                         geom_point() +
+                        labs(y = 'Observed', x = 'Predicted', 
+                             title = 'Exclude Disaster') +
+                        stat_poly_line() +
+                        stat_poly_eq(use_label(c("eq")), label.x = "right", label.y = 0.15) +                                                stat_poly_eq(use_label(c("R2")), label.x = "right", label.y = 0.1) +                                                 stat_poly_eq(use_label(c("n")), label.x = "right", label.y = 0.05) +
+                        theme_bw()
+```
+
+```{r}
+validation_result <- rbind(validation_result, 
+                           tibble(Model = 'Exclude Disaster Log Transform',
+                                  'Coef' = summary(lm(fit.xgb_dm_log_h2s_excl_dis$pred$obs ~
+                                                        fit.xgb_dm_log_h2s_excl_dis$pred$pred))$coefficients[2, 1], 
+                                  'R-Sq' = summary(lm(fit.xgb_dm_log_h2s_excl_dis$pred$obs ~
+                                                        fit.xgb_dm_log_h2s_excl_dis$pred$pred))$r.squared))
+```
+
+
+```{r}
+train_adj_r2 <- adj_r2(getTrainPerf(fit.xgb_dm_log_h2s_excl_dis)$TrainRsquared, 
+                       nrow(fit.xgb_dm_log_h2s_excl_dis$trainingData), 
+                       fit.xgb_dm_log_h2s_excl_dis$finalModel$nfeatures)
+BT_adj_r2 <- adj_r2(test_r2_bt,
+                       nrow(fit.xgb_dm_log_h2s_excl_dis$trainingData), 
+                       fit.xgb_dm_log_h2s_excl_dis$finalModel$nfeatures)
+
+xgb_result_dm <- rbind(xgb_result_dm, 
+                    tibble(Model = 'Exclude Disaster Log Transform',
+                           'XGB R-Sq' = train_adj_r2,
+                           'XGB BT R-Sq' = BT_adj_r2,
+                           'XGB RMSE' = test_rmse,
+                           'XGB BT RMSE' = test_rmse_bt))
+```
+
+## Everything w. Disaster Indicator
+```{r}
+fit.xgb_dm_log_h2s_dis_ind <- readRDS('../rfiles/xgboost_v2/fit.xgb_dm_log_h2s_dis_ind.rds')
+```
+
+```{r}
+getTrainPerf(fit.xgb_dm_log_h2s_dis_ind)
+```
+
+```{r}
+fit.xgb_dm_log_h2s_dis_ind$finalModel
+```
+
+```{r}
+imp<-varImp(fit.xgb_dm_log_h2s_dis_ind,scale=FALSE)
+
+# rename variables
+imp <- tibble(variable = rownames(imp$importance), importance = imp$importance$Overall) %>%
+    pivot_wider(names_from = variable, 
+                values_from = importance) %>%
+    rename(any_of(names)) %>%
+    pivot_longer(cols = everything(),names_to = 'variable', values_to = 'importance')
+
+imp %>%
+  top_n(15, importance) %>%
+  ggplot(aes(x=reorder(variable, importance), y=importance)) + 
+  geom_point() +
+  geom_segment(aes(x=variable,xend=variable,y=0,yend=importance)) +
+  ylab("importance") +
+  xlab("Variable") +
+  coord_flip() +
+  theme_minimal()
+```
+
+### Fold Performance
+```{r}
+# Here, we compute the R2 and RMSE for each fold and take the average
+fold_stat <- fit.xgb_dm_log_h2s_dis_ind$pred %>% group_by(Resample) %>% 
+  summarise(R2 = R2(pred, obs), RMSE = RMSE(pred, obs),
+            R2_BT = R2(exp(pred), exp(obs)), RMSE_BT = RMSE(exp(pred), exp(obs)))
+test_r2 <- mean(fold_stat$R2)
+test_r2_bt <- mean(fold_stat$R2_BT)
+test_rmse <- mean(fold_stat$RMSE)
+test_rmse_bt <- mean(fold_stat$RMSE_BT)
+```
+
+```{r}
+log_h2s_xgb_dis_ind_obs_vs_pred_plot <- ggplot(tibble(obs = exp(fit.xgb_dm_log_h2s_dis_ind$pred$obs), 
+                                                              pred = exp(fit.xgb_dm_log_h2s_dis_ind$pred$pred)),
+                             aes(x = pred, y = obs)) +
+                        geom_abline(slope = 1, intercept = 0, linetype = 'dashed') +
+                        geom_point() +
+                        labs(y = 'Observed', x = 'Predicted', 
+                             title = 'Everything w. Disaster Indicator') +
+                        stat_poly_line() +
+                        stat_poly_eq(use_label(c("eq")), label.x = "right", label.y = 0.03) + 
+                        stat_poly_eq(use_label(c("R2")), label.x = "right", label.y = 0.08) + 
+                        stat_poly_eq(use_label(c("n")), label.x = "right", label.y = 0.17) +
+                        theme_bw()
+```
+
+```{r}
+validation_result <- rbind(validation_result, 
+                           tibble(Model = 'Everything w. Disaster Indicator Log Transform',
+                                  'Coef' = summary(lm(fit.xgb_dm_log_h2s_dis_ind$pred$obs ~
+                                                        fit.xgb_dm_log_h2s_dis_ind$pred$pred))$coefficients[2, 1], 
+                                  'R-Sq' = summary(lm(fit.xgb_dm_log_h2s_dis_ind$pred$obs ~
+                                                        fit.xgb_dm_log_h2s_dis_ind$pred$pred))$r.squared))
+```
+
+```{r}
+train_adj_r2 <- adj_r2(getTrainPerf(fit.xgb_dm_log_h2s_dis_ind)$TrainRsquared, 
+                       nrow(fit.xgb_dm_log_h2s_dis_ind$trainingData), 
+                       fit.xgb_dm_log_h2s_dis_ind$finalModel$nfeatures)
+BT_adj_r2 <- adj_r2(test_r2_bt,
+                       nrow(fit.xgb_dm_log_h2s_dis_ind$trainingData), 
+                       fit.xgb_dm_log_h2s_dis_ind$finalModel$nfeatures)
+
+xgb_result_dm <- rbind(xgb_result_dm, 
+                    tibble(Model = 'Everything w. Disaster Indicator Log Transform',
+                           'XGB R-Sq' = train_adj_r2,
+                           'XGB BT R-Sq' = BT_adj_r2,
+                           'XGB RMSE' = test_rmse,
+                           'XGB BT RMSE' = test_rmse_bt))
+```
+
+## Everything w.o Disaster Indicator
+```{r}
+fit.xgb_dm_log_h2s_full <- readRDS('../rfiles/xgboost_v2/fit.xgb_dm_log_h2s_full.rds')
+```
+
+```{r}
+getTrainPerf(fit.xgb_dm_log_h2s_full)
+```
+
+```{r}
+fit.xgb_dm_log_h2s_full$finalModel
+```
+
+```{r}
+imp<-varImp(fit.xgb_dm_log_h2s_full,scale=FALSE)
+
+# rename variables
+imp <- tibble(variable = rownames(imp$importance), importance = imp$importance$Overall) %>%
+    pivot_wider(names_from = variable, 
+                values_from = importance) %>%
+    rename(any_of(names)) %>%
+    pivot_longer(cols = everything(),names_to = 'variable', values_to = 'importance')
+
+imp %>%
+  top_n(15, importance) %>%
+  ggplot(aes(x=reorder(variable, importance), y=importance)) + 
+  geom_point() +
+  geom_segment(aes(x=variable,xend=variable,y=0,yend=importance)) +
+  ylab("importance") +
+  xlab("Variable") +
+  coord_flip() +
+  theme_minimal()
+```
+
+### Fold Performance
+```{r}
+# Here, we compute the R2 and RMSE for each fold and take the average
+fold_stat <- fit.xgb_dm_log_h2s_full$pred %>% group_by(Resample) %>% 
+  summarise(R2 = R2(pred, obs), RMSE = RMSE(pred, obs),
+            R2_BT = R2(exp(pred), exp(obs)), RMSE_BT = RMSE(exp(pred), exp(obs)))
+test_r2 <- mean(fold_stat$R2)
+test_r2_bt <- mean(fold_stat$R2_BT)
+test_rmse <- mean(fold_stat$RMSE)
+test_rmse_bt <- mean(fold_stat$RMSE_BT)
+```
+
+```{r}
+log_h2s_xgb_full_obs_vs_pred_plot <- ggplot(tibble(obs = exp(fit.xgb_dm_log_h2s_full$pred$obs), 
+                                                              pred = exp(fit.xgb_dm_log_h2s_full$pred$pred)),
+                             aes(x = pred, y = obs)) +
+                        geom_abline(slope = 1, intercept = 0, linetype = 'dashed') +                                                         
+                        geom_point() +
+                        labs(y = 'Observed', x = 'Predicted', 
+                             title = 'Everything w.o Disaster Indicator') +
+                        stat_poly_line() +
+                        stat_poly_eq(use_label(c("eq")), label.x = "right", label.y = 0.15) + 
+                        stat_poly_eq(use_label(c("R2")), label.x = "right", label.y = 0.1) +                                                 
+                        stat_poly_eq(use_label(c("n")), label.x = "right", label.y = 0.05) +
+                        theme_bw()
+```
+
+```{r}
+validation_result <- rbind(validation_result, 
+                           tibble(Model = 'Everything w.o Disaster Indicator Log Transform',
+                                  'Coef' = summary(lm(fit.xgb_dm_log_h2s_full$pred$obs ~
+                                                        fit.xgb_dm_log_h2s_full$pred$pred))$coefficients[2, 1], 
+                                  'R-Sq' = summary(lm(fit.xgb_dm_log_h2s_full$pred$obs ~
+                                                        fit.xgb_dm_log_h2s_full$pred$pred))$r.squared))
+```
+
+```{r}
+train_adj_r2 <- adj_r2(getTrainPerf(fit.xgb_dm_log_h2s_full)$TrainRsquared, 
+                       nrow(fit.xgb_dm_log_h2s_full$trainingData), 
+                       fit.xgb_dm_log_h2s_full$finalModel$nfeatures)
+BT_adj_r2 <- adj_r2(test_r2_bt, 
+                       nrow(fit.xgb_dm_log_h2s_full$trainingData), 
+                       fit.xgb_dm_log_h2s_full$finalModel$nfeatures)
+
+xgb_result_dm <- rbind(xgb_result_dm, 
+                    tibble(Model = 'Everything w.o Disaster Indicator Log Transform',
+                           'XGB R-Sq' = train_adj_r2,
+                           'XGB BT R-Sq' = BT_adj_r2,
+                           'XGB RMSE' = test_rmse,
+                           'XGB BT RMSE' = test_rmse_bt))
+```
+
+# Result Comparison
+# Comparison
+```{r}
+log_model_perf_table <- tibble(Model = c('Since Feb 2022 Log Transform',
+                              'Disaster Only Log Transform',
+                              'Exclude Disaster Log Transform',
+                              'Everything w. Disaster Indicator Log Transform',
+                              'Everything w.o Disaster Indicator Log Transform'),
+                    n = c(nrow(fit.xgb_dm_log_h2s_sincefeb2022$trainingData),
+                          nrow(fit.xgb_dm_log_h2s_dis$trainingData),
+                          nrow(fit.xgb_dm_log_h2s_excl_dis$trainingData),
+                          nrow(fit.xgb_dm_log_h2s_dis_ind$trainingData),
+                          nrow(fit.xgb_dm_log_h2s_full$trainingData))) %>% 
+               left_join(rbind(result_10cv)) %>%
+               left_join(rbind(xgb_result_dm))
+
+log_model_perf_latex <- knitr::kable(log_model_perf_table, digits = 3, format = 'latex')
+writeLines(log_model_perf_latex, 'figures/log_model_perf.tex')
+
+knitr::kable(log_model_perf_table, digits = 3, format = 'html')
+```
+
+```{r}
+# Gam Models
+ggarrange(logh2s_10cv_ovp_plot_sincefeb2022, 
+          logh2s_10cv_ovp_plot_dis_only,
+          logh2s_10cv_ovp_plot_excl_dis,
+          labels = c("1", "2", "3"),
+          nrow = 3)
+
+ggarrange(logh2s_10cv_ovp_plot_dis_ind,
+          logh2s_10cv_ovp_plot_full,
+          labels = c("4", "5"),
+          nrow = 2)
+```
+
+```{r}
+ggarrange(log_h2s_xgb_sincefeb2022_obs_vs_pred_plot, 
+          log_h2s_xgb_dis_obs_vs_pred_plot,
+          log_h2s_xgb_excl_dis_obs_vs_pred_plot, 
+          labels = c("1", "2", "3"),
+          nrow = 3)
+ggarrange(log_h2s_xgb_dis_ind_obs_vs_pred_plot, 
+          log_h2s_xgb_full_obs_vs_pred_plot,
+          labels = c("4", "5"),
+          nrow = 2)
+```
+
+# For Figures
+```{r}
+ggarrange(logh2s_10cv_ovp_plot_sincefeb2022 + labs(title = 'GAM'),
+          log_h2s_xgb_sincefeb2022_obs_vs_pred_plot + labs(title = 'XGBoost'),
+          nrow = 1)
+```
+
+```{r}
+ggarrange(log_h2s_xgb_dis_obs_vs_pred_plot + labs(title = ''),
+          log_h2s_xgb_dis_obs_vs_pred_plot + 
+            labs(title = '') + 
+            coord_cartesian(xlim = c(0, 15), ylim = c(0, 15)),
+          nrow = 1)
+```
+
+```{r}
+ggarrange(log_h2s_xgb_dis_ind_obs_vs_pred_plot + labs(title = ''),
+          log_h2s_xgb_dis_ind_obs_vs_pred_plot + 
+            labs(title = '') + 
+            coord_cartesian(xlim = c(0, 15), ylim = c(0, 15)),
+          nrow = 1)
+```
