@@ -22,7 +22,6 @@ library(fastDummies)
 library(circular)
 library(raster)
 library(terra)
-library(rgl)
 library(sf)
 library(evgam)
 library(ggpubr)
@@ -360,7 +359,7 @@ step_gam <- function(response, features, init_features, direction, data) {
     
     if (direction == 'forward') {
       # compare the best feature to add with current GCV
-      if (best_feature_forward$GCV_new < GCV) {
+      if (best_feature_forward$GCV_new <= GCV) {
         # add this feature to used feature vector and remove from unused
         used_features <- append(used_features, best_feature_forward$feature)
         unused_features <- setdiff(unused_features, best_feature_forward$feature)
@@ -370,7 +369,7 @@ step_gam <- function(response, features, init_features, direction, data) {
         break
       }
     } else if (direction == 'backward') {
-      if (best_feature_backward$GCV_new < GCV) {
+      if (best_feature_backward$GCV_new <= GCV) {
         # if this is intercept model and adding anything won't improve the model
         if (best_feature_backward$feature == 'Intercept') {
           convergence == TRUE
@@ -388,7 +387,7 @@ step_gam <- function(response, features, init_features, direction, data) {
       # choose direction/feature that decreases GCV the most
       if (best_feature_forward$GCV_new < best_feature_backward$GCV_new) {
         # if forward is better (lower GCV)
-        if (best_feature_forward$GCV_new < GCV) {
+        if (best_feature_forward$GCV_new <= GCV) {
           used_features <- append(used_features, best_feature_forward$feature)
           unused_features <- setdiff(unused_features, best_feature_forward$feature)
           GCV <- best_feature_forward$GCV_new
@@ -396,10 +395,32 @@ step_gam <- function(response, features, init_features, direction, data) {
           convergence == TRUE
         break
         }
+      } else if (best_feature_forward$GCV_new == best_feature_backward$GCV_new) {
+        # randomly choose step
+        random_coin <- sample(c(1, 2), 1)
+        if (random_coin == 1) {
+          if (best_feature_forward$GCV_new < GCV) {
+          # add this feature to used feature vector and remove from unused
+            used_features <- append(used_features, best_feature_forward$feature)
+            unused_features <- setdiff(unused_features, best_feature_forward$feature)
+            GCV <- best_feature_forward$GCV_new # update GCV
+          }
+        } else {
+            if (best_feature_backward$GCV_new < GCV) {
+              # if this is intercept model and adding anything won't improve the model
+              if (best_feature_backward$feature == 'Intercept') {
+                convergence == TRUE
+              }
+              # add this feature to unused feature vector and remove from used
+              unused_features <- append(unused_features, best_feature_backward$feature)
+              used_features <- setdiff(used_features, best_feature_backward$feature)
+              GCV <- best_feature_backward$GCV_new # update GCV
+            }
+          }
       } else {
         # else backward is better
         # if this new model gives better GCV than last model
-        if (best_feature_backward$GCV_new < GCV) {
+        if (best_feature_backward$GCV_new <= GCV) {
           # if this is intercept model and adding anything won't improve the model
           if (best_feature_backward$feature == 'Intercept') {
             convergence == TRUE
@@ -408,28 +429,6 @@ step_gam <- function(response, features, init_features, direction, data) {
           unused_features <- append(unused_features, best_feature_backward$feature)
           used_features <- setdiff(used_features, best_feature_backward$feature)
           GCV <- best_feature_backward$GCV_new # update GCV
-        } else if (best_feature_forward$GCV_new == best_feature_backward$GCV_new) {
-          # randomly choose step
-          random_coin <- sample(c(1, 2), 1)
-          if (random_coin == 1) {
-            if (best_feature_forward$GCV_new < GCV) {
-            # add this feature to used feature vector and remove from unused
-           used_features <- append(used_features, best_feature_forward$feature)
-            unused_features <- setdiff(unused_features, best_feature_forward$feature)
-           GCV <- best_feature_forward$GCV_new # update GCV
-            }
-          } else {
-            if (best_feature_backward$GCV_new < GCV) {
-            # if this is intercept model and adding anything won't improve the model
-            if (best_feature_backward$feature == 'Intercept') {
-              convergence == TRUE
-            }
-            # add this feature to unused feature vector and remove from used
-            unused_features <- append(unused_features, best_feature_backward$feature)
-            used_features <- setdiff(used_features, best_feature_backward$feature)
-            GCV <- best_feature_backward$GCV_new # update GCV
-      }
-          }
         } else {
           convergence == TRUE
           break
@@ -462,10 +461,11 @@ predictors_sincefeb2022 <-
     'closest_wrp_capacity', 'daily_temp', 'daily_hum', 'daily_precip')
 
 data_sincefeb2022 <- daily_full %>% filter(day > '2022-01-31')
-da_step_gam_table_empty_init_sincefeb2022 <- 
-  step_gam('H2S_daily_avg', predictors_sincefeb2022, c(), 'stepwise', data_sincefeb2022)
-da_step_gam_table_full_init_sincefeb2022 <- 
-  step_gam('H2S_daily_avg', predictors_sincefeb2022, predictors_sincefeb2022, 'stepwise', data_sincefeb2022)
+
+# da_step_gam_table_empty_init_sincefeb2022 <- 
+#   step_gam('H2S_daily_avg', predictors_sincefeb2022, c(), 'stepwise', data_sincefeb2022)
+# da_step_gam_table_full_init_sincefeb2022 <- 
+#   step_gam('H2S_daily_avg', predictors_sincefeb2022, predictors_sincefeb2022, 'stepwise', data_sincefeb2022)
 ```
 
 ```{r}
@@ -480,10 +480,10 @@ predictors_dis <-
     "I(1/dist_dc^2)", "daily_temp", "daily_hum", "daily_precip")
 
 data_dis <- daily_full %>% filter(year == '2021', month %in% c('10', '11', '12'))
-da_step_gam_table_empty_init_dis <- 
+da_step_gam_table_empty_init_dis3 <-
   step_gam('H2S_daily_avg', predictors_dis, c(), 'stepwise', data_dis)
-da_step_gam_table_full_init_dis <- 
-  step_gam('H2S_daily_avg', predictors_dis, predictors_dis, 'stepwise', data_dis)
+# da_step_gam_table_full_init_dis <- 
+#   step_gam('H2S_daily_avg', predictors_dis, predictors_dis, 'stepwise', data_dis)
 ```
 
 ```{r}
@@ -498,10 +498,10 @@ predictors_excl_dis <-
     'I(1/dist_dc^2)', 'closest_wrp_capacity', 'daily_temp', 'daily_hum', 'daily_precip')
 
 data_excl_dis <- daily_full %>% filter(!(year == '2021' & month %in% c('10', '11', '12')))
-da_step_gam_table_empty_init_excl_dis <- 
-  step_gam('H2S_daily_avg', predictors_excl_dis, c(), 'stepwise', data_excl_dis)
-da_step_gam_table_full_init_excl_dis <- 
-  step_gam('H2S_daily_avg', predictors_excl_dis, predictors_excl_dis, 'stepwise', data_excl_dis)
+# da_step_gam_table_empty_init_excl_dis <- 
+#   step_gam('H2S_daily_avg', predictors_excl_dis, c(), 'stepwise', data_excl_dis)
+# da_step_gam_table_full_init_excl_dis <- 
+#   step_gam('H2S_daily_avg', predictors_excl_dis, predictors_excl_dis, 'stepwise', data_excl_dis)
 ```
 
 ```{r}
@@ -518,10 +518,10 @@ predictors_dis_ind <-
 data_dis_ind <- daily_full %>% 
   mutate(disaster = 
            if_else(year == '2021', month %in% c('10', '11', '12'), 1, 0))
-da_step_gam_table_empty_init_dis_ind <- 
-  step_gam('H2S_daily_avg', predictors_dis_ind, c(), 'stepwise', data_dis_ind)
-da_step_gam_table_full_init_dis_ind <- 
-  step_gam('H2S_daily_avg', predictors_dis_ind, predictors_dis_ind, 'stepwise', data_dis_ind)
+# da_step_gam_table_empty_init_dis_ind <- 
+#   step_gam('H2S_daily_avg', predictors_dis_ind, c(), 'stepwise', data_dis_ind)
+# da_step_gam_table_full_init_dis_ind <- 
+#   step_gam('H2S_daily_avg', predictors_dis_ind, predictors_dis_ind, 'stepwise', data_dis_ind)
 ```
 
 ```{r}
@@ -535,10 +535,10 @@ predictors_full <-
     'daily_downwind_wrp', 'elevation', 'EVI', 'num_odor_complaints', 'I(1/dist_dc^2)', 
     'closest_wrp_capacity', 'daily_temp', 'daily_hum', 'daily_precip')
 
-da_step_gam_table_empty_init_full <- 
-  step_gam('H2S_daily_avg', predictors_full, c(), 'stepwise', daily_full)
-da_step_gam_table_full_init_full <- 
-  step_gam('H2S_daily_avg', predictors_full, predictors_full, 'stepwise', daily_full)
+# da_step_gam_table_empty_init_full <- 
+#   step_gam('H2S_daily_avg', predictors_full, c(), 'stepwise', daily_full)
+# da_step_gam_table_full_init_full <- 
+#   step_gam('H2S_daily_avg', predictors_full, predictors_full, 'stepwise', daily_full)
 ```
 
 
@@ -673,11 +673,20 @@ date <- c('sincefeb2022', 'dis', 'excl_dis', 'dis_ind', 'full')
 
 model_table_names <- apply(expand.grid(stat, 'step_gam_table', init, date), 1, paste, collapse="_")
 
+# for (model_table_name in model_table_names) {
+#   model_table <- get(model_table_name)
+#   write_csv(model_table, paste0('step_gam_tables/', model_table_name, '.csv'))
+# }
+```
+
+```{r}
+# read model tables
 for (model_table_name in model_table_names) {
-  model_table <- get(model_table_name)
-  write_csv(model_table, paste0('step_gam_tables/', model_table_name, '.csv'))
+  assign(model_table_name, 
+         read_csv(paste0('step_gam_tables/', model_table_name, '.csv')))
 }
 ```
+
 
 ```{r}
 model_features_table <- tibble(model_name = character(),
@@ -689,7 +698,7 @@ model_features_table <- tibble(model_name = character(),
 for (model in model_table_names) {
   step_gam_table <- get(model)
   best_model <- step_gam_table[nrow(step_gam_table), ]
-  best_model_features <- setdiff(names(best_model), 'GCV')
+  best_model_features <-names(best_model)[as.logical(c(0, unname(unlist(c(best_model[1,-1])))))]
   model_features_table <- rbind(model_features_table, 
                                 tibble(model_name = model,
                                        GCV = best_model$GCV,
@@ -710,7 +719,17 @@ saveRDS(model_features_table, 'step_gam_tables/model_features_table.rds')
 ```{r}
 # write function that takes in response, predictors, data and returns gam model 
 # different from stepwise function, this has select = FALSE
-get_gam_model <- function(response, predictors, data) {
+get_feature_vector <- function(stat, date, model_feature_table) {
+  feature_vec <-  final_model_features_table %>%
+      filter(stat == .env$stat & date == .env$date) %>%
+      pull(features) %>%
+      unlist()
+  print(feature_vec)
+  return(feature_vec)
+}
+
+get_gam_model <- function(response, stat, date, data) {
+  predictors <- get_feature_vector(stat, date, model_feature_table)
   formula_feature_str <- paste(predictors, collapse = ' + ')
   formula_str <- paste(response, formula_feature_str, sep = ' ~ ')
   formula <- as.formula(formula_str)
@@ -734,11 +753,8 @@ final_model_features_table <- final_model_features_table %>%
 ### Daily Average
 ```{r}
 # Since feb 2022
-h2s_da_model_sincefeb2022 <- get_gam_model('H2S_daily_avg',
-                                           final_model_features_table %>%
-                                             filter(stat == 'da' & date == 'sincefeb2022') %>%
-                                             pull(features) %>%
-                                             unlist(),
+h2s_da_model_sincefeb2022 <- get_gam_model('H2S_daily_avg', 'da',
+                                           'sincefeb2022',
                                            data_sincefeb2022)
 summary(h2s_da_model_sincefeb2022)
 ```
@@ -746,18 +762,8 @@ summary(h2s_da_model_sincefeb2022)
 #### Disaster Only
 ```{r}
 # Disaster only
-h2s_da_model_dis <- gam(H2S_daily_avg ~ month + weekday +
-                         wd_avg + ws_avg + daily_downwind_ref + closest_wrp_capacity +
-                          I(1/dist_wrp^2) + I(1/dist_ref^2) + 
-                         s(I(mon_utm_x/10^3), I(mon_utm_y/10^3), bs='tp', k = 10) + 
-                        te(I(mon_utm_x/10^3), I(mon_utm_y/10^3),as.numeric(day),
-                           k=c(10,10),d=c(2,1),bs=c('tp','cc')) +
-                         monthly_oil_2km + monthly_gas_2km + active_2km + inactive_2km + 
-                        daily_downwind_wrp + elevation + EVI + num_odor_complaints +
-                        I(1/dist_dc^2) + daily_temp + daily_hum + daily_precip, 
-                      data = daily_full %>% filter(year == '2021', month %in% c('10', '11', '12')))
+h2s_da_model_dis <- get_gam_model('H2S_daily_avg', 'da', 'dis', data_dis)
 summary(h2s_da_model_dis)
-plot(h2s_da_model_dis)
 ```
 
 #### Exclude Disaster	
