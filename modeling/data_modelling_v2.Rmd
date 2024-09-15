@@ -231,6 +231,31 @@ knitr::kable(table1, format = 'html', digits = 2)
 
 # GAM
 ## Feature Selection
+### Select smooth
+```{r}
+responses <- c('H2S_daily_avg', 'log(H2S_daily_avg)', 'H2S_daily_max', 'log(H2S_daily_max)')
+daterange <- c('sincefeb2022', 'dis', 'excl_dis', 'dis_ind', 'full')
+smooth <- c("s(as.numeric(month),bs='cc')", 
+            "s(I(mon_utm_x/10^3), I(mon_utm_y/10^3), bs='tp', k = 10)",
+            "te(I(mon_utm_x/10^3), I(mon_utm_y/10^3), as.numeric(day), k=c(10,10),d=c(2,1),bs=c('tp','cc'))")
+smooth_tibble <- tibble(features = c(list(c(smooth[1])), 
+                                     list(c(smooth[2])),
+                                     list(c(smooth[3])),
+                                     list(c(smooth[1:2])),
+                                     list(c(smooth[c(1, 3)])),
+                                     list(c(smooth[2:3])),
+                                     list(c(smooth[1:3]))),
+                        disaster_applicable = c(0, 1, 1, 0, 0, 1, 0))
+smooth_compare <- crossing(response = responses, daterange = daterange)
+
+for (i in 1:nrow(smooth_compare)) {
+  features <- crossing("s(as.numeric(month),bs='cc')", 
+                       "s(I(mon_utm_x/10^3), I(mon_utm_y/10^3), bs='tp', k = 10)",
+                       "te(I(mon_utm_x/10^3), I(mon_utm_y/10^3), as.numeric(day), k=c(10,10),d=c(2,1),bs=c('tp','cc'))")
+}
+```
+
+
 ```{r}
 # prepare stepwise function
 # for this function, I will first have the set of features
@@ -448,9 +473,174 @@ step_gam <- function(response, features, init_features, direction, data) {
 }
 ```
 
-### Daily Avg
+Daily Avg
 ```{r}
 # since feb 2022 stepwise
+# da_step_gam_table_empty_init_sincefeb2022 <- 
+#   step_gam('H2S_daily_avg', predictors_sincefeb2022, c(), 'stepwise', data_sincefeb2022)
+# da_step_gam_table_full_init_sincefeb2022 <- 
+#   step_gam('H2S_daily_avg', predictors_sincefeb2022, predictors_sincefeb2022, 'stepwise', data_sincefeb2022)
+```
+
+```{r}
+# Disaster stepwise
+# da_step_gam_table_empty_init_dis <-
+#   step_gam('H2S_daily_avg', predictors_dis, c(), 'stepwise', data_dis)
+# da_step_gam_table_full_init_dis <- 
+#   step_gam('H2S_daily_avg', predictors_dis, predictors_dis, 'stepwise', data_dis)
+```
+
+```{r}
+# Exclude disaster stepwise
+# da_step_gam_table_empty_init_excl_dis <- 
+#   step_gam('H2S_daily_avg', predictors_excl_dis, c(), 'stepwise', data_excl_dis)
+# da_step_gam_table_full_init_excl_dis <- 
+#   step_gam('H2S_daily_avg', predictors_excl_dis, predictors_excl_dis, 'stepwise', data_excl_dis)
+```
+
+```{r}
+# full with disaster indicator
+# da_step_gam_table_empty_init_dis_ind <- 
+#   step_gam('H2S_daily_avg', predictors_dis_ind, c(), 'stepwise', data_dis_ind)
+# da_step_gam_table_full_init_dis_ind <- 
+#   step_gam('H2S_daily_avg', predictors_dis_ind, predictors_dis_ind, 'stepwise', data_dis_ind)
+```
+
+```{r}
+# full without disaster indicator
+# da_step_gam_table_empty_init_full <- 
+#   step_gam('H2S_daily_avg', predictors_full, c(), 'stepwise', daily_full)
+# da_step_gam_table_full_init_full <- 
+#   step_gam('H2S_daily_avg', predictors_full, predictors_full, 'stepwise', daily_full)
+```
+
+Log Daily Average
+```{r}
+# since feb 2022 stepwise
+# log_da_step_gam_table_empty_init_sincefeb2022 <- 
+#   step_gam('log(H2S_daily_avg)', predictors_sincefeb2022, c(), 'stepwise', data_sincefeb2022)
+# log_da_step_gam_table_full_init_sincefeb2022 <- 
+#   step_gam('log(H2S_daily_avg)', predictors_sincefeb2022, predictors_sincefeb2022, 'stepwise', data_sincefeb2022)
+```
+
+```{r}
+# Disaster stepwise
+# log_da_step_gam_table_empty_init_dis <- 
+#   step_gam('log(H2S_daily_avg)', predictors_dis, c(), 'stepwise', data_dis)
+# log_da_step_gam_table_full_init_dis <- 
+#   step_gam('log(H2S_daily_avg)', predictors_dis, predictors_dis, 'stepwise', data_dis)
+```
+
+```{r}
+# Exclude disaster stepwise
+# log_da_step_gam_table_empty_init_excl_dis <- 
+#   step_gam('log(H2S_daily_avg)', predictors_excl_dis, c(), 'stepwise', data_excl_dis)
+# log_da_step_gam_table_full_init_excl_dis <- 
+#   step_gam('log(H2S_daily_avg)', predictors_excl_dis, predictors_excl_dis, 'stepwise', data_excl_dis)
+```
+
+```{r}
+# full with disaster indicator
+# log_da_step_gam_table_empty_init_dis_ind <- 
+#   step_gam('log(H2S_daily_avg)', predictors_dis_ind, c(), 'stepwise', data_dis_ind)
+# log_da_step_gam_table_full_init_dis_ind <- 
+#   step_gam('log(H2S_daily_avg)', predictors_dis_ind, predictors_dis_ind, 'stepwise', data_dis_ind)
+```
+
+```{r}
+# full without disaster indicator
+# log_da_step_gam_table_empty_init_full <- 
+#   step_gam('log(H2S_daily_avg)', predictors_full, c(), 'stepwise', daily_full)
+# log_da_step_gam_table_full_init_full <- 
+#   step_gam('log(H2S_daily_avg)', predictors_full, predictors_full, 'stepwise', daily_full)
+```
+
+Daily Max
+```{r}
+# since feb 2022 stepwise
+# dm_step_gam_table_empty_init_sincefeb2022 <- 
+#   step_gam('H2S_daily_max', predictors_sincefeb2022, c(), 'stepwise', data_sincefeb2022)
+# dm_step_gam_table_full_init_sincefeb2022 <- 
+#   step_gam('H2S_daily_max', predictors_sincefeb2022, predictors_sincefeb2022, 'stepwise', data_sincefeb2022)
+```
+
+```{r}
+# Disaster stepwise
+# dm_step_gam_table_empty_init_dis <- 
+#   step_gam('H2S_daily_max', predictors_dis, c(), 'stepwise', data_dis)
+# dm_step_gam_table_full_init_dis <- 
+#   step_gam('H2S_daily_max', predictors_dis, predictors_dis, 'stepwise', data_dis)
+```
+
+```{r}
+# Exclude disaster stepwise
+# dm_step_gam_table_empty_init_excl_dis <- 
+#   step_gam('H2S_daily_max', predictors_excl_dis, c(), 'stepwise', data_excl_dis)
+# dm_step_gam_table_full_init_excl_dis <- 
+#   step_gam('H2S_daily_max', predictors_excl_dis, predictors_excl_dis, 'stepwise', data_excl_dis)
+```
+
+```{r}
+# full with disaster indicator
+# dm_step_gam_table_empty_init_dis_ind <- 
+#   step_gam('H2S_daily_max', predictors_dis_ind, c(), 'stepwise', data_dis_ind)
+# dm_step_gam_table_full_init_dis_ind <- 
+#   step_gam('H2S_daily_max', predictors_dis_ind, predictors_dis_ind, 'stepwise', data_dis_ind)
+```
+
+```{r}
+# full without disaster indicator
+# dm_step_gam_table_empty_init_full <- 
+#   step_gam('H2S_daily_max', predictors_full, c(), 'stepwise', daily_full)
+# dm_step_gam_table_full_init_full <- 
+#   step_gam('H2S_daily_max', predictors_full, predictors_full, 'stepwise', daily_full)
+```
+
+Log Daily Max
+```{r}
+# since feb 2022 stepwise
+# log_dm_step_gam_table_empty_init_sincefeb2022 <- 
+#   step_gam('log(H2S_daily_max)', predictors_sincefeb2022, c(), 'stepwise', data_sincefeb2022)
+# log_dm_step_gam_table_full_init_sincefeb2022 <- 
+#   step_gam('log(H2S_daily_max)', predictors_sincefeb2022, predictors_sincefeb2022, 'stepwise', data_sincefeb2022)
+```
+
+```{r}
+# Disaster stepwise
+# log_dm_step_gam_table_empty_init_dis <- 
+#   step_gam('log(H2S_daily_max)', predictors_dis, c(), 'stepwise', data_dis)
+# log_dm_step_gam_table_full_init_dis <- 
+#   step_gam('log(H2S_daily_max)', predictors_dis, predictors_dis, 'stepwise', data_dis)
+```
+
+```{r}
+# Exclude disaster stepwise
+# log_dm_step_gam_table_empty_init_excl_dis <- 
+#   step_gam('log(H2S_daily_max)', predictors_excl_dis, c(), 'stepwise', data_excl_dis)
+# log_dm_step_gam_table_full_init_excl_dis <- 
+#   step_gam('log(H2S_daily_max)', predictors_excl_dis, predictors_excl_dis, 'stepwise', data_excl_dis)
+```
+
+```{r}
+# full with disaster indicator
+# log_dm_step_gam_table_empty_init_dis_ind <- 
+#   step_gam('log(H2S_daily_max)', predictors_dis_ind, c(), 'stepwise', data_dis_ind)
+# log_dm_step_gam_table_full_init_dis_ind <- 
+#   step_gam('log(H2S_daily_max)', predictors_dis_ind, predictors_dis_ind, 'stepwise', data_dis_ind)
+```
+
+```{r}
+# full without disaster indicator
+# log_dm_step_gam_table_empty_init_full <- 
+#   step_gam('log(H2S_daily_max)', predictors_full, c(), 'stepwise', daily_full)
+# log_dm_step_gam_table_full_init_full <- 
+#   step_gam('log(H2S_daily_max)', predictors_full, predictors_full, 'stepwise', daily_full)
+```
+
+
+### Prepare feature and data tables
+```{r}
+# since feb 2022
 predictors_sincefeb2022 <- 
   c("s(as.numeric(month),bs='cc')", 'year', 'weekday', 'wd_avg', 'ws_avg', 
     'daily_downwind_ref', 'I(1/dist_wrp^2)', 'I(1/dist_ref^2)', 
@@ -462,14 +652,7 @@ predictors_sincefeb2022 <-
 
 data_sincefeb2022 <- daily_full %>% filter(day > '2022-01-31')
 
-# da_step_gam_table_empty_init_sincefeb2022 <- 
-#   step_gam('H2S_daily_avg', predictors_sincefeb2022, c(), 'stepwise', data_sincefeb2022)
-# da_step_gam_table_full_init_sincefeb2022 <- 
-#   step_gam('H2S_daily_avg', predictors_sincefeb2022, predictors_sincefeb2022, 'stepwise', data_sincefeb2022)
-```
-
-```{r}
-# Disaster stepwise
+# Disaster
 predictors_dis <- 
   c("month", "weekday", "wd_avg", "ws_avg", "daily_downwind_ref", 
     "closest_wrp_capacity", "I(1/dist_wrp^2)", "I(1/dist_ref^2)", 
@@ -480,13 +663,7 @@ predictors_dis <-
     "I(1/dist_dc^2)", "daily_temp", "daily_hum", "daily_precip")
 
 data_dis <- daily_full %>% filter(year == '2021', month %in% c('10', '11', '12'))
-da_step_gam_table_empty_init_dis3 <-
-  step_gam('H2S_daily_avg', predictors_dis, c(), 'stepwise', data_dis)
-# da_step_gam_table_full_init_dis <- 
-#   step_gam('H2S_daily_avg', predictors_dis, predictors_dis, 'stepwise', data_dis)
-```
 
-```{r}
 # Exclude disaster stepwise
 predictors_excl_dis <- 
   c("s(as.numeric(month),bs='cc')", 'year', 'weekday', 'wd_avg', 'ws_avg', 
@@ -498,14 +675,7 @@ predictors_excl_dis <-
     'I(1/dist_dc^2)', 'closest_wrp_capacity', 'daily_temp', 'daily_hum', 'daily_precip')
 
 data_excl_dis <- daily_full %>% filter(!(year == '2021' & month %in% c('10', '11', '12')))
-# da_step_gam_table_empty_init_excl_dis <- 
-#   step_gam('H2S_daily_avg', predictors_excl_dis, c(), 'stepwise', data_excl_dis)
-# da_step_gam_table_full_init_excl_dis <- 
-#   step_gam('H2S_daily_avg', predictors_excl_dis, predictors_excl_dis, 'stepwise', data_excl_dis)
-```
 
-```{r}
-# full with disaster indicator
 predictors_dis_ind <- 
   c("s(as.numeric(month),bs='cc')", 'year', 'weekday', 'wd_avg', 'ws_avg', 
     'daily_downwind_ref', 'I(1/dist_wrp^2)', 'I(1/dist_ref^2)',
@@ -518,14 +688,7 @@ predictors_dis_ind <-
 data_dis_ind <- daily_full %>% 
   mutate(disaster = 
            if_else(year == '2021', month %in% c('10', '11', '12'), 1, 0))
-# da_step_gam_table_empty_init_dis_ind <- 
-#   step_gam('H2S_daily_avg', predictors_dis_ind, c(), 'stepwise', data_dis_ind)
-# da_step_gam_table_full_init_dis_ind <- 
-#   step_gam('H2S_daily_avg', predictors_dis_ind, predictors_dis_ind, 'stepwise', data_dis_ind)
-```
 
-```{r}
-# full without disaster indicator
 predictors_full <- 
   c("s(as.numeric(month),bs='cc')", 'year', 'weekday', 'wd_avg', 'ws_avg', 
     'daily_downwind_ref', 'I(1/dist_wrp^2)', 'I(1/dist_ref^2)',
@@ -534,135 +697,6 @@ predictors_full <-
     'monthly_oil_2km', 'monthly_gas_2km', 'active_2km', 'inactive_2km', 
     'daily_downwind_wrp', 'elevation', 'EVI', 'num_odor_complaints', 'I(1/dist_dc^2)', 
     'closest_wrp_capacity', 'daily_temp', 'daily_hum', 'daily_precip')
-
-# da_step_gam_table_empty_init_full <- 
-#   step_gam('H2S_daily_avg', predictors_full, c(), 'stepwise', daily_full)
-# da_step_gam_table_full_init_full <- 
-#   step_gam('H2S_daily_avg', predictors_full, predictors_full, 'stepwise', daily_full)
-```
-
-
-### Log Daily Avg
-```{r}
-# since feb 2022 stepwise
-log_da_step_gam_table_empty_init_sincefeb2022 <- 
-  step_gam('log(H2S_daily_avg)', predictors_sincefeb2022, c(), 'stepwise', data_sincefeb2022)
-log_da_step_gam_table_full_init_sincefeb2022 <- 
-  step_gam('log(H2S_daily_avg)', predictors_sincefeb2022, predictors_sincefeb2022, 'stepwise', data_sincefeb2022)
-```
-
-```{r}
-# Disaster stepwise
-log_da_step_gam_table_empty_init_dis <- 
-  step_gam('log(H2S_daily_avg)', predictors_dis, c(), 'stepwise', data_dis)
-log_da_step_gam_table_full_init_dis <- 
-  step_gam('log(H2S_daily_avg)', predictors_dis, predictors_dis, 'stepwise', data_dis)
-```
-
-```{r}
-# Exclude disaster stepwise
-log_da_step_gam_table_empty_init_excl_dis <- 
-  step_gam('log(H2S_daily_avg)', predictors_excl_dis, c(), 'stepwise', data_excl_dis)
-log_da_step_gam_table_full_init_excl_dis <- 
-  step_gam('log(H2S_daily_avg)', predictors_excl_dis, predictors_excl_dis, 'stepwise', data_excl_dis)
-```
-
-```{r}
-# full with disaster indicator
-log_da_step_gam_table_empty_init_dis_ind <- 
-  step_gam('log(H2S_daily_avg)', predictors_dis_ind, c(), 'stepwise', data_dis_ind)
-log_da_step_gam_table_full_init_dis_ind <- 
-  step_gam('log(H2S_daily_avg)', predictors_dis_ind, predictors_dis_ind, 'stepwise', data_dis_ind)
-```
-
-```{r}
-# full without disaster indicator
-log_da_step_gam_table_empty_init_full <- 
-  step_gam('log(H2S_daily_avg)', predictors_full, c(), 'stepwise', daily_full)
-log_da_step_gam_table_full_init_full <- 
-  step_gam('log(H2S_daily_avg)', predictors_full, predictors_full, 'stepwise', daily_full)
-```
-
-### Daily Max
-```{r}
-# since feb 2022 stepwise
-dm_step_gam_table_empty_init_sincefeb2022 <- 
-  step_gam('H2S_daily_max', predictors_sincefeb2022, c(), 'stepwise', data_sincefeb2022)
-dm_step_gam_table_full_init_sincefeb2022 <- 
-  step_gam('H2S_daily_max', predictors_sincefeb2022, predictors_sincefeb2022, 'stepwise', data_sincefeb2022)
-```
-
-```{r}
-# Disaster stepwise
-dm_step_gam_table_empty_init_dis <- 
-  step_gam('H2S_daily_max', predictors_dis, c(), 'stepwise', data_dis)
-dm_step_gam_table_full_init_dis <- 
-  step_gam('H2S_daily_max', predictors_dis, predictors_dis, 'stepwise', data_dis)
-```
-
-```{r}
-# Exclude disaster stepwise
-dm_step_gam_table_empty_init_excl_dis <- 
-  step_gam('H2S_daily_max', predictors_excl_dis, c(), 'stepwise', data_excl_dis)
-dm_step_gam_table_full_init_excl_dis <- 
-  step_gam('H2S_daily_max', predictors_excl_dis, predictors_excl_dis, 'stepwise', data_excl_dis)
-```
-
-```{r}
-# full with disaster indicator
-dm_step_gam_table_empty_init_dis_ind <- 
-  step_gam('H2S_daily_max', predictors_dis_ind, c(), 'stepwise', data_dis_ind)
-dm_step_gam_table_full_init_dis_ind <- 
-  step_gam('H2S_daily_max', predictors_dis_ind, predictors_dis_ind, 'stepwise', data_dis_ind)
-```
-
-```{r}
-# full without disaster indicator
-dm_step_gam_table_empty_init_full <- 
-  step_gam('H2S_daily_max', predictors_full, c(), 'stepwise', daily_full)
-dm_step_gam_table_full_init_full <- 
-  step_gam('H2S_daily_max', predictors_full, predictors_full, 'stepwise', daily_full)
-```
-
-### Log Daily Max
-```{r}
-# since feb 2022 stepwise
-log_dm_step_gam_table_empty_init_sincefeb2022 <- 
-  step_gam('log(H2S_daily_max)', predictors_sincefeb2022, c(), 'stepwise', data_sincefeb2022)
-log_dm_step_gam_table_full_init_sincefeb2022 <- 
-  step_gam('log(H2S_daily_max)', predictors_sincefeb2022, predictors_sincefeb2022, 'stepwise', data_sincefeb2022)
-```
-
-```{r}
-# Disaster stepwise
-log_dm_step_gam_table_empty_init_dis <- 
-  step_gam('log(H2S_daily_max)', predictors_dis, c(), 'stepwise', data_dis)
-log_dm_step_gam_table_full_init_dis <- 
-  step_gam('log(H2S_daily_max)', predictors_dis, predictors_dis, 'stepwise', data_dis)
-```
-
-```{r}
-# Exclude disaster stepwise
-log_dm_step_gam_table_empty_init_excl_dis <- 
-  step_gam('log(H2S_daily_max)', predictors_excl_dis, c(), 'stepwise', data_excl_dis)
-log_dm_step_gam_table_full_init_excl_dis <- 
-  step_gam('log(H2S_daily_max)', predictors_excl_dis, predictors_excl_dis, 'stepwise', data_excl_dis)
-```
-
-```{r}
-# full with disaster indicator
-log_dm_step_gam_table_empty_init_dis_ind <- 
-  step_gam('log(H2S_daily_max)', predictors_dis_ind, c(), 'stepwise', data_dis_ind)
-log_dm_step_gam_table_full_init_dis_ind <- 
-  step_gam('log(H2S_daily_max)', predictors_dis_ind, predictors_dis_ind, 'stepwise', data_dis_ind)
-```
-
-```{r}
-# full without disaster indicator
-log_dm_step_gam_table_empty_init_full <- 
-  step_gam('log(H2S_daily_max)', predictors_full, c(), 'stepwise', daily_full)
-log_dm_step_gam_table_full_init_full <- 
-  step_gam('log(H2S_daily_max)', predictors_full, predictors_full, 'stepwise', daily_full)
 ```
 
 ### Save step tables
@@ -711,6 +745,7 @@ names(meta) <- c('stat', 'init', 'date')
 model_features_table <- cbind(meta, model_features_table)
 
 saveRDS(model_features_table, 'step_gam_tables/model_features_table.rds')
+model_features_table <- readRDS('step_gam_tables/model_features_table.rds')
 ```
 
 ## Final models
@@ -786,19 +821,15 @@ plot(h2s_da_model_excl_dis)
 #### Everything w Disaster Indicator	
 ```{r}
 # Disaster indicator
-h2s_da_model_dis_ind <- gam(H2S_daily_avg~s(as.numeric(month),bs='cc') + year + weekday +
-                         wd_avg + ws_avg + daily_downwind_ref + closest_wrp_capacity +
-                          I(1/dist_wrp^2) + I(1/dist_ref^2) + 
-                         s(I(mon_utm_x/10^3), I(mon_utm_y/10^3), bs='tp', k = 10) + 
-                        te(I(mon_utm_x/10^3), I(mon_utm_y/10^3),as.numeric(day),
-                           k=c(10,10),d=c(2,1),bs=c('tp','cc')) +
-                         monthly_oil_2km + monthly_gas_2km + active_2km + inactive_2km + 
-                        daily_downwind_wrp + elevation + EVI + num_odor_complaints +
-                        I(1/dist_dc^2) + daily_temp + daily_hum + daily_precip + disaster, 
-                      data = daily_full %>% mutate(disaster = if_else(year == '2021', 
-                                                                      month %in% c('10', '11', '12'), 1, 0)))
+h2s_da_model_dis_ind <- get_gam_model('H2S_daily_avg', 'da',
+                                           'dis_ind',
+                                           data_dis_ind)
 summary(h2s_da_model_dis_ind)
-plot(h2s_da_model_dis_ind)
+
+log_h2s_da_model_dis_ind <- get_gam_model('log(H2S_daily_avg)', 'log_da',
+                                           'dis_ind',
+                                           data_dis_ind)
+summary(log_h2s_da_model_dis_ind)
 ```
 
 #### Everything w.o Disaster Indicator	
