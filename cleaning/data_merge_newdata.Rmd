@@ -20,6 +20,7 @@ library(lwgeom)
 library(circular)
 library(raster)
 library(units)
+library(lubridate)
 select <- dplyr::select
 ```
 
@@ -47,12 +48,12 @@ gc()
 
 ```{r}
 # check duplicate date/site pairs
-full_data %>% 
-  select(`Date/Time`, Monitor, DST) %>%
-  group_by(`Date/Time`, Monitor, DST) %>%
-  summarise(n = n()) %>%
-  filter(n > 2) %>%
-  nrow()
+# full_data %>% 
+#   select(`Date/Time`, Monitor, DST) %>%
+#   group_by(`Date/Time`, Monitor, DST) %>%
+#   summarise(n = n()) %>%
+#   filter(n > 2) %>%
+#   nrow()
 ```
 
 ```{r}
@@ -85,17 +86,51 @@ full_data <- full_data %>%
 # saveRDS(full_data, '../data/weather/site_data_for_weather.rds')
 ```
 
+```{r}
+# add one hour to date/time where DST is true
+full_data <- full_data %>%
+  mutate(`Date/Time` = if_else(DST == TRUE, `Date/Time` + hours(1), `Date/Time`))
+```
+
+```{r}
+# check for duplicate time for each monitor
+# full_data %>% 
+#   select(`Date/Time`, Monitor) %>%
+#   group_by(`Date/Time`, Monitor) %>%
+#   summarise(n = n()) %>%
+#   filter(n > 2) %>%
+#   nrow()
+```
+
+
 # Add meteorological data
 ```{r}
 # load in daily weather data
 monitor_daily_weather <- readRDS('../data/weather/monitor_daily_weather.rds')
-# monitor_hourly_weather <- readRDS('../data/weather/monitor_daily_weather.rds')
+monitor_hourly_weather <- readRDS('../data/weather/monitor_hourly_weather.rds')
 ```
 
 ```{r}
-# Merge with full_data using day and Monitor as keys
+# Merge with full_data using day and Monitor as keys for daily data
+# prepare daily weather
+monitor_daily_weather <- monitor_daily_weather %>% 
+  mutate(day = as.POSIXct(day, format="%Y-%m-%d", tz = 'America/Los_Angeles')) %>% 
+  select(day, Monitor, daily_temp, daily_hum, daily_precip, daily_ws, daily_wd)
+
 full_data <- full_data %>%
-  left_join(monitor_daily_weather %>% mutate(day = as.POSIXct(day, format="%Y-%m-%d", tz = 'America/Los_Angeles')), join_by(Monitor, day))
+  left_join(monitor_daily_weather, join_by(Monitor, day))
+```
+
+```{r}
+# same for hourly data
+# first prepare hourly weather data
+monitor_hourly_weather <- monitor_hourly_weather %>% 
+  mutate(`Date/Time` = as.POSIXct(hourly, format = "%Y-%m-%dT%H:%M", tz = 'America/Los_Angeles')) %>%
+  mutate(dayhour = format(`Date/Time`, "%Y-%m-%d %H"))  %>% 
+  select(dayhour, Monitor, hourly_temp, hourly_hum, hourly_precip, hourly_ws, hourly_wd)
+
+full_data <- full_data %>%
+  left_join(monitor_hourly_weather, join_by(Monitor, dayhour), keep = FALSE)
 ```
 
 ```{r}
@@ -287,26 +322,6 @@ What's the difference between Date/Time and Date/Time.First? The latter is prese
 For missing H2S, it could be missing due to mismatch from merging, or flagged due to issues such as low detection (minimm detection limit: 0.4)
 
 # Any additional cleaning
-```{r}
-# For Judson, it appeared that longitude had some significant figure issues
-full_data <- full_data %>%
-  mutate(longitude = case_when(Monitor == 'Judson' ~ -118.268128,
-                               Monitor == 'West HS' ~ -118.36836539131416,
-                               Monitor == 'Elm Ave' ~ -118.3316298600153,
-                               Monitor == 'North HS' ~ -118.33660803949037,
-                               Monitor == 'G Street' ~ -118.2818168,
-                               Monitor == 'Guenser Park' ~ -118.313499,
-                               Monitor == 'Harbor Park' ~ -118.286028,
-                               .default = longitude),
-         latitude = case_when(Monitor == 'West HS' ~ 33.85032033929173, 
-                               Monitor == 'Elm Ave' ~ 33.84048285612423,
-                               Monitor == 'North HS' ~ 33.86785391284254, 
-                               Monitor == 'G Street' ~ 33.77785794,
-                               Monitor == 'Guenser Park' ~ 33.869231,
-                               Monitor == 'Harbor Park' ~ 33.786252,
-                               .default = latitude))
-```
-
 ```{r}
 # For observations below MDL, set it to half of MDL
 # As confirmed, MDL for all monitors is 0.4
@@ -503,7 +518,8 @@ CRS_UTM <- CRS("+proj=utm +zone=11 ellps=WGS84")
 
 monitors <- monitors %>%
   mutate(mon_utm_x = st_coordinates(.)[,1],
-         mon_utm_y = st_coordinates(.)[,2])
+         mon_utm_y = st_coordinates(.)[,2]) %>%
+  st_drop_geometry
                    
 
 full_data <- full_data %>%
@@ -575,13 +591,13 @@ daily_full$daily_downwind_wrp <- as.integer(wind_diff <= 15)
 # Get monitor locations
 ```{r}
 monitors_coord <- full_data %>%
-  select(Monitor, latitude, longitude) %>%
+  select(Monitor, lat, lon) %>%
   distinct()
 
 monitors <- monitors_coord %>%
   select(Monitor)
   
-coordinates(monitors_coord) <- ~ longitude + latitude
+coordinates(monitors_coord) <- ~ lon + lat
 ```
 
 # Load in elevation data
@@ -724,8 +740,11 @@ saveRDS(daily_full, '../data/daily_full_20230930.rds')
 
 ```{r}
 remove(la_county, la_county_present, la_county_trans, monitor_odor, monitor_zip,
-       monitor_zip_graph, monitors, monitor_coord, odor, odor_graph, odor_graph_b,
-       pnts_sf, pnts_trans, elevation, evi)
+       monitor_zip_graph, monitors, monitors_coord, odor, odor_graph, odor_graph_b,
+       pnts_sf, pnts_trans, elevation, evi, active_well_info, active_well_location,
+       full_well_info, inactive_well_info, monitor_daily_weather, monitor_hourly_weather,
+       monitor_inactive_wells, monitor_well_api, monitor_well_prod, site_geo_metadata,
+       well_prod, monitor_active_wells)
 gc()
 ```
 
