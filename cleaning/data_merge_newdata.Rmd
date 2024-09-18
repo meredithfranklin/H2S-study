@@ -308,11 +308,11 @@ It also appears that some times we get different measurements for the same time 
 
 
 ```{r}
-glimpse(full_data)
+#glimpse(full_data)
 ```
 
 ```{r}
-summary(full_data)
+#summary(full_data)
 ```
 Some concerns for the data include:
 For TorranceAir_H2SWind, there are actually three sites, but only one site contains ws/wd information
@@ -557,36 +557,36 @@ wind_diff <- ifelse(wind_diff > 180, 360 - wind_diff, wind_diff)
 daily_full$daily_downwind_wrp <- as.integer(wind_diff <= 15)
 ```
 
-<!-- ```{r} -->
-<!-- # Compute hourly data -->
-<!-- hourly_full <- full_data %>% -->
-<!--   select(H2S_hourly_max, H2S_hourly_avg, `Wind Speed`, `Wind Direction`, -->
-<!--          lat, lon, mon_utm_x, mon_utm_y, Monitor, dist_ref,  -->
-<!--          angle_ref, closest_ref, year, month, day, weekday,dayhour,  -->
-<!--          active_2km, monthly_oil_2km, monthly_gas_2km, inactive_2km, -->
-<!--          dist_wrp, closest_wrp_capacity, angle_wrp, dist_dc, -->
-<!--          hourly_temp, hourly_precip) %>% -->
-<!--   group_by(Monitor, dayhour) %>% -->
-<!--   mutate(ws_avg = mean(`Wind Speed`, na.rm=TRUE), -->
-<!--          wd_avg = as.numeric(mean(circular(`Wind Direction`, units = 'degrees'), na.rm=TRUE))) %>% -->
-<!--   mutate(wd_avg = if_else(wd_avg < 0, wd_avg+360, wd_avg)) %>% -->
-<!--   ungroup() %>% -->
-<!--   rename(monitor_lat = lat, monitor_lon = lon)  %>% -->
-<!--   select(-c(`Wind Speed`, `Wind Direction`)) %>% -->
-<!--   distinct() -->
-<!-- ``` -->
+```{r}
+# Compute hourly data
+hourly_full <- full_data %>%
+  select(H2S_hourly_max, H2S_hourly_avg, `Wind Speed`, `Wind Direction`,
+         lat, lon, mon_utm_x, mon_utm_y, Monitor, dist_ref,
+         angle_ref, closest_ref, year, month, day, weekday, dayhour,
+         active_2km, monthly_oil_2km, monthly_gas_2km, inactive_2km,
+         dist_wrp, closest_wrp_capacity, angle_wrp, dist_dc,
+         hourly_temp, hourly_precip, hourly_hum) %>%
+  group_by(Monitor, dayhour) %>%
+  mutate(ws_avg = mean(`Wind Speed`, na.rm=TRUE),
+         wd_avg = as.numeric(mean(circular(`Wind Direction`, units = 'degrees'), na.rm=TRUE))) %>%
+  mutate(wd_avg = if_else(wd_avg < 0, wd_avg+360, wd_avg)) %>%
+  ungroup() %>%
+  rename(monitor_lat = lat, monitor_lon = lon)  %>%
+  select(-c(`Wind Speed`, `Wind Direction`)) %>%
+  distinct()
+```
 
-<!-- ```{r} -->
-<!-- # Get the downwind indicators for hourly data -->
-<!-- wind_diff <- abs(hourly_full$angle_ref - 180 - hourly_full$wd_avg) -->
-<!-- wind_diff <- ifelse(wind_diff > 180, 360 - wind_diff, wind_diff) -->
-<!-- hourly_full$hourly_downwind_ref <- as.integer(wind_diff <= 15) -->
+```{r}
+# Get the downwind indicators for hourly data
+wind_diff <- abs(hourly_full$angle_ref - 180 - hourly_full$wd_avg)
+wind_diff <- ifelse(wind_diff > 180, 360 - wind_diff, wind_diff)
+hourly_full$hourly_downwind_ref <- as.integer(wind_diff <= 15)
 
-<!-- wind_diff <- abs(hourly_full$angle_wrp - hourly_full$wd_avg) -->
-<!-- wind_diff <- ifelse(wind_diff > 180, 360 - wind_diff, wind_diff) -->
+wind_diff <- abs(hourly_full$angle_wrp - hourly_full$wd_avg)
+wind_diff <- ifelse(wind_diff > 180, 360 - wind_diff, wind_diff)
 
-<!-- hourly_full$hourly_downwind_wrp <- as.integer(wind_diff <= 15) -->
-<!-- ``` -->
+hourly_full$hourly_downwind_wrp <- as.integer(wind_diff <= 15)
+```
 
 # Get monitor locations
 ```{r}
@@ -621,6 +621,9 @@ monitors <- cbind(monitors, extract(evi, monitors_coord) * 0.0001) %>%
 # Merge EVI and elevation to data
 ```{r}
 full_data <- full_data %>%
+  left_join(monitors, join_by(Monitor))
+
+hourly_full <- hourly_full %>%
   left_join(monitors, join_by(Monitor))
 
 daily_full <- daily_full %>%
@@ -681,6 +684,9 @@ monitor_odor <- monitors_coord@data %>%
 full_data <- full_data %>%
   left_join(monitors_coord@data, join_by(Monitor))
 
+hourly_full <- hourly_full %>%
+  left_join(monitors_coord@data, join_by(Monitor))
+
 daily_full <- daily_full %>%
   left_join(monitors_coord@data, join_by(Monitor))
 
@@ -688,6 +694,12 @@ full_data <- full_data %>%
   left_join(monitor_odor %>% select(Monitor, date, num_odor_complaints), join_by(Monitor, day == date))
 
 full_data <- full_data %>%
+  mutate(num_odor_complaints = coalesce(num_odor_complaints, 0))
+
+hourly_full <- hourly_full %>%
+  left_join(monitor_odor %>% select(Monitor, date, num_odor_complaints), join_by(Monitor, day == date))
+
+hourly_full <- hourly_full %>%
   mutate(num_odor_complaints = coalesce(num_odor_complaints, 0))
 
 daily_full <- daily_full %>%
@@ -729,12 +741,16 @@ ggplotly(odor_graph_b) %>% layout(dragmode = 'pan')
 full_data <- full_data %>%
   filter(day < '2023-10-01')
 
+hourly_full <- hourly_full %>%
+  filter(day < '2023-10-01')
+
 daily_full <- daily_full %>%
   filter(day < '2023-10-01')
 ```
 
 ```{r}
 saveRDS(full_data, '../data/full_data_20230930.rds')
+saveRDS(hourly_full, '../data/hourly_full_20230930.rds')
 saveRDS(daily_full, '../data/daily_full_20230930.rds')
 ```
 

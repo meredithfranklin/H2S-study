@@ -1,0 +1,2 @@
+load("/Users/jerrywu/Documents/PhD/Research/Carson-H2S/H2S-study/modeling/gam_models/ da_dis_gam.rds")
+load("/Users/jerrywu/Documents/PhD/Research/Carson-H2S/H2S-study/modeling/gam_models/ da_dis_ind_gam.rds")
