@@ -5473,11 +5473,20 @@ xgb_result
 ```{r}
 base_validation_result <- validation_result %>%
   mutate(transformation = if_else(str_detect(model_response_name, 'log_'), 'Log', '')) %>%
-  filter(transformation == '')
+  filter(transformation == '') %>%
+  mutate(response_base = case_when(str_detect(model_response_name, 'da') ~ 'Daily Avg',
+                                   str_detect(model_response_name, 'dm') ~ 'Daily Max',
+                                   str_detect(model_response_name, 'ha') ~ 'Hourly Avg',
+                                   str_detect(model_response_name, 'hm') ~ 'Hourly Max')) %>%
+  arrange(factor(Model, levels = unique(validation_result$Model)))
 
 log_validation_result <- validation_result %>%
   mutate(transformation = if_else(str_detect(model_response_name, 'log_'), 'Log', '')) %>%
-  filter(transformation == 'Log')
+  filter(transformation == 'Log') %>%
+  mutate(response_base = case_when(str_detect(model_response_name, 'da') ~ 'Daily Avg',
+                                   str_detect(model_response_name, 'dm') ~ 'Daily Max',
+                                   str_detect(model_response_name, 'ha') ~ 'Hourly Avg',
+                                   str_detect(model_response_name, 'hm') ~ 'Hourly Max'))
 
 base_xgb_result <- xgb_result %>%
   mutate(transformation = if_else(str_detect(model_response_name, 'log_'), 'Log', '')) %>%
@@ -5497,6 +5506,26 @@ log_xgb_result <- xgb_result %>%
                                    str_detect(model_response_name, 'hm') ~ 'Hourly Max')) %>%
   select(-transformation, -`Train BT R-Sq`, -`Train BT RMSE`)
 ```
+
+```{r}
+# This is the result from regressing the observed on predicted
+options(knitr.kable.NA = '')
+validation_result_table <- base_validation_result %>% 
+  left_join(log_validation_result, join_by(Model, response_base)) %>%
+  select(all_of(c('response_base', 'Coef.x', 'R-Sq.x', 'Normal RMSE.x', 
+                  'Disaster RMSE.x', 'Coef.y', 'R-Sq.y', 'Normal RMSE.y', 
+                  'Disaster RMSE.y'))) %>%
+  setNames(c('Response', 'Coef', 'R2', 'Normal RMSE', 'Disaster RMSE', 
+             'Coef', 'R2', 'Normal RMSE', 'Disaster RMSE'))
+
+validation_result_table %>%
+  knitr::kable(format = 'pipe', digits = 3, table.attr = "style='width:100%;'") %>%
+  pack_rows(index = c("Since Feb 2022" = 4, "Disaster Only" = 4, 
+                      "Exclude Disaster" = 4, "Everything w D.I" = 4, "Everything w.o D.I" = 4)) %>%
+  add_header_above(c(' ' = 1, 'No Transformation' = 4, 'Log-Transformation' = 4)) %>%
+  kable_styling()
+```
+
 
 ```{r}
 full_result_table_fordisp <- base_table %>%
@@ -5521,7 +5550,7 @@ full_result_table_kable <- full_result_table_fordisp %>%
 writeLines(gam_result_table_kable, '../figures/gam_result_table.tex')
 
 full_result_table_fordisp %>%
-  knitr::kable(format = 'pipe', digits = 2, table.attr = "style='width:100%;'") %>%
+  knitr::kable(format = 'pipe', digits = 4, table.attr = "style='width:100%;'") %>%
   pack_rows(index = c("Since Feb 2022" = 4, "Disaster Only" = 4, 
                       "Exclude Disaster" = 4, "Everything w D.I" = 4, "Everything w.o D.I" = 4)) %>%
   add_header_above(c(' ' = 7, 'Train' = 2, 'Test' = 2, 'Train' = 2, 'Test' = 4)) %>%

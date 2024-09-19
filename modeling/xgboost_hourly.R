@@ -7,7 +7,7 @@ library(tidyr)
 library(dplyr)
 library(caret)
 library(fastDummies)
-library(doParallel)
+# library(doParallel)
 
 select <- dplyr::select
 
@@ -138,7 +138,8 @@ control_everything <- trainControl(method="cv",
                                    verboseIter=TRUE, 
                                    search='grid',
                                    savePredictions = 'final',
-                                   allowParallel = TRUE)
+                                   #allowParallel = TRUE
+                                   )
 
 fit.xgb_ha_dis_ind <- train(H2S_hourly_avg~.,
                                  method = 'xgbTree',
@@ -344,7 +345,7 @@ fit.xgb_hm_full <- train(H2S_hourly_max~.,
 saveRDS(fit.xgb_hm_full, 'fit.xgb_hm_full.rds')
 gc();rm(fit.xgb_hm_full)
 
-# Log H2S hourly average
+# Log H2S hourly max
 # Since Feb 2022
 train <- since_feb2022 %>% 
   mutate(H2S_hourly_max = log(H2S_hourly_max))
