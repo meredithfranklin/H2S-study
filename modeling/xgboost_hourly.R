@@ -2,30 +2,40 @@
 # 2024-09-15
 
 library(tidyverse)
+library(stringr)
+library(tidyr)
+library(dplyr)
 library(caret)
 library(fastDummies)
+library(doParallel)
+
 select <- dplyr::select
 
-hourly_full <- readRDS('../data/full_data_20230930.rds')
+#n_cores <- detectCores(); n_cores
+#registerDoParallel(cores = 8)
 
-hourly_full <- hourly_full %>%
+hourly_full_raw <- readRDS('hourly_full_20230930.rds')
+
+hourly_full <- hourly_full_raw %>%
   mutate(Monitor = str_replace_all(Monitor, ' ', '_'),
          weekday = weekday,
-         downwind_ref = as.integer(downwind_ref),
-         downwind_wrp = as.integer(downwind_wrp),
+         hourly_downwind_ref = as.integer(hourly_downwind_ref),
+         hourly_downwind_wrp = as.integer(hourly_downwind_wrp),
          dist_ref = 1/(dist_ref^2),
          dist_wrp = 1/(dist_wrp^2),
-         dist_dc = 1/(dist_dc^2))
+         dist_dc = 1/(dist_dc^2)) %>%
+  filter(!is.na(H2S_hourly_avg))
 
-predictors <- c('month', 'year', 'weekday', 'Wind Direction', 'Wind Speed', 
-                'downwind_ref', 'dist_wrp', 'dist_ref',
+predictors <- c('month', 'year', 'weekday', 'wd_avg', 'ws_avg', 
+                'hourly_downwind_ref', 'dist_wrp', 'dist_ref',
                 'mon_utm_x', 'mon_utm_y', 'monthly_oil_2km', 'monthly_gas_2km', 
-                'active_2km', 'inactive_2km', 'downwind_wrp', 'elevation', 'EVI', 'num_odor_complaints',
+                'active_2km', 'inactive_2km', 'hourly_downwind_wrp', 'elevation', 'EVI', 'num_odor_complaints',
                 'dist_dc', 'closest_wrp_capacity', 'hourly_temp', 'hourly_hum', 'hourly_precip') 
 
+############### Hourly Avg ####################
 since_feb2022 <- hourly_full %>% 
   filter(day >= '2022-01-31') %>%
-  select(all_of(c('H2S', predictors))) %>% 
+  select(all_of(c('H2S_hourly_avg', predictors))) %>% 
   filter(complete.cases(.))
 
 train <- since_feb2022
@@ -33,7 +43,7 @@ train <- since_feb2022
 train <- fastDummies::dummy_cols(train,
                                  remove_selected_columns = TRUE)
 
-tune_grid <- expand.grid(nrounds = c(20, 50),
+tune_grid <- expand.grid(nrounds = c(50, 100),
                          max_depth = c(3, 4),
                          eta = c(0.2, 0.4),
                          gamma = c(0.01, 0.001),
@@ -46,20 +56,23 @@ control <- trainControl(method="cv",
                         number=10,
                         verboseIter=TRUE, 
                         search='grid',
-                        savePredictions = 'final')
+                        savePredictions = 'final',
+                        #allowParallel = TRUE
+                        )
 
-fit.xgb_da <- train(H2S~.,
+fit.xgb_ha <- train(H2S_hourly_avg~.,
                     method = 'xgbTree',
                     data = train,
                     trControl=control,
                     tuneGrid = tune_grid,
                     tuneLength = 10, importance=TRUE, verbosity = 0, verbose=FALSE)
-saveRDS(fit.xgb_da, 'fit.xgb_hourly_sincefeb2022.rds')
+saveRDS(fit.xgb_ha, 'fit.xgb_ha_sincefeb2022.rds')
+gc();rm(fit.xgb_ha)
 
 # Disaster Only
 disaster <- hourly_full %>% 
   filter(year == '2021', month %in% c('10', '11', '12')) %>% 
-  select(c('H2S', predictors)) %>% 
+  select(c('H2S_hourly_avg', predictors)) %>% 
   filter(complete.cases(.))
 
 train <- disaster
@@ -67,18 +80,19 @@ train <- disaster
 train <- fastDummies::dummy_cols(train,
                                  remove_selected_columns = TRUE)
 
-fit.xgb_da_dis <- train(H2S~.,
+fit.xgb_ha_dis <- train(H2S_hourly_avg~.,
                         method = 'xgbTree',
                         data = train,
                         trControl=control,
                         tuneGrid = tune_grid,
                         tuneLength = 10, importance=TRUE, verbosity = 0, verbose=FALSE)
-saveRDS(fit.xgb_da_dis, 'fit.xgb_hourly_dis.rds')
+saveRDS(fit.xgb_ha_dis, 'fit.xgb_ha_dis.rds')
+gc();rm(fit.xgb_ha_dis)
 
 # Exclude Disaster
 excl_disaster <- hourly_full %>% 
   filter(!(year == '2021' & month %in% c('10', '11', '12'))) %>% 
-  select(c('H2S', predictors)) %>% 
+  select(c('H2S_hourly_avg', predictors)) %>% 
   filter(complete.cases(.))
 
 train <- excl_disaster
@@ -86,18 +100,19 @@ train <- excl_disaster
 train <- fastDummies::dummy_cols(train,
                                  remove_selected_columns = TRUE)
 
-fit.xgb_da_excl_dis <- train(H2S~.,
+fit.xgb_ha_excl_dis <- train(H2S_hourly_avg~.,
                              method = 'xgbTree',
                              data = train,
                              trControl=control,
                              tuneGrid = tune_grid,
                              tuneLength = 10, importance=TRUE, verbosity = 0, verbose=FALSE)
-saveRDS(fit.xgb_da_excl_dis, 'fit.xgb_hourly_excl_dis.rds')
 
+saveRDS(fit.xgb_ha_excl_dis, 'fit.xgb_ha_excl_dis.rds')
+gc();rm(fit.xgb_ha_excl_dis)
 
 # Everything w. Disaster Indicator
 everything <- hourly_full %>%
-  select(c('H2S', predictors)) %>%
+  select(c('H2S_hourly_avg', predictors)) %>%
   mutate(disaster = if_else(year == '2021' & month %in% c('10', '11', '12'), 1, 0)) %>%
   filter(complete.cases(.))
 
@@ -122,15 +137,17 @@ control_everything <- trainControl(method="cv",
                                    indexOut = folds,
                                    verboseIter=TRUE, 
                                    search='grid',
-                                   savePredictions = 'final')
+                                   savePredictions = 'final',
+                                   allowParallel = TRUE)
 
-fit.xgb_da_full_dis_ind <- train(H2S~.,
+fit.xgb_ha_dis_ind <- train(H2S_hourly_avg~.,
                                  method = 'xgbTree',
                                  data = train,
                                  trControl=control_everything,
                                  tuneGrid = tune_grid,
                                  tuneLength = 10, importance=TRUE, verbosity = 0, verbose=FALSE)
-saveRDS(fit.xgb_da_full_dis_ind, 'fit.xgb_hourly_dis_ind.rds')
+saveRDS(fit.xgb_ha_dis_ind, 'fit.xgb_ha_dis_ind.rds')
+gc();rm(fit.xgb_ha_dis_ind)
 
 # Everything w.o Disaster Indicator
 train <- everything %>% 
@@ -139,87 +156,272 @@ train <- everything %>%
 train <- fastDummies::dummy_cols(train,
                                  remove_selected_columns = TRUE)
 
-fit.xgb_da_full <- train(H2S~.,
+fit.xgb_ha_full <- train(H2S_hourly_avg~.,
                          method = 'xgbTree',
                          data = train,
                          trControl=control_everything,
                          tuneGrid = tune_grid,
                          tuneLength = 10, importance=TRUE, verbosity = 0, verbose=FALSE)
-saveRDS(fit.xgb_da_full, 'fit.xgb_hourly_full.rds')
+saveRDS(fit.xgb_ha_full, 'fit.xgb_ha_full.rds')
+gc();rm(fit.xgb_ha_full)
 
-# Log H2S average
+# Log H2S hourly average
 # Since Feb 2022
 train <- since_feb2022 %>% 
-  mutate(H2S = log(H2S))
+  mutate(H2S_hourly_avg = log(H2S_hourly_avg))
 
 train <- fastDummies::dummy_cols(train,
                                  remove_selected_columns = TRUE)
 
-fit.xgb_da_log_h2s_sincefeb2022 <- train(H2S~.,
+fit.xgb_log_ha_sincefeb2022 <- train(H2S_hourly_avg~.,
                                          method = 'xgbTree',
                                          data = train,
                                          trControl=control,
                                          tuneGrid = tune_grid,
                                          tuneLength = 10, importance=TRUE, verbosity = 0, verbose=FALSE)
-saveRDS(fit.xgb_da_log_h2s_sincefeb2022, 'fit.xgb_hourly_log_h2s_sincefeb2022.rds')
+saveRDS(fit.xgb_log_ha_sincefeb2022, 'fit.xgb_log_ha_sincefeb2022.rds')
+gc();rm(fit.xgb_log_ha_sincefeb2022)
 
 # Disaster Only
 train <- disaster %>% 
-  mutate(H2S = log(H2S))
+  mutate(H2S_hourly_avg = log(H2S_hourly_avg))
 
 train <- fastDummies::dummy_cols(train,
                                  remove_selected_columns = TRUE)
 
-fit.xgb_da_log_h2s_dis <- train(H2S~.,
+fit.xgb_log_ha_dis <- train(H2S_hourly_avg~.,
                                 method = 'xgbTree',
                                 data = train,
                                 trControl=control,
                                 tuneGrid = tune_grid,
                                 tuneLength = 10, importance=TRUE, verbosity = 0, verbose=FALSE)
-saveRDS(fit.xgb_da_log_h2s_dis, 'fit.xgb_hourly_log_h2s_dis.rds')
+saveRDS(fit.xgb_log_ha_dis, 'fit.xgb_log_ha_dis.rds')
+gc();rm(fit.xgb_log_ha_dis)
 
 # Exclude Disaster
 train <- excl_disaster %>% 
-  mutate(H2S = log(H2S))
+  mutate(H2S_hourly_avg = log(H2S_hourly_avg))
 
 train <- fastDummies::dummy_cols(train,
                                  remove_selected_columns = TRUE)
 
-fit.xgb_da_log_h2s_excl_dis <- train(H2S~.,
+fit.xgb_log_ha_excl_dis <- train(H2S_hourly_avg~.,
                                      method = 'xgbTree',
                                      data = train,
                                      trControl=control,
                                      tuneGrid = tune_grid,
                                      tuneLength = 10, importance=TRUE, verbosity = 0, verbose=FALSE)
-saveRDS(fit.xgb_da_log_h2s_excl_dis, 'fit.xgb_hourly_log_h2s_excl_dis.rds')
+saveRDS(fit.xgb_log_ha_excl_dis, 'fit.xgb_log_ha_excl_dis.rds')
+gc();rm(fit.xgb_log_ha_excl_dis)
 
 # Everything w. Disaster Indicator
 train <- everything %>%
-  mutate(H2S = log(H2S))
+  mutate(H2S_hourly_avg = log(H2S_hourly_avg))
 
 train <- fastDummies::dummy_cols(train,
                                  remove_selected_columns = TRUE)
 
-fit.xgb_da_log_h2s_dis_ind <- train(H2S~.,
+fit.xgb_log_ha_dis_ind <- train(H2S_hourly_avg~.,
                                     method = 'xgbTree',
                                     data = train,
                                     trControl=control_everything,
                                     tuneGrid = tune_grid,
                                     tuneLength = 10, importance=TRUE, verbosity = 0, verbose=FALSE)
-saveRDS(fit.xgb_da_log_h2s_dis_ind, 'fit.xgb_hourly_log_h2s_dis_ind.rds')
+saveRDS(fit.xgb_log_ha_dis_ind, 'fit.xgb_log_ha_dis_ind.rds')
+gc();rm(fit.xgb_log_ha_dis_ind)
 
 # Everything w.o Disaster Indicator
 train <- everything %>% 
   select(-disaster) %>%
-  mutate(H2S = log(H2S))
+  mutate(H2S_hourly_avg = log(H2S_hourly_avg))
 
 train <- fastDummies::dummy_cols(train,
                                  remove_selected_columns = TRUE)
 
-fit.xgb_da_log_h2s_full <- train(H2S~.,
+fit.xgb_log_ha_full <- train(H2S_hourly_avg~.,
                                  method = 'xgbTree',
                                  data = train,
                                  trControl=control_everything,
                                  tuneGrid = tune_grid,
                                  tuneLength = 10, importance=TRUE, verbosity = 0, verbose=FALSE)
-saveRDS(fit.xgb_da_log_h2s_full, 'fit.xgb_hourly_log_h2s_full.rds')
+saveRDS(fit.xgb_log_ha_full, 'fit.xgb_log_ha_full.rds')
+gc();rm(fit.xgb_log_ha_full)
+
+############### Hourly Max ####################
+since_feb2022 <- hourly_full %>% 
+  filter(day >= '2022-01-31') %>%
+  select(all_of(c('H2S_hourly_max', predictors))) %>% 
+  filter(complete.cases(.))
+
+train <- since_feb2022
+
+train <- fastDummies::dummy_cols(train,
+                                 remove_selected_columns = TRUE)
+
+fit.xgb_hm_sincefeb2022 <- train(H2S_hourly_max~.,
+                    method = 'xgbTree',
+                    data = train,
+                    trControl=control,
+                    tuneGrid = tune_grid,
+                    tuneLength = 10, importance=TRUE, verbosity = 0, verbose=FALSE)
+saveRDS(fit.xgb_hm_sincefeb2022, 'fit.xgb_hm_sincefeb2022.rds')
+gc();rm(fit.xgb_hm_sincefeb2022)
+
+# Disaster Only
+disaster <- hourly_full %>% 
+  filter(year == '2021', month %in% c('10', '11', '12')) %>% 
+  select(c('H2S_hourly_max', predictors)) %>% 
+  filter(complete.cases(.))
+
+train <- disaster
+
+train <- fastDummies::dummy_cols(train,
+                                 remove_selected_columns = TRUE)
+
+fit.xgb_hm_dis <- train(H2S_hourly_max~.,
+                        method = 'xgbTree',
+                        data = train,
+                        trControl=control,
+                        tuneGrid = tune_grid,
+                        tuneLength = 10, importance=TRUE, verbosity = 0, verbose=FALSE)
+saveRDS(fit.xgb_hm_dis, 'fit.xgb_hm_dis.rds')
+gc();rm(fit.xgb_hm_dis)
+
+# Exclude Disaster
+excl_disaster <- hourly_full %>% 
+  filter(!(year == '2021' & month %in% c('10', '11', '12'))) %>% 
+  select(c('H2S_hourly_max', predictors)) %>% 
+  filter(complete.cases(.))
+
+train <- excl_disaster
+
+train <- fastDummies::dummy_cols(train,
+                                 remove_selected_columns = TRUE)
+
+fit.xgb_hm_excl_dis <- train(H2S_hourly_max~.,
+                             method = 'xgbTree',
+                             data = train,
+                             trControl=control,
+                             tuneGrid = tune_grid,
+                             tuneLength = 10, importance=TRUE, verbosity = 0, verbose=FALSE)
+
+saveRDS(fit.xgb_hm_excl_dis, 'fit.xgb_hm_excl_dis.rds')
+gc();rm(fit.xgb_hm_excl_dis)
+
+# Everything w. Disaster Indicator
+everything <- hourly_full %>%
+  select(c('H2S_hourly_max', predictors)) %>%
+  mutate(disaster = if_else(year == '2021' & month %in% c('10', '11', '12'), 1, 0)) %>%
+  filter(complete.cases(.))
+
+train <- everything
+
+train <- fastDummies::dummy_cols(train,
+                                 remove_selected_columns = TRUE)
+
+fit.xgb_hm_dis_ind <- train(H2S_hourly_max~.,
+                                 method = 'xgbTree',
+                                 data = train,
+                                 trControl=control_everything,
+                                 tuneGrid = tune_grid,
+                                 tuneLength = 10, importance=TRUE, verbosity = 0, verbose=FALSE)
+saveRDS(fit.xgb_hm_dis_ind, 'fit.xgb_hm_dis_ind.rds')
+gc();rm(fit.xgb_hm_dis_ind)
+
+# Everything w.o Disaster Indicator
+train <- everything %>% 
+  select(-disaster)
+
+train <- fastDummies::dummy_cols(train,
+                                 remove_selected_columns = TRUE)
+
+fit.xgb_hm_full <- train(H2S_hourly_max~.,
+                         method = 'xgbTree',
+                         data = train,
+                         trControl=control_everything,
+                         tuneGrid = tune_grid,
+                         tuneLength = 10, importance=TRUE, verbosity = 0, verbose=FALSE)
+saveRDS(fit.xgb_hm_full, 'fit.xgb_hm_full.rds')
+gc();rm(fit.xgb_hm_full)
+
+# Log H2S hourly average
+# Since Feb 2022
+train <- since_feb2022 %>% 
+  mutate(H2S_hourly_max = log(H2S_hourly_max))
+
+train <- fastDummies::dummy_cols(train,
+                                 remove_selected_columns = TRUE)
+
+fit.xgb_log_hm_sincefeb2022 <- train(H2S_hourly_max~.,
+                                         method = 'xgbTree',
+                                         data = train,
+                                         trControl=control,
+                                         tuneGrid = tune_grid,
+                                         tuneLength = 10, importance=TRUE, verbosity = 0, verbose=FALSE)
+saveRDS(fit.xgb_log_hm_sincefeb2022, 'fit.xgb_log_hm_sincefeb2022.rds')
+gc();rm(fit.xgb_log_hm_sincefeb2022)
+
+# Disaster Only
+train <- disaster %>% 
+  mutate(H2S_hourly_max = log(H2S_hourly_max))
+
+train <- fastDummies::dummy_cols(train,
+                                 remove_selected_columns = TRUE)
+
+fit.xgb_log_hm_dis <- train(H2S_hourly_max~.,
+                                method = 'xgbTree',
+                                data = train,
+                                trControl=control,
+                                tuneGrid = tune_grid,
+                                tuneLength = 10, importance=TRUE, verbosity = 0, verbose=FALSE)
+saveRDS(fit.xgb_log_hm_dis, 'fit.xgb_log_hm_dis.rds')
+gc();rm(fit.xgb_log_hm_dis)
+
+# Exclude Disaster
+train <- excl_disaster %>% 
+  mutate(H2S_hourly_max = log(H2S_hourly_max))
+
+train <- fastDummies::dummy_cols(train,
+                                 remove_selected_columns = TRUE)
+
+fit.xgb_log_hm_excl_dis <- train(H2S_hourly_max~.,
+                                     method = 'xgbTree',
+                                     data = train,
+                                     trControl=control,
+                                     tuneGrid = tune_grid,
+                                     tuneLength = 10, importance=TRUE, verbosity = 0, verbose=FALSE)
+saveRDS(fit.xgb_log_hm_excl_dis, 'fit.xgb_log_hm_excl_dis.rds')
+gc();rm(fit.xgb_log_hm_excl_dis)
+
+# Everything w. Disaster Indicator
+train <- everything %>%
+  mutate(H2S_hourly_max = log(H2S_hourly_max))
+
+train <- fastDummies::dummy_cols(train,
+                                 remove_selected_columns = TRUE)
+
+fit.xgb_log_hm_dis_ind <- train(H2S_hourly_max~.,
+                                    method = 'xgbTree',
+                                    data = train,
+                                    trControl=control_everything,
+                                    tuneGrid = tune_grid,
+                                    tuneLength = 10, importance=TRUE, verbosity = 0, verbose=FALSE)
+saveRDS(fit.xgb_log_hm_dis_ind, 'fit.xgb_log_hm_dis_ind.rds')
+gc();rm(fit.xgb_log_hm_dis_ind)
+
+# Everything w.o Disaster Indicator
+train <- everything %>% 
+  select(-disaster) %>%
+  mutate(H2S_hourly_max = log(H2S_hourly_max))
+
+train <- fastDummies::dummy_cols(train,
+                                 remove_selected_columns = TRUE)
+
+fit.xgb_log_hm_full <- train(H2S_hourly_max~.,
+                                 method = 'xgbTree',
+                                 data = train,
+                                 trControl=control_everything,
+                                 tuneGrid = tune_grid,
+                                 tuneLength = 10, importance=TRUE, verbosity = 0, verbose=FALSE)
+saveRDS(fit.xgb_log_hm_full, 'fit.xgb_log_hm_full.rds')
+gc();rm(fit.xgb_log_hm_full)
