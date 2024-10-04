@@ -2,11 +2,16 @@
 # 2024-09-07
 
 library(tidyverse)
+library(stringr)
+library(tidyr)
+library(dplyr)
 library(caret)
 library(fastDummies)
 select <- dplyr::select
 
-daily_full <- readRDS('../data/daily_full_20230930.rds')
+savedir <- '../rfiles/xgboost_v2/'
+#savedir <- 'xgboost/'
+daily_full <- readRDS('daily_full_20230930.rds')
 
 daily_full <- daily_full %>%
   mutate(Monitor = str_replace_all(Monitor, ' ', '_'),
@@ -51,13 +56,14 @@ control <- trainControl(method="cv",
                         search='grid',
                         savePredictions = 'final')
 
-fit.xgb_da <- train(H2S_daily_avg~.,
+fit.xgb_da_sincefeb2022 <- train(H2S_daily_avg~.,
                     method = 'xgbTree',
                     data = train,
                     trControl=control,
                     tuneGrid = tune_grid,
                     tuneLength = 10, importance=TRUE, verbosity = 0, verbose=FALSE)
-saveRDS(fit.xgb_da, '../rfiles/xgboost_v2/fit.xgb_da.rds')
+saveRDS(fit.xgb_da_sincefeb2022, paste0(savedir, 'fit.xgb_da_sincefeb2022', '.rds'))
+gc();rm(fit.xgb_da_sincefeb2022)
 
 # Disaster Only
 disaster <- daily_full %>% 
@@ -76,7 +82,8 @@ fit.xgb_da_dis <- train(H2S_daily_avg~.,
                         trControl=control,
                         tuneGrid = tune_grid,
                         tuneLength = 10, importance=TRUE, verbosity = 0, verbose=FALSE)
-saveRDS(fit.xgb_da_dis, '../rfiles/xgboost_v2/fit.xgb_da_dis.rds')
+saveRDS(fit.xgb_da_dis,  paste0(savedir, 'fit.xgb_da_dis', '.rds'))
+gc();rm(fit.xgb_da_dis)
 
 # Exclude Disaster
 excl_disaster <- daily_full %>% 
@@ -95,8 +102,8 @@ fit.xgb_da_excl_dis <- train(H2S_daily_avg~.,
                              trControl=control,
                              tuneGrid = tune_grid,
                              tuneLength = 10, importance=TRUE, verbosity = 0, verbose=FALSE)
-saveRDS(fit.xgb_da_excl_dis, '../rfiles/xgboost_v2//fit.xgb_da_excl_dis.rds')
-
+saveRDS(fit.xgb_da_excl_dis,  paste0(savedir, 'fit.xgb_da_excl_dis', '.rds'))
+gc();rm(fit.xgb_da_excl_dis)
 
 # Everything w. Disaster Indicator
 everything <- daily_full %>%
@@ -133,7 +140,8 @@ fit.xgb_da_full_dis_ind <- train(H2S_daily_avg~.,
                                  trControl=control_everything,
                                  tuneGrid = tune_grid,
                                  tuneLength = 10, importance=TRUE, verbosity = 0, verbose=FALSE)
-saveRDS(fit.xgb_da_full_dis_ind, '../rfiles/xgboost_v2//fit.xgb_da_full_dis_ind.rds')
+saveRDS(fit.xgb_da_full_dis_ind,  paste0(savedir, 'fit.xgb_da_full_dis_ind', '.rds'))
+gc();rm(fit.xgb_da_full_dis_ind)
 
 # Everything w.o Disaster Indicator
 train <- everything %>% 
@@ -148,7 +156,8 @@ fit.xgb_da_full <- train(H2S_daily_avg~.,
                          trControl=control_everything,
                          tuneGrid = tune_grid,
                          tuneLength = 10, importance=TRUE, verbosity = 0, verbose=FALSE)
-saveRDS(fit.xgb_da_full, '../rfiles/xgboost_v2/fit.xgb_da_full.rds')
+saveRDS(fit.xgb_da_full, paste0(savedir, 'fit.xgb_da_full', '.rds'))
+gc();rm(fit.xgb_da_full)
 
 # Log H2S average
 # Since Feb 2022
@@ -164,7 +173,8 @@ fit.xgb_da_log_h2s_sincefeb2022 <- train(H2S_daily_avg~.,
                                          trControl=control,
                                          tuneGrid = tune_grid,
                                          tuneLength = 10, importance=TRUE, verbosity = 0, verbose=FALSE)
-saveRDS(fit.xgb_da_log_h2s_sincefeb2022, '../rfiles/xgboost_v2/fit.xgb_da_log_h2s_sincefeb2022.rds')
+saveRDS(fit.xgb_da_log_h2s_sincefeb2022,  paste0(savedir, 'fit.xgb_da_log_h2s_sincefeb2022', '.rds'))
+gc();rm(fit.xgb_da_log_h2s_sincefeb2022)
 
 # Disaster Only
 train <- disaster %>% 
@@ -179,7 +189,8 @@ fit.xgb_da_log_h2s_dis <- train(H2S_daily_avg~.,
                                 trControl=control,
                                 tuneGrid = tune_grid,
                                 tuneLength = 10, importance=TRUE, verbosity = 0, verbose=FALSE)
-saveRDS(fit.xgb_da_log_h2s_dis, '../rfiles/xgboost_v2/fit.xgb_da_log_h2s_dis.rds')
+saveRDS(fit.xgb_da_log_h2s_dis,  paste0(savedir, 'fit.xgb_da_log_h2s_dis', '.rds'))
+gc();rm(fit.xgb_da_log_h2s_dis)
 
 # Exclude Disaster
 train <- excl_disaster %>% 
@@ -194,7 +205,8 @@ fit.xgb_da_log_h2s_excl_dis <- train(H2S_daily_avg~.,
                                      trControl=control,
                                      tuneGrid = tune_grid,
                                      tuneLength = 10, importance=TRUE, verbosity = 0, verbose=FALSE)
-saveRDS(fit.xgb_da_log_h2s_excl_dis, '../rfiles/xgboost_v2/fit.xgb_da_log_h2s_excl_dis.rds')
+saveRDS(fit.xgb_da_log_h2s_excl_dis,  paste0(savedir, 'fit.xgb_da_log_h2s_excl_dis', '.rds'))
+gc();rm(fit.xgb_da_log_h2s_excl_dis)
 
 # Everything w. Disaster Indicator
 train <- everything %>%
@@ -209,7 +221,8 @@ fit.xgb_da_log_h2s_dis_ind <- train(H2S_daily_avg~.,
                                     trControl=control_everything,
                                     tuneGrid = tune_grid,
                                     tuneLength = 10, importance=TRUE, verbosity = 0, verbose=FALSE)
-saveRDS(fit.xgb_da_log_h2s_dis_ind, '../rfiles/xgboost_v2/fit.xgb_da_log_h2s_dis_ind.rds')
+saveRDS(fit.xgb_da_log_h2s_dis_ind,  paste0(savedir, 'fit.xgb_da_log_h2s_dis_ind', '.rds'))
+gc();rm(fit.xgb_da_log_h2s_dis_ind)
 
 # Everything w.o Disaster Indicator
 train <- everything %>% 
@@ -225,7 +238,8 @@ fit.xgb_da_log_h2s_full <- train(H2S_daily_avg~.,
                                  trControl=control_everything,
                                  tuneGrid = tune_grid,
                                  tuneLength = 10, importance=TRUE, verbosity = 0, verbose=FALSE)
-saveRDS(fit.xgb_da_log_h2s_full, '../rfiles/xgboost_v2/fit.xgb_da_log_h2s_full.rds')
+saveRDS(fit.xgb_da_log_h2s_full,  paste0(savedir, 'fit.xgb_da_log_h2s_full', '.rds'))
+gc();rm(fit.xgb_da_log_h2s_full)
 
 #------------------------Daily Max-----------------------------#
 # Daily max
@@ -256,13 +270,14 @@ control <- trainControl(method="cv",
                         search='grid',
                         savePredictions = 'final')
 
-fit.xgb_dm <- train(H2S_daily_max~.,
+fit.xgb_dm_sincefeb2022 <- train(H2S_daily_max~.,
                     method = 'xgbTree',
                     data = train,
                     trControl=control,
                     tuneGrid = tune_grid,
                     tuneLength = 10, importance=TRUE, verbosity = 0, verbose=FALSE)
-saveRDS(fit.xgb_dm, '../rfiles/xgboost_v2/fit.xgb_dm.rds')
+saveRDS(fit.xgb_dm_sincefeb2022,  paste0(savedir, 'fit.xgb_dm_sincefeb2022', '.rds'))
+gc();rm(fit.xgb_dm_sincefeb2022)
 
 # Disaster Only
 disaster <- daily_full %>% 
@@ -281,7 +296,8 @@ fit.xgb_dm_dis <- train(H2S_daily_max~.,
                         trControl=control,
                         tuneGrid = tune_grid,
                         tuneLength = 10, importance=TRUE, verbosity = 0, verbose=FALSE)
-saveRDS(fit.xgb_dm_dis, '../rfiles/xgboost_v2/fit.xgb_dm_dis.rds')
+saveRDS(fit.xgb_dm_dis,  paste0(savedir, 'fit.xgb_dm_dis', '.rds'))
+gc();rm(fit.xgb_dm_dis)
 
 # Exclude Disaster
 excl_disaster <- daily_full %>% 
@@ -300,8 +316,8 @@ fit.xgb_dm_excl_dis <- train(H2S_daily_max~.,
                              trControl=control,
                              tuneGrid = tune_grid,
                              tuneLength = 10, importance=TRUE, verbosity = 0, verbose=FALSE)
-saveRDS(fit.xgb_dm_excl_dis, '../rfiles/xgboost_v2/fit.xgb_dm_excl_dis.rds')
-
+saveRDS(fit.xgb_dm_excl_dis,  paste0(savedir, 'fit.xgb_dm_excl_dis', '.rds'))
+gc();rm(fit.xgb_dm_excl_dis)
 
 # Everything w. Disaster Indicator
 everything <- daily_full %>%
@@ -338,7 +354,8 @@ fit.xgb_dm_full_dis_ind <- train(H2S_daily_max~.,
                                  trControl=control_everything,
                                  tuneGrid = tune_grid,
                                  tuneLength = 10, importance=TRUE, verbosity = 0, verbose=FALSE)
-saveRDS(fit.xgb_dm_full_dis_ind, '../rfiles/xgboost_v2/fit.xgb_dm_full_dis_ind.rds')
+saveRDS(fit.xgb_dm_full_dis_ind,  paste0(savedir, 'fit.xgb_dm_full_dis_ind', '.rds'))
+gc();rm(fit.xgb_dm_full_dis_ind)
 
 # Everything w.o Disaster Indicator
 train <- everything %>% 
@@ -353,7 +370,8 @@ fit.xgb_dm_full <- train(H2S_daily_max~.,
                          trControl=control_everything,
                          tuneGrid = tune_grid,
                          tuneLength = 10, importance=TRUE, verbosity = 0, verbose=FALSE)
-saveRDS(fit.xgb_dm_full, '../rfiles/xgboost_v2/fit.xgb_dm_full.rds')
+saveRDS(fit.xgb_dm_full,  paste0(savedir, 'fit.xgb_dm_full', '.rds'))
+gc();rm(fit.xgb_dm_full)
 
 # Log H2S average
 # Since Feb 2022
@@ -369,7 +387,8 @@ fit.xgb_dm_log_h2s_sincefeb2022 <- train(H2S_daily_max~.,
                                          trControl=control,
                                          tuneGrid = tune_grid,
                                          tuneLength = 10, importance=TRUE, verbosity = 0, verbose=FALSE)
-saveRDS(fit.xgb_dm_log_h2s_sincefeb2022, '../rfiles/xgboost_v2/fit.xgb_dm_log_h2s_sincefeb2022.rds')
+saveRDS(fit.xgb_dm_log_h2s_sincefeb2022,  paste0(savedir, 'fit.xgb_dm_log_h2s_sincefeb2022', '.rds'))
+gc();rm(fit.xgb_dm_log_h2s_sincefeb2022)
 
 # Disaster Only
 train <- disaster %>% 
@@ -384,7 +403,8 @@ fit.xgb_dm_log_h2s_dis <- train(H2S_daily_max~.,
                                 trControl=control,
                                 tuneGrid = tune_grid,
                                 tuneLength = 10, importance=TRUE, verbosity = 0, verbose=FALSE)
-saveRDS(fit.xgb_dm_log_h2s_dis, '../rfiles/xgboost_v2/fit.xgb_dm_log_h2s_dis.rds')
+saveRDS(fit.xgb_dm_log_h2s_dis,  paste0(savedir, 'fit.xgb_dm_log_h2s_dis', '.rds'))
+gc();rm(fit.xgb_dm_log_h2s_dis)
 
 # Exclude Disaster
 train <- excl_disaster %>% 
@@ -399,7 +419,8 @@ fit.xgb_dm_log_h2s_excl_dis <- train(H2S_daily_max~.,
                                      trControl=control,
                                      tuneGrid = tune_grid,
                                      tuneLength = 10, importance=TRUE, verbosity = 0, verbose=FALSE)
-saveRDS(fit.xgb_dm_log_h2s_excl_dis, '../rfiles/xgboost_v2/fit.xgb_dm_log_h2s_excl_dis.rds')
+saveRDS(fit.xgb_dm_log_h2s_excl_dis,  paste0(savedir, 'fit.xgb_dm_log_h2s_excl_dis', '.rds'))
+gc();rm(fit.xgb_dm_log_h2s_excl_dis)
 
 # Everything w. Disaster Indicator
 train <- everything %>%
@@ -414,7 +435,8 @@ fit.xgb_dm_log_h2s_dis_ind <- train(H2S_daily_max~.,
                                     trControl=control_everything,
                                     tuneGrid = tune_grid,
                                     tuneLength = 10, importance=TRUE, verbosity = 0, verbose=FALSE)
-saveRDS(fit.xgb_dm_log_h2s_dis_ind, '../rfiles/xgboost_v2/fit.xgb_dm_log_h2s_dis_ind.rds')
+saveRDS(fit.xgb_dm_log_h2s_dis_ind,  paste0(savedir, 'fit.xgb_dm_log_h2s_dis_ind', '.rds'))
+gc();rm(fit.xgb_dm_log_h2s_dis_ind)
 
 # Everything w.o Disaster Indicator
 train <- everything %>% 
@@ -430,4 +452,5 @@ fit.xgb_dm_log_h2s_full <- train(H2S_daily_max~.,
                                  trControl=control_everything,
                                  tuneGrid = tune_grid,
                                  tuneLength = 10, importance=TRUE, verbosity = 0, verbose=FALSE)
-saveRDS(fit.xgb_dm_log_h2s_full, '../rfiles/xgboost_v2/fit.xgb_dm_log_h2s_full.rds')
+saveRDS(fit.xgb_dm_log_h2s_full,  paste0(savedir, 'fit.xgb_dm_log_h2s_full', '.rds'))
+gc();rm(fit.xgb_dm_log_h2s_full)

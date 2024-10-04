@@ -113,7 +113,7 @@ sincefeb2022_stat <- daily_full %>%
             'Average Wind Direction' = as.numeric(mean(circular(wd_avg, 
                                                                 units = 'degrees'), 
                                                        na.rm=T)),
-            'Average daily odor complaints within county' = mean(num_odor_complaints, na.rm=T),
+            'Average daily odor complaints within zipcode' = mean(num_odor_complaints, na.rm=T),
             'Active wells 2km' = mean(active_2km, na.rm=T)) %>%
   mutate('Average Wind Direction' = if_else(`Average Wind Direction` < 0, 
                                             `Average Wind Direction`+360, 
@@ -138,7 +138,7 @@ disaster_stat <- daily_full %>%
             'Average Wind Direction' = as.numeric(mean(circular(wd_avg, 
                                                                 units = 'degrees'), 
                                                        na.rm=T)),
-            'Average daily odor complaints within county' = mean(num_odor_complaints, na.rm=T),
+            'Average daily odor complaints within zipcode' = mean(num_odor_complaints, na.rm=T),
             'Active wells 2km' = mean(active_2km, na.rm=T)) %>%
   mutate('Average Wind Direction' = if_else(`Average Wind Direction` < 0, 
                                             `Average Wind Direction`+360, 
@@ -163,7 +163,7 @@ disaster_oct_stat <- daily_full %>%
             'Average Wind Direction' = as.numeric(mean(circular(wd_avg, 
                                                                 units = 'degrees'), 
                                                        na.rm=T)),
-            'Average daily odor complaints within county' = mean(num_odor_complaints, na.rm=T),
+            'Average daily odor complaints within zipcode' = mean(num_odor_complaints, na.rm=T),
             'Active wells 2km' = mean(active_2km, na.rm=T)) %>%
   mutate('Average Wind Direction' = if_else(`Average Wind Direction` < 0, 
                                             `Average Wind Direction`+360, 
@@ -188,7 +188,7 @@ normal_stat <- daily_full %>%
             'Average Wind Direction' = as.numeric(mean(circular(wd_avg, 
                                                                 units = 'degrees'), 
                                                        na.rm=T)),
-            'Average daily odor complaints within county' = mean(num_odor_complaints, na.rm=T),
+            'Average daily odor complaints within zipcode' = mean(num_odor_complaints, na.rm=T),
             'Active wells 2km' = mean(active_2km, na.rm=T)) %>%
   mutate('Average Wind Direction' = if_else(`Average Wind Direction` < 0, 
                                             `Average Wind Direction`+360, 
@@ -213,7 +213,7 @@ normal_oct_stat <- daily_full %>%
             'Average Wind Direction' = as.numeric(mean(circular(wd_avg, 
                                                                 units = 'degrees'), 
                                                        na.rm=T)),
-            'Average daily odor complaints within county' = mean(num_odor_complaints, na.rm=T),
+            'Average daily odor complaints within zipcode' = mean(num_odor_complaints, na.rm=T),
             'Active wells 2km' = mean(active_2km, na.rm=T)) %>%
   mutate('Average Wind Direction' = if_else(`Average Wind Direction` < 0, 
                                             `Average Wind Direction`+360, 
@@ -233,10 +233,14 @@ table1 <- base_monitor_stat %>%
               rename(`Disaster Avg Daily Average` = `Avg Daily Average`), 
             join_by(Monitor)) %>%
   left_join(normal_stat %>% 
-              select(Monitor, `Avg Daily Average`) %>%
-              rename(`Normal Avg Daily Average` = `Avg Daily Average`), 
+              select(Monitor, `Avg Daily Average`, `Average daily odor complaints within zipcode`) %>%
+              rename(`Normal Avg Daily Average` = `Avg Daily Average`,
+                     `Normal Avg Daily odor complaints` = `Average daily odor complaints within zipcode`), 
             join_by(Monitor)) %>%
-  relocate(Monitor, `Start Date`, `End Date`, `Closest Refinery`, `Normal Avg Daily Average`, `Disaster Avg Daily Average`)
+  mutate(`Closest Refinery` = paste0(`Closest Refinery`, ' (', round(`Distance to Nearest Refinery (m)`/1000, 1), ')'),
+         '#' = 1:n()) %>%
+  select(-`Distance to Nearest Refinery (m)`) %>%
+  relocate('#', Monitor, `Start Date`, `End Date`, `Closest Refinery`, `Normal Avg Daily Average`, `Disaster Avg Daily Average`, `Normal Avg Daily odor complaints`)
 
 table1_kable <- knitr::kable(table1, format = 'latex', digits = 2)
 writeLines(table1_kable, '../figures/table1.tex')
@@ -297,7 +301,7 @@ smooth_tibble <- tibble(features = c(list(c(smooth[1])),
 #   filter(!(daterange == 'dis' & disaster_applicable == 0)) %>%
 #   select(-disaster_applicable)
 # 
-# for (i in 89:nrow(smooth_compare)) {
+# for (i in 1:nrow(smooth_compare)) {
 #   features <- unname(unlist(smooth_compare[i,'features']))
 #   formula_feature_str <- paste(features, collapse = ' + ')
 #   formula_str <- paste(smooth_compare[[i, 'response']], formula_feature_str, sep = ' ~ ')
@@ -353,44 +357,44 @@ best_smooth
 ```{r}
 response_names <- c('da', 'log_da', 'dm', 'log_dm', 'ha', 'log_ha', 'hm', 'log_hm')
 
-# smooth_models <- tibble(name = response_names,
-#                         response = responses) %>%
-#   crossing(daterange) %>%
-#   mutate(name = paste(name, daterange, sep = '_'))
+smooth_models <- tibble(name = response_names,
+                        response = c(daily_responses, hourly_responses)) %>%
+  crossing(dateranges) %>%
+  mutate(name = paste(name, daterange, sep = '_'))
 
 
 smooth_predictors <-
   c("s(as.numeric(month),bs='cc')",
     "s(I(mon_utm_x/10^3), I(mon_utm_y/10^3), bs='tp', k = 10)",
     "te(I(mon_utm_x/10^3), I(mon_utm_y/10^3), as.numeric(day), k=c(10,10),d=c(2,1),bs=c('tp','cc'))")
-# 
-# smooth_models$residuals <- rep(list(c()), nrow(smooth_models))
-# 
-# for (i in 1:nrow(smooth_models)) {
-#   # first, get residuals of smooth on response
-#   if (smooth_models$daterange[i] == 'dis') {
-#     formula_feature_str <- paste(smooth_predictors[c(2, 3)], collapse = ' + ')
-#   } else {
-#     formula_feature_str <- paste(smooth_predictors, collapse = ' + ')
-#   }
-# 
-#   if (smooth_models[[i, 'response']] %in% hourly_responses &
-#       smooth_models[[i, 'daterange']] == 'full') {
-#     data <- hourly_full
-#   } else if (smooth_models[[i, 'response']] %in% hourly_responses) {
-#     data <- get(paste0('hourly_data_', smooth_models[[i, 'daterange']]))
-#   } else if (smooth_models[[i, 'daterange']] == 'full') {
-#     data <- daily_full
-#   } else {
-#     data <- get(paste0('daily_data_', smooth_models[[i, 'daterange']]))
-#   }
-# 
-#   formula_str <- paste(smooth_models[[i, 'response']], formula_feature_str, sep = ' ~ ')
-#   formula <- as.formula(formula_str)
-#   residuals <- gam(formula, data = data, method = 'GCV.Cp')$residuals
-#   smooth_models$residuals[i] <- list(residuals)
-# }
-# saveRDS(smooth_models, 'smooth_models.rds')
+
+smooth_models$residuals <- rep(list(c()), nrow(smooth_models))
+
+for (i in 1:nrow(smooth_models)) {
+  # first, get residuals of smooth on response
+  if (smooth_models$daterange[i] == 'dis') {
+    formula_feature_str <- paste(smooth_predictors[c(2, 3)], collapse = ' + ')
+  } else {
+    formula_feature_str <- paste(smooth_predictors, collapse = ' + ')
+  }
+
+  if (smooth_models[[i, 'response']] %in% hourly_responses &
+      smooth_models[[i, 'daterange']] == 'full') {
+    data <- hourly_full
+  } else if (smooth_models[[i, 'response']] %in% hourly_responses) {
+    data <- get(paste0('hourly_data_', smooth_models[[i, 'daterange']]))
+  } else if (smooth_models[[i, 'daterange']] == 'full') {
+    data <- daily_full
+  } else {
+    data <- get(paste0('daily_data_', smooth_models[[i, 'daterange']]))
+  }
+
+  formula_str <- paste(smooth_models[[i, 'response']], formula_feature_str, sep = ' ~ ')
+  formula <- as.formula(formula_str)
+  residuals <- gam(formula, data = data, method = 'GCV.Cp')$residuals
+  smooth_models$residuals[i] <- list(residuals)
+}
+saveRDS(smooth_models, 'smooth_models.rds')
 
 smooth_models <- readRDS('smooth_models.rds')
 ```
@@ -1419,14 +1423,10 @@ validation_result <- tibble(Model = character(),
 xgb_result <- tibble(Model = character(),
                         model_response_name = character(),
                         daterange = character(),
-                        'Train R-Sq' = numeric(),
-                        'Train BT R-Sq' = numeric(),
-                        'Test R-Sq' = numeric(),
-                        'Test BT R-Sq' = numeric(),
-                        'Train RMSE' = numeric(),
-                        'Train BT RMSE' = numeric(),
-                        'Test RMSE' = numeric(),
-                        'Test BT RMSE' = numeric())
+                        'R-Sq' = numeric(),
+                        'BT R-Sq' = numeric(),
+                        'RMSE' = numeric(),
+                        'BT RMSE' = numeric())
 
 fit.xgb_da_sincefeb2022 <- readRDS('../rfiles/xgboost_v2/fit.xgb_da_sincefeb2022.rds')
 ```
@@ -1542,10 +1542,6 @@ validation_result <- rbind(validation_result,
 ```
 
 ```{r}
-train_adj_r2 <- adj_r2(getTrainPerf(fit.xgb_da_sincefeb2022)$TrainRsquared,
-                       nrow(fit.xgb_da_sincefeb2022$trainingData),
-                       fit.xgb_da_sincefeb2022$finalModel$nfeatures)
-
 test_adj_r2 <- adj_r2(test_r2,
                        nrow(fit.xgb_da_sincefeb2022$trainingData),
                        fit.xgb_da_sincefeb2022$finalModel$nfeatures)
@@ -1554,14 +1550,10 @@ xgb_result <- rbind(xgb_result,
                        tibble(Model = 'Since Feb 2022',
                         model_response_name = 'da',
                         daterange = 'sincefeb2022',
-                        'Train R-Sq' = train_adj_r2,
-                        'Train BT R-Sq' = NA,
-                        'Test R-Sq' = test_adj_r2,
-                        'Test BT R-Sq' = NA,
-                        'Train RMSE' = getTrainPerf(fit.xgb_da_sincefeb2022)$TrainRMSE,
-                        'Train BT RMSE' = NA,
-                        'Test RMSE' = test_rmse,
-                        'Test BT RMSE' = NA))
+                        'R-Sq' = test_adj_r2,
+                        'BT R-Sq' = NA,
+                        'RMSE' = test_rmse,
+                        'BT RMSE' = NA))
 ```
 
 ## Disaster 
@@ -1600,7 +1592,7 @@ imp %>%
 ```
 
 ```{r}
-test_r2 <- fold_stat <- fit.xgb_da_dis$pred %>% group_by(Resample) %>% 
+fold_stat <- fit.xgb_da_dis$pred %>% group_by(Resample) %>% 
   summarise(R2 = R2(pred, obs), RMSE = RMSE(pred, obs))
 test_r2 <- mean(fold_stat$R2)
 test_rmse <- mean(fold_stat$RMSE)
@@ -1643,9 +1635,6 @@ validation_result <- rbind(validation_result,
 ```
 
 ```{r}
-train_adj_r2 <- adj_r2(getTrainPerf(fit.xgb_da_dis)$TrainRsquared,
-                       nrow(fit.xgb_da_dis$trainingData),
-                       fit.xgb_da_dis$finalModel$nfeatures)
 test_adj_r2 <- adj_r2(test_r2,
                        nrow(fit.xgb_da_dis$trainingData),
                        fit.xgb_da_dis$finalModel$nfeatures)
@@ -1654,14 +1643,10 @@ xgb_result <- rbind(xgb_result,
                        tibble(Model = 'Disaster Only',
                               model_response_name = 'da',
                               daterange = 'dis',
-                              'Train R-Sq' = train_adj_r2,
-                              'Train BT R-Sq' = NA,
-                              'Test R-Sq' = test_adj_r2,
-                              'Test BT R-Sq' = NA,
-                              'Train RMSE' = getTrainPerf(fit.xgb_da_dis)$TrainRMSE,
-                              'Train BT RMSE' = NA,
-                              'Test RMSE' = test_rmse,
-                              'Test BT RMSE' = NA))
+                              'R-Sq' = test_adj_r2,
+                              'BT R-Sq' = NA,
+                              'RMSE' = test_rmse,
+                              'BT RMSE' = NA))
 ```
 ## Exclude Disaster
 
@@ -1733,9 +1718,6 @@ validation_result <- rbind(validation_result,
 ```
 
 ```{r}
-train_adj_r2 <- adj_r2(getTrainPerf(fit.xgb_da_excl_dis)$TrainRsquared, 
-                       nrow(fit.xgb_da_excl_dis$trainingData), 
-                       fit.xgb_da_excl_dis$finalModel$nfeatures)
 test_adj_r2 <- adj_r2(test_r2, 
                        nrow(fit.xgb_da_excl_dis$trainingData), 
                        fit.xgb_da_excl_dis$finalModel$nfeatures)
@@ -1744,14 +1726,10 @@ xgb_result <- rbind(xgb_result,
                        tibble(Model = 'Exclude Disaster',
                               model_response_name = 'da',
                               daterange = 'excl_dis',
-                              'Train R-Sq' = train_adj_r2,
-                              'Train BT R-Sq' = NA,
-                              'Test R-Sq' = test_adj_r2,
-                              'Test BT R-Sq' = NA,
-                              'Train RMSE' = getTrainPerf(fit.xgb_da_excl_dis)$TrainRMSE,
-                              'Train BT RMSE' = NA,
-                              'Test RMSE' = test_rmse,
-                              'Test BT RMSE' = NA))
+                              'R-Sq' = test_adj_r2,
+                              'BT R-Sq' = NA,
+                              'RMSE' = test_rmse,
+                              'BT RMSE' = NA))
 ```
 
 ## Everything w Disaster Indicator	
@@ -1841,9 +1819,6 @@ validation_result <- rbind(validation_result,
 ```
 
 ```{r}
-train_adj_r2 <- adj_r2(getTrainPerf(fit.xgb_da_dis_ind)$TrainRsquared, 
-                       nrow(fit.xgb_da_dis_ind$trainingData), 
-                       fit.xgb_da_dis_ind$finalModel$nfeatures)
 test_adj_r2 <- adj_r2(test_r2, 
                        nrow(fit.xgb_da_dis_ind$trainingData), 
                        fit.xgb_da_dis_ind$finalModel$nfeatures)
@@ -1852,14 +1827,10 @@ xgb_result <- rbind(xgb_result,
                        tibble(Model = 'Everything w. Disaster Indicator',
                               model_response_name = 'da',
                               daterange = 'dis_ind',
-                              'Train R-Sq' = train_adj_r2,
-                              'Train BT R-Sq' = NA,
-                              'Test R-Sq' = test_adj_r2,
-                              'Test BT R-Sq' = NA,
-                              'Train RMSE' = getTrainPerf(fit.xgb_da_dis_ind)$TrainRMSE,
-                              'Train BT RMSE' = NA,
-                              'Test RMSE' = test_rmse,
-                              'Test BT RMSE' = NA))
+                              'R-Sq' = test_adj_r2,
+                              'BT R-Sq' = NA,
+                              'RMSE' = test_rmse,
+                              'BT RMSE' = NA))
 ```
 ## Everything w.o Disaster Indicator	
 ```{r echo = T, results = 'hide'}
@@ -1947,9 +1918,6 @@ validation_result <- rbind(validation_result,
 
 
 ```{r}
-train_adj_r2 <- adj_r2(getTrainPerf(fit.xgb_da_full)$TrainRsquared,
-                       nrow(fit.xgb_da_full$trainingData),
-                       fit.xgb_da_full$finalModel$nfeatures)
 test_adj_r2 <- adj_r2(test_r2,
                        nrow(fit.xgb_da_full$trainingData),
                        fit.xgb_da_full$finalModel$nfeatures)
@@ -1957,14 +1925,10 @@ xgb_result <- rbind(xgb_result,
                        tibble(Model = 'Everything w.o Disaster Indicator',
                               model_response_name = 'da',
                               daterange = 'full',
-                              'Train R-Sq' = train_adj_r2,
-                              'Train BT R-Sq' = NA,
-                              'Test R-Sq' = test_adj_r2,
-                              'Test BT R-Sq' = NA,
-                              'Train RMSE' = getTrainPerf(fit.xgb_da_full)$TrainRMSE,
-                              'Train BT RMSE' = NA,
-                              'Test RMSE' = test_rmse,
-                              'Test BT RMSE' = NA))
+                              'R-Sq' = test_adj_r2,
+                              'BT R-Sq' = NA,
+                              'RMSE' = test_rmse,
+                              'BT RMSE' = NA))
 ```
 
 
@@ -2061,7 +2025,7 @@ validation_result <- rbind(validation_result,
 ```
 
 ```{r}
-train_adj_r2 <- adj_r2(getTrainPerf(fit.xgb_da_log_h2s_sincefeb2022)$TrainRsquared, 
+test_adj_r2 <- adj_r2(test_r2, 
                        nrow(fit.xgb_da_log_h2s_sincefeb2022$trainingData), 
                        fit.xgb_da_log_h2s_sincefeb2022$finalModel$nfeatures)
 BT_adj_r2 <- adj_r2(test_r2_bt,
@@ -2072,14 +2036,10 @@ xgb_result <- rbind(xgb_result,
                        tibble(Model = 'Since Feb 2022',
                               model_response_name = 'log_da',
                               daterange = 'sincefeb2022',
-                              'Train R-Sq' = train_adj_r2,
-                              'Train BT R-Sq' = NA,
-                              'Test R-Sq' = test_r2_bt,
-                              'Test BT R-Sq' = BT_adj_r2,
-                              'Train RMSE' = getTrainPerf(fit.xgb_da_log_h2s_sincefeb2022)$TrainRMSE,
-                              'Train BT RMSE' = NA,
-                              'Test RMSE' = test_rmse,
-                              'Test BT RMSE' = test_rmse_bt))
+                              'R-Sq' = test_adj_r2,
+                              'BT R-Sq' = BT_adj_r2,
+                              'RMSE' = test_rmse,
+                              'BT RMSE' = test_rmse_bt))
 ```
 
 ## Disaster Only
@@ -2153,9 +2113,10 @@ validation_result <- rbind(validation_result,
 ```
 
 ```{r}
-train_adj_r2 <- adj_r2(getTrainPerf(fit.xgb_da_log_h2s_dis)$TrainRsquared, 
+test_adj_r2 <- adj_r2(test_r2,
                        nrow(fit.xgb_da_log_h2s_dis$trainingData), 
                        fit.xgb_da_log_h2s_dis$finalModel$nfeatures)
+
 BT_adj_r2 <- adj_r2(test_r2_bt,
                        nrow(fit.xgb_da_log_h2s_dis$trainingData), 
                        fit.xgb_da_log_h2s_dis$finalModel$nfeatures)
@@ -2164,14 +2125,10 @@ xgb_result <- rbind(xgb_result,
                        tibble(Model = 'Disaster Only',
                               model_response_name = 'log_da',
                               daterange = 'dis',
-                              'Train R-Sq' = train_adj_r2,
-                              'Train BT R-Sq' = NA,
-                              'Test R-Sq' = test_adj_r2,
-                              'Test BT R-Sq' = BT_adj_r2,
-                              'Train RMSE' = getTrainPerf(fit.xgb_da_log_h2s_dis)$TrainRMSE,
-                              'Train BT RMSE' = NA,
-                              'Test RMSE' = test_rmse,
-                              'Test BT RMSE' = test_rmse_bt))
+                              'R-Sq' = test_adj_r2,
+                              'BT R-Sq' = BT_adj_r2,
+                              'RMSE' = test_rmse,
+                              'BT RMSE' = test_rmse_bt))
 ```
 
 
@@ -2247,9 +2204,11 @@ validation_result <- rbind(validation_result,
 
 
 ```{r}
-train_adj_r2 <- adj_r2(getTrainPerf(fit.xgb_da_log_h2s_excl_dis)$TrainRsquared, 
-                       nrow(fit.xgb_da_log_h2s_excl_dis$trainingData), 
-                       fit.xgb_da_log_h2s_excl_dis$finalModel$nfeatures)
+test_adj_r2 <- adj_r2(test_r2,
+                      nrow(fit.xgb_da_log_h2s_excl_dis$trainingData), 
+                      fit.xgb_da_log_h2s_excl_dis$finalModel$nfeatures)
+
+
 BT_adj_r2 <- adj_r2(test_r2_bt,
                        nrow(fit.xgb_da_log_h2s_excl_dis$trainingData), 
                        fit.xgb_da_log_h2s_excl_dis$finalModel$nfeatures)
@@ -2258,14 +2217,10 @@ xgb_result <- rbind(xgb_result,
                        tibble(Model = 'Exclude Disaster',
                               model_response_name = 'log_da',
                               daterange = 'excl_dis',
-                              'Train R-Sq' = train_adj_r2,
-                              'Train BT R-Sq' = NA,
-                              'Test R-Sq' = test_adj_r2,
-                              'Test BT R-Sq' = BT_adj_r2,
-                              'Train RMSE' = getTrainPerf(fit.xgb_da_log_h2s_excl_dis)$TrainRMSE,
-                              'Train BT RMSE' = NA,
-                              'Test RMSE' = test_rmse,
-                              'Test BT RMSE' = test_rmse_bt))
+                              'R-Sq' = test_adj_r2,
+                              'BT R-Sq' = BT_adj_r2,
+                              'RMSE' = test_rmse,
+                              'BT RMSE' = test_rmse_bt))
 ```
 
 ## Everything w. Disaster Indicator
@@ -2347,7 +2302,7 @@ validation_result <- rbind(validation_result,
 ```
 
 ```{r}
-train_adj_r2 <- adj_r2(getTrainPerf(fit.xgb_da_log_h2s_dis_ind)$TrainRsquared, 
+test_adj_r2 <- adj_r2(test_r2, 
                        nrow(fit.xgb_da_log_h2s_dis_ind$trainingData), 
                        fit.xgb_da_log_h2s_dis_ind$finalModel$nfeatures)
 BT_adj_r2 <- adj_r2(test_r2_bt,
@@ -2358,14 +2313,10 @@ xgb_result <- rbind(xgb_result,
                     tibble(Model = 'Everything w. Disaster Indicator',
                               model_response_name = 'log_da',
                               daterange = 'dis_ind',
-                              'Train R-Sq' = train_adj_r2,
-                              'Train BT R-Sq' = NA,
-                              'Test R-Sq' = test_adj_r2,
-                              'Test BT R-Sq' = BT_adj_r2,
-                              'Train RMSE' = getTrainPerf(fit.xgb_da_log_h2s_dis_ind)$TrainRMSE,
-                              'Train BT RMSE' = NA,
-                              'Test RMSE' = test_rmse,
-                              'Test BT RMSE' = test_rmse_bt))
+                              'R-Sq' = test_adj_r2,
+                              'BT R-Sq' = BT_adj_r2,
+                              'RMSE' = test_rmse,
+                              'BT RMSE' = test_rmse_bt))
 ```
 
 ## Everything w.o Disaster Indicator
@@ -2451,7 +2402,7 @@ validation_result <- rbind(validation_result,
 ```
 
 ```{r}
-train_adj_r2 <- adj_r2(getTrainPerf(fit.xgb_da_log_h2s_full)$TrainRsquared, 
+test_adj_r2 <- adj_r2(test_r2, 
                        nrow(fit.xgb_da_log_h2s_full$trainingData), 
                        fit.xgb_da_log_h2s_full$finalModel$nfeatures)
 BT_adj_r2 <- adj_r2(test_r2_bt, 
@@ -2462,14 +2413,10 @@ xgb_result <- rbind(xgb_result,
                        tibble(Model = 'Everything w.o Disaster Indicator',
                               model_response_name = 'log_da',
                               daterange = 'full',
-                              'Train R-Sq' = train_adj_r2,
-                              'Train BT R-Sq' = NA,
-                              'Test R-Sq' = test_adj_r2,
-                              'Test BT R-Sq' = BT_adj_r2,
-                              'Train RMSE' = getTrainPerf(fit.xgb_da_log_h2s_full)$TrainRMSE,
-                              'Train BT RMSE' = NA,
-                              'Test RMSE' = test_rmse,
-                              'Test BT RMSE' = test_rmse_bt))
+                              'R-Sq' = test_adj_r2,
+                              'BT R-Sq' = BT_adj_r2,
+                              'RMSE' = test_rmse,
+                              'BT RMSE' = test_rmse_bt))
 ```
 
 # XGBoost (Daily Max)
@@ -2543,9 +2490,6 @@ validation_result <- rbind(validation_result,
 ```
 
 ```{r}
-train_adj_r2 <- adj_r2(getTrainPerf(fit.xgb_dm)$TrainRsquared,
-                       nrow(fit.xgb_dm$trainingData),
-                       fit.xgb_dm$finalModel$nfeatures)
 test_adj_r2 <- adj_r2(test_r2,
                        nrow(fit.xgb_dm$trainingData),
                        fit.xgb_dm$finalModel$nfeatures)
@@ -2554,14 +2498,10 @@ xgb_result <- rbind(xgb_result,
                        tibble(Model = 'Since Feb 2022',
                               model_response_name = 'dm',
                               daterange = 'sincefeb2022',
-                              'Train R-Sq' = train_adj_r2,
-                              'Train BT R-Sq' = NA,
-                              'Test R-Sq' = test_adj_r2,
-                              'Test BT R-Sq' = NA,
-                              'Train RMSE' = getTrainPerf(fit.xgb_dm)$TrainRMSE,
-                              'Train BT RMSE' = NA,
-                              'Test RMSE' = test_rmse,
-                              'Test BT RMSE' = NA))
+                              'R-Sq' = test_adj_r2,
+                              'BT R-Sq' = NA,
+                              'RMSE' = test_rmse,
+                              'BT RMSE' = NA))
 ```
 
 ## Disaster 
@@ -2600,7 +2540,7 @@ imp %>%
 ```
 
 ```{r}
-test_r2 <- fold_stat <- fit.xgb_dm_dis$pred %>% group_by(Resample) %>% 
+fold_stat <- fit.xgb_dm_dis$pred %>% group_by(Resample) %>% 
   summarise(R2 = R2(pred, obs), RMSE = RMSE(pred, obs))
 test_r2 <- mean(fold_stat$R2)
 test_rmse <- mean(fold_stat$RMSE)
@@ -2643,9 +2583,6 @@ validation_result <- rbind(validation_result,
 ```
 
 ```{r}
-train_adj_r2 <- adj_r2(getTrainPerf(fit.xgb_dm_dis)$TrainRsquared,
-                       nrow(fit.xgb_dm_dis$trainingData),
-                       fit.xgb_dm_dis$finalModel$nfeatures)
 test_adj_r2 <- adj_r2(test_r2,
                        nrow(fit.xgb_dm_dis$trainingData),
                        fit.xgb_dm_dis$finalModel$nfeatures)
@@ -2654,14 +2591,10 @@ xgb_result <- rbind(xgb_result,
                        tibble(Model = 'Disaster Only',
                               model_response_name = 'dm',
                               daterange = 'dis',
-                              'Train R-Sq' = train_adj_r2,
-                              'Train BT R-Sq' = NA,
-                              'Test R-Sq' = test_adj_r2,
-                              'Test BT R-Sq' = NA,
-                              'Train RMSE' = getTrainPerf(fit.xgb_dm_dis)$TrainRMSE,
-                              'Train BT RMSE' = NA,
-                              'Test RMSE' = test_rmse,
-                              'Test BT RMSE' = NA))
+                              'R-Sq' = test_adj_r2,
+                              'BT R-Sq' = NA,
+                              'RMSE' = test_rmse,
+                              'BT RMSE' = NA))
 ```
 ## Exclude Disaster
 
@@ -2733,9 +2666,6 @@ validation_result <- rbind(validation_result,
 ```
 
 ```{r}
-train_adj_r2 <- adj_r2(getTrainPerf(fit.xgb_dm_excl_dis)$TrainRsquared, 
-                       nrow(fit.xgb_dm_excl_dis$trainingData), 
-                       fit.xgb_dm_excl_dis$finalModel$nfeatures)
 test_adj_r2 <- adj_r2(test_r2, 
                        nrow(fit.xgb_dm_excl_dis$trainingData), 
                        fit.xgb_dm_excl_dis$finalModel$nfeatures)
@@ -2744,14 +2674,10 @@ xgb_result <- rbind(xgb_result,
                        tibble(Model = 'Exclude Disaster',
                               model_response_name = 'dm',
                               daterange = 'excl_dis',
-                              'Train R-Sq' = train_adj_r2,
-                              'Train BT R-Sq' = NA,
-                              'Test R-Sq' = test_adj_r2,
-                              'Test BT R-Sq' = NA,
-                              'Train RMSE' = getTrainPerf(fit.xgb_dm_excl_dis)$TrainRMSE,
-                              'Train BT RMSE' = NA,
-                              'Test RMSE' = test_rmse,
-                              'Test BT RMSE' = NA))
+                              'R-Sq' = test_adj_r2,
+                              'BT R-Sq' = NA,
+                              'RMSE' = test_rmse,
+                              'BT RMSE' = NA))
 ```
 
 ## Everything w Disaster Indicator	
@@ -2841,9 +2767,6 @@ validation_result <- rbind(validation_result,
 ```
 
 ```{r}
-train_adj_r2 <- adj_r2(getTrainPerf(fit.xgb_dm_dis_ind)$TrainRsquared, 
-                       nrow(fit.xgb_dm_dis_ind$trainingData), 
-                       fit.xgb_dm_dis_ind$finalModel$nfeatures)
 test_adj_r2 <- adj_r2(test_r2, 
                        nrow(fit.xgb_dm_dis_ind$trainingData), 
                        fit.xgb_dm_dis_ind$finalModel$nfeatures)
@@ -2852,14 +2775,10 @@ xgb_result <- rbind(xgb_result,
                        tibble(Model = 'Everything w. Disaster Indicator',
                               model_response_name = 'dm',
                               daterange = 'dis_ind',
-                              'Train R-Sq' = train_adj_r2,
-                              'Train BT R-Sq' = NA,
-                              'Test R-Sq' = test_adj_r2,
-                              'Test BT R-Sq' = NA,
-                              'Train RMSE' = getTrainPerf(fit.xgb_dm_dis_ind)$TrainRMSE,
-                              'Train BT RMSE' = NA,
-                              'Test RMSE' = test_rmse,
-                              'Test BT RMSE' = NA))
+                              'R-Sq' = test_adj_r2,
+                              'BT R-Sq' = NA,
+                              'RMSE' = test_rmse,
+                              'BT RMSE' = NA))
 ```
 ## Everything w.o Disaster Indicator	
 
@@ -2958,14 +2877,10 @@ xgb_result <- rbind(xgb_result,
                        tibble(Model = 'Everything w.o Disaster Indicator',
                               model_response_name = 'dm',
                               daterange = 'full',
-                              'Train R-Sq' = train_adj_r2,
-                              'Train BT R-Sq' = NA,
-                              'Test R-Sq' = test_adj_r2,
-                              'Test BT R-Sq' = NA,
-                              'Train RMSE' = getTrainPerf(fit.xgb_dm_full)$TrainRMSE,
-                              'Train BT RMSE' = NA,
-                              'Test RMSE' = test_rmse,
-                              'Test BT RMSE' = NA))
+                              'R-Sq' = test_adj_r2,
+                              'BT R-Sq' = NA,
+                              'RMSE' = test_rmse,
+                              'BT RMSE' = NA))
 ```
 
 # XGBoost: log(H2S_daily_max)
@@ -3040,7 +2955,7 @@ validation_result <- rbind(validation_result,
 ```
 
 ```{r}
-train_adj_r2 <- adj_r2(getTrainPerf(fit.xgb_dm_log_h2s_sincefeb2022)$TrainRsquared, 
+test_adj_r2 <- adj_r2(test_r2, 
                        nrow(fit.xgb_dm_log_h2s_sincefeb2022$trainingData), 
                        fit.xgb_dm_log_h2s_sincefeb2022$finalModel$nfeatures)
 BT_adj_r2 <- adj_r2(test_r2_bt,
@@ -3051,14 +2966,10 @@ xgb_result <- rbind(xgb_result,
                        tibble(Model = 'Since Feb 2022',
                               model_response_name = 'log_dm',
                               daterange = 'sincefeb2022',
-                              'Train R-Sq' = train_adj_r2,
-                              'Train BT R-Sq' = NA,
-                              'Test R-Sq' = test_adj_r2,
-                              'Test BT R-Sq' = BT_adj_r2,
-                              'Train RMSE' = getTrainPerf(fit.xgb_dm_log_h2s_sincefeb2022)$TrainRMSE,
-                              'Train BT RMSE' = NA,
-                              'Test RMSE' = test_rmse,
-                              'Test BT RMSE' = test_rmse_bt))
+                              'R-Sq' = test_adj_r2,
+                              'BT R-Sq' = BT_adj_r2,
+                              'RMSE' = test_rmse,
+                              'BT RMSE' = test_rmse_bt))
 ```
 
 ## Disaster Only
@@ -3132,7 +3043,7 @@ validation_result <- rbind(validation_result,
 ```
 
 ```{r}
-train_adj_r2 <- adj_r2(getTrainPerf(fit.xgb_dm_log_h2s_dis)$TrainRsquared, 
+test_adj_r2 <- adj_r2(test_r2, 
                        nrow(fit.xgb_dm_log_h2s_dis$trainingData), 
                        fit.xgb_dm_log_h2s_dis$finalModel$nfeatures)
 BT_adj_r2 <- adj_r2(test_r2_bt,
@@ -3143,14 +3054,10 @@ xgb_result <- rbind(xgb_result,
                        tibble(Model = 'Disaster Only',
                               model_response_name = 'log_dm',
                               daterange = 'dis',
-                              'Train R-Sq' = train_adj_r2,
-                              'Train BT R-Sq' = NA,
-                              'Test R-Sq' = test_adj_r2,
-                              'Test BT R-Sq' = BT_adj_r2,
-                              'Train RMSE' = getTrainPerf(fit.xgb_dm_log_h2s_dis)$TrainRMSE,
-                              'Train BT RMSE' = NA,
-                              'Test RMSE' = test_rmse,
-                              'Test BT RMSE' = test_rmse_bt))
+                              'R-Sq' = test_adj_r2,
+                              'BT R-Sq' = BT_adj_r2,
+                              'RMSE' = test_rmse,
+                              'BT RMSE' = test_rmse_bt))
 ```
 
 
@@ -3226,7 +3133,7 @@ validation_result <- rbind(validation_result,
 
 
 ```{r}
-train_adj_r2 <- adj_r2(getTrainPerf(fit.xgb_dm_log_h2s_excl_dis)$TrainRsquared, 
+test_adj_r2 <- adj_r2(test_r2, 
                        nrow(fit.xgb_dm_log_h2s_excl_dis$trainingData), 
                        fit.xgb_dm_log_h2s_excl_dis$finalModel$nfeatures)
 BT_adj_r2 <- adj_r2(test_r2_bt,
@@ -3237,14 +3144,10 @@ xgb_result <- rbind(xgb_result,
                        tibble(Model = 'Exclude Disaster',
                               model_response_name = 'log_dm',
                               daterange = 'excl_dis',
-                              'Train R-Sq' = train_adj_r2,
-                              'Train BT R-Sq' = NA,
-                              'Test R-Sq' = test_adj_r2,
-                              'Test BT R-Sq' = BT_adj_r2,
-                              'Train RMSE' = getTrainPerf(fit.xgb_dm_log_h2s_excl_dis)$TrainRMSE,
-                              'Train BT RMSE' = NA,
-                              'Test RMSE' = test_rmse,
-                              'Test BT RMSE' = test_rmse_bt))
+                              'R-Sq' = test_adj_r2,
+                              'BT R-Sq' = BT_adj_r2,
+                              'RMSE' = test_rmse,
+                              'BT RMSE' = test_rmse_bt))
 ```
 
 ## Everything w. Disaster Indicator
@@ -3327,7 +3230,7 @@ validation_result <- rbind(validation_result,
 ```
 
 ```{r}
-train_adj_r2 <- adj_r2(getTrainPerf(fit.xgb_dm_log_h2s_dis_ind)$TrainRsquared, 
+test_adj_r2 <- adj_r2(test_r2, 
                        nrow(fit.xgb_dm_log_h2s_dis_ind$trainingData), 
                        fit.xgb_dm_log_h2s_dis_ind$finalModel$nfeatures)
 BT_adj_r2 <- adj_r2(test_r2_bt,
@@ -3338,14 +3241,10 @@ xgb_result <- rbind(xgb_result,
                        tibble(Model = 'Everything w. Disaster Indicator',
                               model_response_name = 'log_dm',
                               daterange = 'dis_ind',
-                              'Train R-Sq' = train_adj_r2,
-                              'Train BT R-Sq' = NA,
-                              'Test R-Sq' = test_adj_r2,
-                              'Test BT R-Sq' = BT_adj_r2,
-                              'Train RMSE' = getTrainPerf(fit.xgb_dm_log_h2s_dis_ind)$TrainRMSE,
-                              'Train BT RMSE' = NA,
-                              'Test RMSE' = test_rmse,
-                              'Test BT RMSE' = test_rmse_bt))
+                              'R-Sq' = test_adj_r2,
+                              'BT R-Sq' = BT_adj_r2,
+                              'RMSE' = test_rmse,
+                              'BT RMSE' = test_rmse_bt))
 ```
 
 ## Everything w.o Disaster Indicator
@@ -3432,7 +3331,7 @@ validation_result <- rbind(validation_result,
 ```
 
 ```{r}
-train_adj_r2 <- adj_r2(getTrainPerf(fit.xgb_dm_log_h2s_full)$TrainRsquared, 
+test_adj_r2 <- adj_r2(test_r2, 
                        nrow(fit.xgb_dm_log_h2s_full$trainingData), 
                        fit.xgb_dm_log_h2s_full$finalModel$nfeatures)
 BT_adj_r2 <- adj_r2(test_r2_bt, 
@@ -3443,14 +3342,10 @@ xgb_result <- rbind(xgb_result,
                        tibble(Model = 'Everything w.o Disaster Indicator',
                               model_response_name = 'log_dm',
                               daterange = 'full',
-                              'Train R-Sq' = train_adj_r2,
-                              'Train BT R-Sq' = NA,
-                              'Test R-Sq' = test_adj_r2,
-                              'Test BT R-Sq' = BT_adj_r2,
-                              'Train RMSE' = getTrainPerf(fit.xgb_dm_log_h2s_full)$TrainRMSE,
-                              'Train BT RMSE' = NA,
-                              'Test RMSE' = test_rmse,
-                              'Test BT RMSE' = test_rmse_bt))
+                              'R-Sq' = test_adj_r2,
+                              'BT R-Sq' = BT_adj_r2,
+                              'RMSE' = test_rmse,
+                              'BT RMSE' = test_rmse_bt))
 ```
 
 # XGBoost (Hourly Average)
@@ -3571,26 +3466,18 @@ validation_result <- rbind(validation_result,
 ```
 
 ```{r}
-train_adj_r2 <- adj_r2(getTrainPerf(fit.xgb_ha_sincefeb2022)$TrainRsquared,
-                       nrow(fit.xgb_ha_sincefeb2022$trainingData),
-                       fit.xgb_ha_sincefeb2022$finalModel$nfeatures)
-
 test_adj_r2 <- adj_r2(test_r2,
                        nrow(fit.xgb_ha_sincefeb2022$trainingData),
                        fit.xgb_ha_sincefeb2022$finalModel$nfeatures)
 
 xgb_result <- rbind(xgb_result,
                        tibble(Model = 'Since Feb 2022',
-                        model_response_name = 'ha',
-                        daterange = 'sincefeb2022',
-                        'Train R-Sq' = train_adj_r2,
-                        'Train BT R-Sq' = NA,
-                        'Test R-Sq' = test_adj_r2,
-                        'Test BT R-Sq' = NA,
-                        'Train RMSE' = getTrainPerf(fit.xgb_ha_sincefeb2022)$TrainRMSE,
-                        'Train BT RMSE' = NA,
-                        'Test RMSE' = test_rmse,
-                        'Test BT RMSE' = NA))
+                              model_response_name = 'ha',
+                              daterange = 'sincefeb2022',
+                              'R-Sq' = test_adj_r2,
+                              'BT R-Sq' = NA,
+                              'RMSE' = test_rmse,
+                              'BT RMSE' = NA))
 ```
 
 ## Disaster 
@@ -3629,7 +3516,7 @@ imp %>%
 ```
 
 ```{r}
-test_r2 <- fold_stat <- fit.xgb_ha_dis$pred %>% group_by(Resample) %>% 
+fold_stat <- fit.xgb_ha_dis$pred %>% group_by(Resample) %>% 
   summarise(R2 = R2(pred, obs), RMSE = RMSE(pred, obs))
 test_r2 <- mean(fold_stat$R2)
 test_rmse <- mean(fold_stat$RMSE)
@@ -3672,9 +3559,6 @@ validation_result <- rbind(validation_result,
 ```
 
 ```{r}
-train_adj_r2 <- adj_r2(getTrainPerf(fit.xgb_ha_dis)$TrainRsquared,
-                       nrow(fit.xgb_ha_dis$trainingData),
-                       fit.xgb_ha_dis$finalModel$nfeatures)
 test_adj_r2 <- adj_r2(test_r2,
                        nrow(fit.xgb_ha_dis$trainingData),
                        fit.xgb_ha_dis$finalModel$nfeatures)
@@ -3683,14 +3567,10 @@ xgb_result <- rbind(xgb_result,
                        tibble(Model = 'Disaster Only',
                               model_response_name = 'ha',
                               daterange = 'dis',
-                              'Train R-Sq' = train_adj_r2,
-                              'Train BT R-Sq' = NA,
-                              'Test R-Sq' = test_adj_r2,
-                              'Test BT R-Sq' = NA,
-                              'Train RMSE' = getTrainPerf(fit.xgb_ha_dis)$TrainRMSE,
-                              'Train BT RMSE' = NA,
-                              'Test RMSE' = test_rmse,
-                              'Test BT RMSE' = NA))
+                              'R-Sq' = test_adj_r2,
+                              'BT R-Sq' = NA,
+                              'RMSE' = test_rmse,
+                              'BT RMSE' = NA))
 ```
 ## Exclude Disaster
 
@@ -3762,9 +3642,6 @@ validation_result <- rbind(validation_result,
 ```
 
 ```{r}
-train_adj_r2 <- adj_r2(getTrainPerf(fit.xgb_ha_excl_dis)$TrainRsquared, 
-                       nrow(fit.xgb_ha_excl_dis$trainingData), 
-                       fit.xgb_ha_excl_dis$finalModel$nfeatures)
 test_adj_r2 <- adj_r2(test_r2, 
                        nrow(fit.xgb_ha_excl_dis$trainingData), 
                        fit.xgb_ha_excl_dis$finalModel$nfeatures)
@@ -3773,14 +3650,10 @@ xgb_result <- rbind(xgb_result,
                        tibble(Model = 'Exclude Disaster',
                               model_response_name = 'ha',
                               daterange = 'excl_dis',
-                              'Train R-Sq' = train_adj_r2,
-                              'Train BT R-Sq' = NA,
-                              'Test R-Sq' = test_adj_r2,
-                              'Test BT R-Sq' = NA,
-                              'Train RMSE' = getTrainPerf(fit.xgb_ha_excl_dis)$TrainRMSE,
-                              'Train BT RMSE' = NA,
-                              'Test RMSE' = test_rmse,
-                              'Test BT RMSE' = NA))
+                              'R-Sq' = test_adj_r2,
+                              'BT R-Sq' = NA,
+                              'RMSE' = test_rmse,
+                              'BT RMSE' = NA))
 ```
 
 ## Everything w Disaster Indicator	
@@ -3870,9 +3743,6 @@ validation_result <- rbind(validation_result,
 ```
 
 ```{r}
-train_adj_r2 <- adj_r2(getTrainPerf(fit.xgb_ha_dis_ind)$TrainRsquared, 
-                       nrow(fit.xgb_ha_dis_ind$trainingData), 
-                       fit.xgb_ha_dis_ind$finalModel$nfeatures)
 test_adj_r2 <- adj_r2(test_r2, 
                        nrow(fit.xgb_ha_dis_ind$trainingData), 
                        fit.xgb_ha_dis_ind$finalModel$nfeatures)
@@ -3881,14 +3751,10 @@ xgb_result <- rbind(xgb_result,
                        tibble(Model = 'Everything w. Disaster Indicator',
                               model_response_name = 'ha',
                               daterange = 'dis_ind',
-                              'Train R-Sq' = train_adj_r2,
-                              'Train BT R-Sq' = NA,
-                              'Test R-Sq' = test_adj_r2,
-                              'Test BT R-Sq' = NA,
-                              'Train RMSE' = getTrainPerf(fit.xgb_ha_dis_ind)$TrainRMSE,
-                              'Train BT RMSE' = NA,
-                              'Test RMSE' = test_rmse,
-                              'Test BT RMSE' = NA))
+                              'R-Sq' = test_adj_r2,
+                              'BT R-Sq' = NA,
+                              'RMSE' = test_rmse,
+                              'BT RMSE' = NA))
 ```
 ## Everything w.o Disaster Indicator	
 ```{r echo = T, results = 'hide'}
@@ -3976,9 +3842,6 @@ validation_result <- rbind(validation_result,
 
 
 ```{r}
-train_adj_r2 <- adj_r2(getTrainPerf(fit.xgb_ha_full)$TrainRsquared,
-                       nrow(fit.xgb_ha_full$trainingData),
-                       fit.xgb_ha_full$finalModel$nfeatures)
 test_adj_r2 <- adj_r2(test_r2,
                        nrow(fit.xgb_ha_full$trainingData),
                        fit.xgb_ha_full$finalModel$nfeatures)
@@ -3986,14 +3849,10 @@ xgb_result <- rbind(xgb_result,
                        tibble(Model = 'Everything w.o Disaster Indicator',
                               model_response_name = 'ha',
                               daterange = 'full',
-                              'Train R-Sq' = train_adj_r2,
-                              'Train BT R-Sq' = NA,
-                              'Test R-Sq' = test_adj_r2,
-                              'Test BT R-Sq' = NA,
-                              'Train RMSE' = getTrainPerf(fit.xgb_ha_full)$TrainRMSE,
-                              'Train BT RMSE' = NA,
-                              'Test RMSE' = test_rmse,
-                              'Test BT RMSE' = NA))
+                              'R-Sq' = test_adj_r2,
+                              'BT R-Sq' = NA,
+                              'RMSE' = test_rmse,
+                              'BT RMSE' = NA))
 ```
 
 # XGBoost: log(H2S_hourly_avg)
@@ -4068,9 +3927,10 @@ validation_result <- rbind(validation_result,
 ```
 
 ```{r}
-train_adj_r2 <- adj_r2(getTrainPerf(fit.xgb_log_ha_sincefeb2022)$TrainRsquared, 
+test_adj_r2 <- adj_r2(test_r2,
                        nrow(fit.xgb_log_ha_sincefeb2022$trainingData), 
                        fit.xgb_log_ha_sincefeb2022$finalModel$nfeatures)
+
 BT_adj_r2 <- adj_r2(test_r2_bt,
                        nrow(fit.xgb_log_ha_sincefeb2022$trainingData), 
                        fit.xgb_log_ha_sincefeb2022$finalModel$nfeatures)
@@ -4079,14 +3939,10 @@ xgb_result <- rbind(xgb_result,
                        tibble(Model = 'Since Feb 2022',
                               model_response_name = 'log_ha',
                               daterange = 'sincefeb2022',
-                              'Train R-Sq' = train_adj_r2,
-                              'Train BT R-Sq' = NA,
-                              'Test R-Sq' = test_adj_r2,
-                              'Test BT R-Sq' = BT_adj_r2,
-                              'Train RMSE' = getTrainPerf(fit.xgb_log_ha_sincefeb2022)$TrainRMSE,
-                              'Train BT RMSE' = NA,
-                              'Test RMSE' = test_rmse,
-                              'Test BT RMSE' = test_rmse_bt))
+                              'R-Sq' = test_adj_r2,
+                              'BT R-Sq' = BT_adj_r2,
+                              'RMSE' = test_rmse,
+                              'BT RMSE' = test_rmse_bt))
 ```
 
 ## Disaster Only
@@ -4160,9 +4016,10 @@ validation_result <- rbind(validation_result,
 ```
 
 ```{r}
-train_adj_r2 <- adj_r2(getTrainPerf(fit.xgb_log_ha_dis)$TrainRsquared, 
+test_adj_r2 <- adj_r2(test_r2,
                        nrow(fit.xgb_log_ha_dis$trainingData), 
                        fit.xgb_log_ha_dis$finalModel$nfeatures)
+
 BT_adj_r2 <- adj_r2(test_r2_bt,
                        nrow(fit.xgb_log_ha_dis$trainingData), 
                        fit.xgb_log_ha_dis$finalModel$nfeatures)
@@ -4171,14 +4028,10 @@ xgb_result <- rbind(xgb_result,
                        tibble(Model = 'Disaster Only',
                               model_response_name = 'log_ha',
                               daterange = 'dis',
-                              'Train R-Sq' = train_adj_r2,
-                              'Train BT R-Sq' = NA,
-                              'Test R-Sq' = test_adj_r2,
-                              'Test BT R-Sq' = BT_adj_r2,
-                              'Train RMSE' = getTrainPerf(fit.xgb_log_ha_dis)$TrainRMSE,
-                              'Train BT RMSE' = NA,
-                              'Test RMSE' = test_rmse,
-                              'Test BT RMSE' = test_rmse_bt))
+                              'R-Sq' = test_adj_r2,
+                              'BT R-Sq' = BT_adj_r2,
+                              'RMSE' = test_rmse,
+                              'BT RMSE' = test_rmse_bt))
 ```
 
 
@@ -4254,9 +4107,10 @@ validation_result <- rbind(validation_result,
 
 
 ```{r}
-train_adj_r2 <- adj_r2(getTrainPerf(fit.xgb_log_ha_excl_dis)$TrainRsquared, 
+test_adj_r2 <- adj_r2(test_r2,
                        nrow(fit.xgb_log_ha_excl_dis$trainingData), 
                        fit.xgb_log_ha_excl_dis$finalModel$nfeatures)
+
 BT_adj_r2 <- adj_r2(test_r2_bt,
                        nrow(fit.xgb_log_ha_excl_dis$trainingData), 
                        fit.xgb_log_ha_excl_dis$finalModel$nfeatures)
@@ -4265,14 +4119,10 @@ xgb_result <- rbind(xgb_result,
                        tibble(Model = 'Exclude Disaster',
                               model_response_name = 'log_ha',
                               daterange = 'excl_dis',
-                              'Train R-Sq' = train_adj_r2,
-                              'Train BT R-Sq' = NA,
-                              'Test R-Sq' = test_adj_r2,
-                              'Test BT R-Sq' = BT_adj_r2,
-                              'Train RMSE' = getTrainPerf(fit.xgb_log_ha_excl_dis)$TrainRMSE,
-                              'Train BT RMSE' = NA,
-                              'Test RMSE' = test_rmse,
-                              'Test BT RMSE' = test_rmse_bt))
+                              'R-Sq' = test_adj_r2,
+                              'BT R-Sq' = BT_adj_r2,
+                              'RMSE' = test_rmse,
+                              'BT RMSE' = test_rmse_bt))
 ```
 
 ## Everything w. Disaster Indicator
@@ -4355,9 +4205,10 @@ validation_result <- rbind(validation_result,
 ```
 
 ```{r}
-train_adj_r2 <- adj_r2(getTrainPerf(fit.xgb_log_ha_dis_ind)$TrainRsquared, 
+test_adj_r2 <- adj_r2(test_r2,
                        nrow(fit.xgb_log_ha_dis_ind$trainingData), 
                        fit.xgb_log_ha_dis_ind$finalModel$nfeatures)
+
 BT_adj_r2 <- adj_r2(test_r2_bt,
                        nrow(fit.xgb_log_ha_dis_ind$trainingData), 
                        fit.xgb_log_ha_dis_ind$finalModel$nfeatures)
@@ -4366,14 +4217,10 @@ xgb_result <- rbind(xgb_result,
                     tibble(Model = 'Everything w. Disaster Indicator',
                               model_response_name = 'log_ha',
                               daterange = 'dis_ind',
-                              'Train R-Sq' = train_adj_r2,
-                              'Train BT R-Sq' = NA,
-                              'Test R-Sq' = test_adj_r2,
-                              'Test BT R-Sq' = BT_adj_r2,
-                              'Train RMSE' = getTrainPerf(fit.xgb_log_ha_dis_ind)$TrainRMSE,
-                              'Train BT RMSE' = NA,
-                              'Test RMSE' = test_rmse,
-                              'Test BT RMSE' = test_rmse_bt))
+                              'R-Sq' = test_adj_r2,
+                              'BT R-Sq' = BT_adj_r2,
+                              'RMSE' = test_rmse,
+                              'BT RMSE' = test_rmse_bt))
 ```
 
 ## Everything w.o Disaster Indicator
@@ -4459,9 +4306,10 @@ validation_result <- rbind(validation_result,
 ```
 
 ```{r}
-train_adj_r2 <- adj_r2(getTrainPerf(fit.xgb_log_ha_full)$TrainRsquared, 
+test_adj_r2 <- adj_r2(test_r2,
                        nrow(fit.xgb_log_ha_full$trainingData), 
                        fit.xgb_log_ha_full$finalModel$nfeatures)
+
 BT_adj_r2 <- adj_r2(test_r2_bt, 
                        nrow(fit.xgb_log_ha_full$trainingData), 
                        fit.xgb_log_ha_full$finalModel$nfeatures)
@@ -4470,14 +4318,10 @@ xgb_result <- rbind(xgb_result,
                        tibble(Model = 'Everything w.o Disaster Indicator',
                               model_response_name = 'log_ha',
                               daterange = 'full',
-                              'Train R-Sq' = train_adj_r2,
-                              'Train BT R-Sq' = NA,
-                              'Test R-Sq' = test_adj_r2,
-                              'Test BT R-Sq' = BT_adj_r2,
-                              'Train RMSE' = getTrainPerf(fit.xgb_log_ha_full)$TrainRMSE,
-                              'Train BT RMSE' = NA,
-                              'Test RMSE' = test_rmse,
-                              'Test BT RMSE' = test_rmse_bt))
+                              'R-Sq' = test_adj_r2,
+                              'BT R-Sq' = BT_adj_r2,
+                              'RMSE' = test_rmse,
+                              'BT RMSE' = test_rmse_bt))
 ```
 
 # XGBoost (Hourly Max)
@@ -4551,9 +4395,6 @@ validation_result <- rbind(validation_result,
 ```
 
 ```{r}
-train_adj_r2 <- adj_r2(getTrainPerf(fit.xgb_hm_sincefeb2022)$TrainRsquared,
-                       nrow(fit.xgb_hm_sincefeb2022$trainingData),
-                       fit.xgb_hm_sincefeb2022$finalModel$nfeatures)
 test_adj_r2 <- adj_r2(test_r2,
                        nrow(fit.xgb_hm_sincefeb2022$trainingData),
                        fit.xgb_hm_sincefeb2022$finalModel$nfeatures)
@@ -4562,14 +4403,10 @@ xgb_result <- rbind(xgb_result,
                        tibble(Model = 'Since Feb 2022',
                               model_response_name = 'hm',
                               daterange = 'sincefeb2022',
-                              'Train R-Sq' = train_adj_r2,
-                              'Train BT R-Sq' = NA,
-                              'Test R-Sq' = test_adj_r2,
-                              'Test BT R-Sq' = NA,
-                              'Train RMSE' = getTrainPerf(fit.xgb_hm_sincefeb2022)$TrainRMSE,
-                              'Train BT RMSE' = NA,
-                              'Test RMSE' = test_rmse,
-                              'Test BT RMSE' = NA))
+                              'R-Sq' = test_adj_r2,
+                              'BT R-Sq' = NA,
+                              'RMSE' = test_rmse,
+                              'BT RMSE' = NA))
 ```
 
 ## Disaster 
@@ -4608,7 +4445,7 @@ imp %>%
 ```
 
 ```{r}
-test_r2 <- fold_stat <- fit.xgb_hm_dis$pred %>% group_by(Resample) %>% 
+fold_stat <- fit.xgb_hm_dis$pred %>% group_by(Resample) %>% 
   summarise(R2 = R2(pred, obs), RMSE = RMSE(pred, obs))
 test_r2 <- mean(fold_stat$R2)
 test_rmse <- mean(fold_stat$RMSE)
@@ -4651,9 +4488,6 @@ validation_result <- rbind(validation_result,
 ```
 
 ```{r}
-train_adj_r2 <- adj_r2(getTrainPerf(fit.xgb_hm_dis)$TrainRsquared,
-                       nrow(fit.xgb_hm_dis$trainingData),
-                       fit.xgb_hm_dis$finalModel$nfeatures)
 test_adj_r2 <- adj_r2(test_r2,
                        nrow(fit.xgb_hm_dis$trainingData),
                        fit.xgb_hm_dis$finalModel$nfeatures)
@@ -4662,14 +4496,10 @@ xgb_result <- rbind(xgb_result,
                        tibble(Model = 'Disaster Only',
                               model_response_name = 'hm',
                               daterange = 'dis',
-                              'Train R-Sq' = train_adj_r2,
-                              'Train BT R-Sq' = NA,
-                              'Test R-Sq' = test_adj_r2,
-                              'Test BT R-Sq' = NA,
-                              'Train RMSE' = getTrainPerf(fit.xgb_hm_dis)$TrainRMSE,
-                              'Train BT RMSE' = NA,
-                              'Test RMSE' = test_rmse,
-                              'Test BT RMSE' = NA))
+                              'R-Sq' = test_adj_r2,
+                              'BT R-Sq' = NA,
+                              'RMSE' = test_rmse,
+                              'BT RMSE' = NA))
 ```
 ## Exclude Disaster
 
@@ -4741,9 +4571,6 @@ validation_result <- rbind(validation_result,
 ```
 
 ```{r}
-train_adj_r2 <- adj_r2(getTrainPerf(fit.xgb_hm_excl_dis)$TrainRsquared, 
-                       nrow(fit.xgb_hm_excl_dis$trainingData), 
-                       fit.xgb_hm_excl_dis$finalModel$nfeatures)
 test_adj_r2 <- adj_r2(test_r2, 
                        nrow(fit.xgb_hm_excl_dis$trainingData), 
                        fit.xgb_hm_excl_dis$finalModel$nfeatures)
@@ -4752,14 +4579,10 @@ xgb_result <- rbind(xgb_result,
                        tibble(Model = 'Exclude Disaster',
                               model_response_name = 'hm',
                               daterange = 'excl_dis',
-                              'Train R-Sq' = train_adj_r2,
-                              'Train BT R-Sq' = NA,
-                              'Test R-Sq' = test_adj_r2,
-                              'Test BT R-Sq' = NA,
-                              'Train RMSE' = getTrainPerf(fit.xgb_hm_excl_dis)$TrainRMSE,
-                              'Train BT RMSE' = NA,
-                              'Test RMSE' = test_rmse,
-                              'Test BT RMSE' = NA))
+                              'R-Sq' = test_adj_r2,
+                              'BT R-Sq' = NA,
+                              'RMSE' = test_rmse,
+                              'BT RMSE' = NA))
 ```
 
 ## Everything w Disaster Indicator	
@@ -4849,9 +4672,6 @@ validation_result <- rbind(validation_result,
 ```
 
 ```{r}
-train_adj_r2 <- adj_r2(getTrainPerf(fit.xgb_hm_dis_ind)$TrainRsquared, 
-                       nrow(fit.xgb_hm_dis_ind$trainingData), 
-                       fit.xgb_hm_dis_ind$finalModel$nfeatures)
 test_adj_r2 <- adj_r2(test_r2, 
                        nrow(fit.xgb_hm_dis_ind$trainingData), 
                        fit.xgb_hm_dis_ind$finalModel$nfeatures)
@@ -4860,14 +4680,10 @@ xgb_result <- rbind(xgb_result,
                        tibble(Model = 'Everything w. Disaster Indicator',
                               model_response_name = 'hm',
                               daterange = 'dis_ind',
-                              'Train R-Sq' = train_adj_r2,
-                              'Train BT R-Sq' = NA,
-                              'Test R-Sq' = test_adj_r2,
-                              'Test BT R-Sq' = NA,
-                              'Train RMSE' = getTrainPerf(fit.xgb_hm_dis_ind)$TrainRMSE,
-                              'Train BT RMSE' = NA,
-                              'Test RMSE' = test_rmse,
-                              'Test BT RMSE' = NA))
+                              'R-Sq' = test_adj_r2,
+                              'BT R-Sq' = NA,
+                              'RMSE' = test_rmse,
+                              'BT RMSE' = NA))
 ```
 ## Everything w.o Disaster Indicator	
 
@@ -4956,9 +4772,6 @@ validation_result <- rbind(validation_result,
 
 
 ```{r}
-train_adj_r2 <- adj_r2(getTrainPerf(fit.xgb_hm_full)$TrainRsquared,
-                       nrow(fit.xgb_hm_full$trainingData),
-                       fit.xgb_hm_full$finalModel$nfeatures)
 test_adj_r2 <- adj_r2(test_r2,
                        nrow(fit.xgb_hm_full$trainingData),
                        fit.xgb_hm_full$finalModel$nfeatures)
@@ -4966,14 +4779,10 @@ xgb_result <- rbind(xgb_result,
                        tibble(Model = 'Everything w.o Disaster Indicator',
                               model_response_name = 'hm',
                               daterange = 'full',
-                              'Train R-Sq' = train_adj_r2,
-                              'Train BT R-Sq' = NA,
-                              'Test R-Sq' = test_adj_r2,
-                              'Test BT R-Sq' = NA,
-                              'Train RMSE' = getTrainPerf(fit.xgb_hm_full)$TrainRMSE,
-                              'Train BT RMSE' = NA,
-                              'Test RMSE' = test_rmse,
-                              'Test BT RMSE' = NA))
+                              'R-Sq' = test_adj_r2,
+                              'BT R-Sq' = NA,
+                              'RMSE' = test_rmse,
+                              'BT RMSE' = NA))
 ```
 
 # XGBoost: log(H2S_hourly_max)
@@ -5048,9 +4857,10 @@ validation_result <- rbind(validation_result,
 ```
 
 ```{r}
-train_adj_r2 <- adj_r2(getTrainPerf(fit.xgb_log_hm_sincefeb2022)$TrainRsquared, 
+test_adj_r2 <- adj_r2(test_r2,
                        nrow(fit.xgb_log_hm_sincefeb2022$trainingData), 
                        fit.xgb_log_hm_sincefeb2022$finalModel$nfeatures)
+
 BT_adj_r2 <- adj_r2(test_r2_bt,
                        nrow(fit.xgb_log_hm_sincefeb2022$trainingData), 
                        fit.xgb_log_hm_sincefeb2022$finalModel$nfeatures)
@@ -5059,14 +4869,10 @@ xgb_result <- rbind(xgb_result,
                        tibble(Model = 'Since Feb 2022',
                               model_response_name = 'log_hm',
                               daterange = 'sincefeb2022',
-                              'Train R-Sq' = train_adj_r2,
-                              'Train BT R-Sq' = NA,
-                              'Test R-Sq' = test_adj_r2,
-                              'Test BT R-Sq' = BT_adj_r2,
-                              'Train RMSE' = getTrainPerf(fit.xgb_log_hm_sincefeb2022)$TrainRMSE,
-                              'Train BT RMSE' = NA,
-                              'Test RMSE' = test_rmse,
-                              'Test BT RMSE' = test_rmse_bt))
+                              'R-Sq' = test_adj_r2,
+                              'BT R-Sq' = BT_adj_r2,
+                              'RMSE' = test_rmse,
+                              'BT RMSE' = test_rmse_bt))
 ```
 
 ## Disaster Only
@@ -5140,9 +4946,10 @@ validation_result <- rbind(validation_result,
 ```
 
 ```{r}
-train_adj_r2 <- adj_r2(getTrainPerf(fit.xgb_log_hm_dis)$TrainRsquared, 
+test_adj_r2 <- adj_r2(test_r2,
                        nrow(fit.xgb_log_hm_dis$trainingData), 
                        fit.xgb_log_hm_dis$finalModel$nfeatures)
+
 BT_adj_r2 <- adj_r2(test_r2_bt,
                        nrow(fit.xgb_log_hm_dis$trainingData), 
                        fit.xgb_log_hm_dis$finalModel$nfeatures)
@@ -5151,14 +4958,10 @@ xgb_result <- rbind(xgb_result,
                        tibble(Model = 'Disaster Only',
                               model_response_name = 'log_hm',
                               daterange = 'dis',
-                              'Train R-Sq' = train_adj_r2,
-                              'Train BT R-Sq' = NA,
-                              'Test R-Sq' = test_adj_r2,
-                              'Test BT R-Sq' = BT_adj_r2,
-                              'Train RMSE' = getTrainPerf(fit.xgb_log_hm_dis)$TrainRMSE,
-                              'Train BT RMSE' = NA,
-                              'Test RMSE' = test_rmse,
-                              'Test BT RMSE' = test_rmse_bt))
+                              'R-Sq' = test_adj_r2,
+                              'BT R-Sq' = BT_adj_r2,
+                              'RMSE' = test_rmse,
+                              'BT RMSE' = test_rmse_bt))
 ```
 
 
@@ -5234,9 +5037,10 @@ validation_result <- rbind(validation_result,
 
 
 ```{r}
-train_adj_r2 <- adj_r2(getTrainPerf(fit.xgb_log_hm_excl_dis)$TrainRsquared, 
+test_adj_r2 <- adj_r2(test_r2,
                        nrow(fit.xgb_log_hm_excl_dis$trainingData), 
                        fit.xgb_log_hm_excl_dis$finalModel$nfeatures)
+
 BT_adj_r2 <- adj_r2(test_r2_bt,
                        nrow(fit.xgb_log_hm_excl_dis$trainingData), 
                        fit.xgb_log_hm_excl_dis$finalModel$nfeatures)
@@ -5245,14 +5049,10 @@ xgb_result <- rbind(xgb_result,
                        tibble(Model = 'Exclude Disaster',
                               model_response_name = 'log_hm',
                               daterange = 'excl_dis',
-                              'Train R-Sq' = train_adj_r2,
-                              'Train BT R-Sq' = NA,
-                              'Test R-Sq' = test_adj_r2,
-                              'Test BT R-Sq' = BT_adj_r2,
-                              'Train RMSE' = getTrainPerf(fit.xgb_log_hm_excl_dis)$TrainRMSE,
-                              'Train BT RMSE' = NA,
-                              'Test RMSE' = test_rmse,
-                              'Test BT RMSE' = test_rmse_bt))
+                              'R-Sq' = test_adj_r2,
+                              'BT R-Sq' = BT_adj_r2,
+                              'RMSE' = test_rmse,
+                              'BT RMSE' = test_rmse_bt))
 ```
 
 ## Everything w. Disaster Indicator
@@ -5335,9 +5135,10 @@ validation_result <- rbind(validation_result,
 ```
 
 ```{r}
-train_adj_r2 <- adj_r2(getTrainPerf(fit.xgb_log_hm_dis_ind)$TrainRsquared, 
+test_adj_r2 <- adj_r2(test_r2,
                        nrow(fit.xgb_log_hm_dis_ind$trainingData), 
                        fit.xgb_log_hm_dis_ind$finalModel$nfeatures)
+
 BT_adj_r2 <- adj_r2(test_r2_bt,
                        nrow(fit.xgb_log_hm_dis_ind$trainingData), 
                        fit.xgb_log_hm_dis_ind$finalModel$nfeatures)
@@ -5346,14 +5147,10 @@ xgb_result <- rbind(xgb_result,
                        tibble(Model = 'Everything w. Disaster Indicator',
                               model_response_name = 'log_hm',
                               daterange = 'dis_ind',
-                              'Train R-Sq' = train_adj_r2,
-                              'Train BT R-Sq' = NA,
-                              'Test R-Sq' = test_adj_r2,
-                              'Test BT R-Sq' = BT_adj_r2,
-                              'Train RMSE' = getTrainPerf(fit.xgb_log_hm_dis_ind)$TrainRMSE,
-                              'Train BT RMSE' = NA,
-                              'Test RMSE' = test_rmse,
-                              'Test BT RMSE' = test_rmse_bt))
+                              'R-Sq' = test_adj_r2,
+                              'BT R-Sq' = BT_adj_r2,
+                              'RMSE' = test_rmse,
+                              'BT RMSE' = test_rmse_bt))
 ```
 
 ## Everything w.o Disaster Indicator
@@ -5439,9 +5236,10 @@ validation_result <- rbind(validation_result,
 ```
 
 ```{r}
-train_adj_r2 <- adj_r2(getTrainPerf(fit.xgb_log_hm_full)$TrainRsquared, 
+test_adj_r2 <- adj_r2(test_r2,
                        nrow(fit.xgb_log_hm_full$trainingData), 
                        fit.xgb_log_hm_full$finalModel$nfeatures)
+
 BT_adj_r2 <- adj_r2(test_r2_bt, 
                        nrow(fit.xgb_log_hm_full$trainingData), 
                        fit.xgb_log_hm_full$finalModel$nfeatures)
@@ -5450,14 +5248,10 @@ xgb_result <- rbind(xgb_result,
                        tibble(Model = 'Everything w.o Disaster Indicator',
                               model_response_name = 'log_hm',
                               daterange = 'full',
-                              'Train R-Sq' = train_adj_r2,
-                              'Train BT R-Sq' = NA,
-                              'Test R-Sq' = test_adj_r2,
-                              'Test BT R-Sq' = BT_adj_r2,
-                              'Train RMSE' = getTrainPerf(fit.xgb_log_hm_full)$TrainRMSE,
-                              'Train BT RMSE' = NA,
-                              'Test RMSE' = test_rmse,
-                              'Test BT RMSE' = test_rmse_bt))
+                              'R-Sq' = test_adj_r2,
+                              'BT R-Sq' = BT_adj_r2,
+                              'RMSE' = test_rmse,
+                              'BT RMSE' = test_rmse_bt))
 ```
 
 # XGB Model performances
@@ -5495,7 +5289,7 @@ base_xgb_result <- xgb_result %>%
                                    str_detect(model_response_name, 'dm') ~ 'Daily Max',
                                    str_detect(model_response_name, 'ha') ~ 'Hourly Avg',
                                    str_detect(model_response_name, 'hm') ~ 'Hourly Max')) %>%
-  select(-transformation, -`Train BT R-Sq`, -`Train BT RMSE`, -`Test BT R-Sq`, -`Test BT RMSE`)
+  select(-transformation, -`BT R-Sq`, -`BT RMSE`)
 
 log_xgb_result <- xgb_result %>%
   mutate(transformation = if_else(str_detect(model_response_name, 'log_'), 'Log', '')) %>%
@@ -5504,7 +5298,7 @@ log_xgb_result <- xgb_result %>%
                                    str_detect(model_response_name, 'dm') ~ 'Daily Max',
                                    str_detect(model_response_name, 'ha') ~ 'Hourly Avg',
                                    str_detect(model_response_name, 'hm') ~ 'Hourly Max')) %>%
-  select(-transformation, -`Train BT R-Sq`, -`Train BT RMSE`)
+  select(-transformation)
 ```
 
 ```{r}
@@ -5533,19 +5327,19 @@ full_result_table_fordisp <- base_table %>%
   left_join(base_xgb_result, join_by(date_names == Model, response_base)) %>%
   left_join(log_xgb_result, join_by(date_names == Model, response_base)) %>%
   select(-starts_with('model_response_name'), -starts_with('daterange'), -'date_names') %>%
-  select(all_of(c('response_base', 'n', 'adjr2.x', 'p.x', 'adjr2.y', 'bt_adjr2', 'p.y', 'Train R-Sq.x', 'Train RMSE.x', 'Test R-Sq.x', 'Test RMSE.x', 'Train R-Sq.y', 'Train RMSE.y', 'Test R-Sq.y', 'Test BT R-Sq', 'Test RMSE.y', 'Test BT RMSE'))) %>%
+  select(all_of(c('response_base', 'n', 'adjr2.x', 'p.x', 'adjr2.y', 'bt_adjr2', 'p.y', 'R-Sq.x', 'RMSE.x', 'R-Sq.y', 'RMSE.y', 'BT R-Sq', 'BT RMSE'))) %>%
   setNames(c('Response','N', 'R2', 'P', 'R2', 'BT R2', 'P',
-             c('R2', 'RMSE', 'R2', 'RMSE'), 
-             c('R2', 'RMSE', 'R2', 'BT R2', 'RMSE', 'BT RMSE')))
+             c('R2', 'RMSE'),  
+             c('R2', 'RMSE', 'BT R2', 'BT RMSE')))
   
 
 full_result_table_kable <- full_result_table_fordisp %>%
   knitr::kable(format = 'latex', digits = 2) %>%
   pack_rows(index = c("Since Feb 2022" = 4, "Disaster Only" = 4, 
                       "Exclude Disaster" = 4, "Everything w D.I" = 4, "Everything w.o D.I" = 4)) %>%
-  add_header_above(c(' ' = 7, 'Train' = 2, 'Test' = 2, 'Train' = 2, 'Test' = 4)) %>%
-  add_header_above(c(' ' = 2, 'No Transformation' = 2, 'Log-Transformation' = 3, 'No Transformation' = 4, 'Log-Transformation' = 6)) %>%
-  add_header_above(c(' ' = 2, 'GAM' = 5, 'XGBoost' = 10))
+  add_header_above(c(' ' = 7, 'Test' = 2, 'Test' = 4)) %>%
+  add_header_above(c(' ' = 2, 'No Transformation' = 2, 'Log-Transformation' = 3, 'No Transformation' = 2, 'Log-Transformation' = 4)) %>%
+  add_header_above(c(' ' = 2, 'GAM' = 5, 'XGBoost' = 6))
 
 writeLines(gam_result_table_kable, '../figures/gam_result_table.tex')
 
@@ -5553,9 +5347,9 @@ full_result_table_fordisp %>%
   knitr::kable(format = 'pipe', digits = 4, table.attr = "style='width:100%;'") %>%
   pack_rows(index = c("Since Feb 2022" = 4, "Disaster Only" = 4, 
                       "Exclude Disaster" = 4, "Everything w D.I" = 4, "Everything w.o D.I" = 4)) %>%
-  add_header_above(c(' ' = 7, 'Train' = 2, 'Test' = 2, 'Train' = 2, 'Test' = 4)) %>%
-  add_header_above(c(' ' = 2, 'No Transformation' = 2, 'Log-Transformation' = 3, 'No Transformation' = 4, 'Log-Transformation' = 6)) %>%
-  add_header_above(c(' ' = 2, 'GAM' = 5, 'XGBoost' = 10)) %>% 
+  add_header_above(c(' ' = 7, 'Test' = 2, 'Test' = 4)) %>%
+  add_header_above(c(' ' = 2, 'No Transformation' = 2, 'Log-Transformation' = 3, 'No Transformation' = 2, 'Log-Transformation' = 4)) %>%
+  add_header_above(c(' ' = 2, 'GAM' = 5, 'XGBoost' = 6)) %>%
   kable_styling()
 ```
 

@@ -73,7 +73,7 @@ full_data <- full_data %>%
   mutate(day = as.POSIXct(format(`Date/Time`, "%Y-%m-%d"), format="%Y-%m-%d", tz = 'America/Los_Angeles'))
  
 # Remove observations before 2020
-full_data <- full_data %>% filter(day > '2019-12-31') %>% distinct()
+full_data <- full_data %>% filter(day >= as.POSIXct("2020-01-01 00:00:00", tz="America/Los_Angeles")) %>% distinct()
  
 full_data <- full_data %>% 
   mutate(yearmonth = format(day, "%Y-%m"),
