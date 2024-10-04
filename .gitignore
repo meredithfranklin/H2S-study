@@ -1853,3 +1853,10 @@ predictions/zipcode_prediction/zipcode_data.csv
 predictions/zipcode_prediction/zipcode_data.csv
 predictions/zipcode_prediction/zipcode_data.csv
 predictions/zipcode_prediction/zipcode_data.csv
+shapefiles/.DS_Store
+predictions/.DS_Store
+polarplot_components/.DS_Store
+modeling/.DS_Store
+figures/.DS_Store
+data/.DS_Store
+.DS_Store

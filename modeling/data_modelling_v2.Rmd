@@ -357,10 +357,10 @@ best_smooth
 ```{r}
 response_names <- c('da', 'log_da', 'dm', 'log_dm', 'ha', 'log_ha', 'hm', 'log_hm')
 
-smooth_models <- tibble(name = response_names,
-                        response = c(daily_responses, hourly_responses)) %>%
-  crossing(dateranges) %>%
-  mutate(name = paste(name, daterange, sep = '_'))
+# smooth_models <- tibble(name = response_names,
+#                         response = c(daily_responses, hourly_responses)) %>%
+#   crossing(tibble(daterange = dateranges)) %>%
+#   mutate(name = paste(name, daterange, sep = '_'))
 
 
 smooth_predictors <-
@@ -368,33 +368,33 @@ smooth_predictors <-
     "s(I(mon_utm_x/10^3), I(mon_utm_y/10^3), bs='tp', k = 10)",
     "te(I(mon_utm_x/10^3), I(mon_utm_y/10^3), as.numeric(day), k=c(10,10),d=c(2,1),bs=c('tp','cc'))")
 
-smooth_models$residuals <- rep(list(c()), nrow(smooth_models))
-
-for (i in 1:nrow(smooth_models)) {
-  # first, get residuals of smooth on response
-  if (smooth_models$daterange[i] == 'dis') {
-    formula_feature_str <- paste(smooth_predictors[c(2, 3)], collapse = ' + ')
-  } else {
-    formula_feature_str <- paste(smooth_predictors, collapse = ' + ')
-  }
-
-  if (smooth_models[[i, 'response']] %in% hourly_responses &
-      smooth_models[[i, 'daterange']] == 'full') {
-    data <- hourly_full
-  } else if (smooth_models[[i, 'response']] %in% hourly_responses) {
-    data <- get(paste0('hourly_data_', smooth_models[[i, 'daterange']]))
-  } else if (smooth_models[[i, 'daterange']] == 'full') {
-    data <- daily_full
-  } else {
-    data <- get(paste0('daily_data_', smooth_models[[i, 'daterange']]))
-  }
-
-  formula_str <- paste(smooth_models[[i, 'response']], formula_feature_str, sep = ' ~ ')
-  formula <- as.formula(formula_str)
-  residuals <- gam(formula, data = data, method = 'GCV.Cp')$residuals
-  smooth_models$residuals[i] <- list(residuals)
-}
-saveRDS(smooth_models, 'smooth_models.rds')
+# smooth_models$residuals <- rep(list(c()), nrow(smooth_models))
+# 
+# for (i in 1:nrow(smooth_models)) {
+#   # first, get residuals of smooth on response
+#   if (smooth_models$daterange[i] == 'dis') {
+#     formula_feature_str <- paste(smooth_predictors[c(2, 3)], collapse = ' + ')
+#   } else {
+#     formula_feature_str <- paste(smooth_predictors, collapse = ' + ')
+#   }
+# 
+#   if (smooth_models[[i, 'response']] %in% hourly_responses &
+#       smooth_models[[i, 'daterange']] == 'full') {
+#     data <- hourly_full
+#   } else if (smooth_models[[i, 'response']] %in% hourly_responses) {
+#     data <- get(paste0('hourly_data_', smooth_models[[i, 'daterange']]))
+#   } else if (smooth_models[[i, 'daterange']] == 'full') {
+#     data <- daily_full
+#   } else {
+#     data <- get(paste0('daily_data_', smooth_models[[i, 'daterange']]))
+#   }
+# 
+#   formula_str <- paste(smooth_models[[i, 'response']], formula_feature_str, sep = ' ~ ')
+#   formula <- as.formula(formula_str)
+#   residuals <- gam(formula, data = data, method = 'GCV.Cp')$residuals
+#   smooth_models$residuals[i] <- list(residuals)
+# }
+# saveRDS(smooth_models, 'smooth_models.rds')
 
 smooth_models <- readRDS('smooth_models.rds')
 ```
@@ -868,7 +868,7 @@ for (i in 1:nrow(smooth_models)) {
 #   group_by(name, response, daterange) %>%
 #   summarise(mean_smooth_res = mean(unlist(residuals)),
 #             var_smooth_res = round(var(unlist(residuals))), 4) %>%
-#   select(any_of(c('name', 'response', 'daterange', 
+#   select(any_of(c('name', 'response', 'daterange',
 #                   'mean_smooth_res', 'var_smooth_res'))) %>%
 #   mutate(Adj.R2 = NA,
 #          best_R2 = NA,
@@ -2423,19 +2423,19 @@ xgb_result <- rbind(xgb_result,
 
 ## Since 2022 Feb
 ```{r echo = T, results = 'hide'}
-fit.xgb_dm <- readRDS('../rfiles/xgboost_v2/fit.xgb_dm.rds')
+fit.xgb_dm_sincefeb2022 <- readRDS('../rfiles/xgboost_v2/fit.xgb_dm_sincefeb2022.rds')
 ```
 
 ```{r}
-getTrainPerf(fit.xgb_dm)
+getTrainPerf(fit.xgb_dm_sincefeb2022)
 ```
 
 ```{r}
-fit.xgb_dm$finalModel
+fit.xgb_dm_sincefeb2022$finalModel
 ```
 
 ```{r}
-imp<-varImp(fit.xgb_dm,scale=FALSE)
+imp<-varImp(fit.xgb_dm_sincefeb2022,scale=FALSE)
 
 # rename variables
 imp <- tibble(variable = rownames(imp$importance), importance = imp$importance$Overall) %>%
@@ -2459,14 +2459,14 @@ imp %>%
 # we use savePredictions = 'final' to store the predictions on the test set at each fold
 
 # Here, we compute the R2 and RMSE for each fold and take the average
-fold_stat <- fit.xgb_dm$pred %>% group_by(Resample) %>% 
+fold_stat <- fit.xgb_dm_sincefeb2022$pred %>% group_by(Resample) %>% 
   summarise(R2 = R2(pred, obs), RMSE = RMSE(pred, obs))
 test_r2 <- mean(fold_stat$R2)
 test_rmse <- mean(fold_stat$RMSE)
 ```
 
 ```{r}
-xgb_sincefeb2022_obs_vs_pred_plot <- ggplot(tibble(obs = fit.xgb_dm$pred$obs, pred = fit.xgb_dm$pred$pred),
+xgb_sincefeb2022_obs_vs_pred_plot <- ggplot(tibble(obs = fit.xgb_dm_sincefeb2022$pred$obs, pred = fit.xgb_dm_sincefeb2022$pred$pred),
                              aes(x = pred, y = obs)) +
                         geom_point() +
                         labs(y = 'Observed', x = 'Predicted', 
@@ -2481,18 +2481,18 @@ validation_result <- rbind(validation_result,
                            tibble(Model = 'Since Feb 2022',
                                   model_response_name = 'dm',
                                   daterange = 'sincefeb2022',
-                                  'Coef' = summary(lm(fit.xgb_dm$pred$obs ~
-                                                        fit.xgb_dm$pred$pred))$coefficients[2, 1], 
-                                  'R-Sq' = summary(lm(fit.xgb_dm$pred$obs ~
-                                                        fit.xgb_dm$pred$pred))$r.squared,
+                                  'Coef' = summary(lm(fit.xgb_dm_sincefeb2022$pred$obs ~
+                                                        fit.xgb_dm_sincefeb2022$pred$pred))$coefficients[2, 1], 
+                                  'R-Sq' = summary(lm(fit.xgb_dm_sincefeb2022$pred$obs ~
+                                                        fit.xgb_dm_sincefeb2022$pred$pred))$r.squared,
                                   'Disaster RMSE' = NA,
                                   'Normal RMSE' = NA))
 ```
 
 ```{r}
 test_adj_r2 <- adj_r2(test_r2,
-                       nrow(fit.xgb_dm$trainingData),
-                       fit.xgb_dm$finalModel$nfeatures)
+                       nrow(fit.xgb_dm_sincefeb2022$trainingData),
+                       fit.xgb_dm_sincefeb2022$finalModel$nfeatures)
 
 xgb_result <- rbind(xgb_result,
                        tibble(Model = 'Since Feb 2022',
