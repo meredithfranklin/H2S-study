@@ -67,7 +67,7 @@ dates <- seq(as.Date('2020-01-01'), as.Date('2022-12-31'), by = 'day')
 dates <- dates[format(dates, '%m') %in% c('11', '12', '01', '02')]
 
 airport_nov_to_feb <- airport_full_daily %>%
-  filter(Date %in% dates)
+  filter(as.character(Date) %in% dates)
 
 set.seed(123)
 airport_nov_to_feb_sample <- airport_nov_to_feb %>%

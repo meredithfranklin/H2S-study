@@ -537,7 +537,7 @@ get_feature_vector <- function(response, daterange) {
       pull(full_features) %>%
       unlist()
   feature_vec <- str_replace_all(feature_vec, 'month\\d+', 'month')
-  feature_vec <- str_replace_all(feature_vec, 'year\\d+', 'month')
+  feature_vec <- str_replace_all(feature_vec, 'year\\d+', 'year')
   feature_vec <- str_replace_all(feature_vec, 'weekday\\D+', 'weekday')
   feature_vec <- unique(feature_vec)
   return(feature_vec)
@@ -568,12 +568,12 @@ get_gam_model <- function(response, daterange) {
   return(gam_model)
 }
 
-for (i in 1:nrow(best_gam_models)) {
-  model <- get_gam_model(best_gam_models$response[i],
-                         best_gam_models$daterange[i])
-  assign(paste0(best_gam_models$name[i], '_', best_gam_models$daterange[i], '_gam'), model)
-  saveRDS(model, paste0('gam_models/', paste0(best_gam_models$name[i], '_gam.rds')))
-}
+# for (i in 1:nrow(best_gam_models)) {
+#   model <- get_gam_model(best_gam_models$response[i],
+#                          best_gam_models$daterange[i])
+#   assign(paste0(best_gam_models$name[i], '_', best_gam_models$daterange[i], '_gam'), model)
+#   saveRDS(model, paste0('gam_models/', paste0(best_gam_models$name[i], '_gam.rds')))
+# }
 ```
 
 
@@ -654,7 +654,7 @@ get_gam_result <- function(model_obj, model_name){
 sincefeb2022_model_stat <- get_gam_result(log_da_sincefeb2022_gam, 'Daily Average H2S Since Feb 2022') 
 
 sincefeb2022_model_stat_latex <- knitr::kable(sincefeb2022_model_stat, format = 'latex', digits = 2)
-writeLines(sincefeb2022_model_stat_latex, 'figures/sincefeb2022_log_model.tex')
+writeLines(sincefeb2022_model_stat_latex, '../figures/da_sincefeb2022_log_model.tex')
 
 knitr::kable(sincefeb2022_model_stat, format = 'html', digits = 2)
 ```
@@ -663,6 +663,15 @@ Disaster Only
 ```{r}
 # Disaster only
 summary(log_da_dis_gam)
+```
+
+```{r}
+dis_model_stat <- get_gam_result(log_da_dis_gam, 'Daily Average H2S Event') 
+
+event_model_stat_latex <- knitr::kable(dis_model_stat, format = 'latex', digits = 2)
+writeLines(event_model_stat_latex, '../figures/da_event_log_model.tex')
+
+knitr::kable(dis_model_stat, format = 'html', digits = 2)
 ```
 
 Exclude Disaster	
@@ -1548,23 +1557,6 @@ xgb_result <- rbind(xgb_result,
                               'BT R-Sq' = NA,
                               'RMSE' = test_rmse,
                               'BT RMSE' = NA))
-```
-
-
-## Observed Vs. Predicted Plots 10-fold CV
-```{r}
-ggarrange(xgb_sincefeb2022_obs_vs_pred_plot, 
-          ggarrange(xgb_disaster_obs_vs_pred_plot, xgb_disaster_obs_vs_pred_plot_zoom,  
-                    ncol = 2, labels = c("2", "3")),
-          ggarrange(xgb_everything_obs_vs_pred_plot, xgb_everything_obs_vs_pred_plot_zoom, 
-                    ncol = 2, labels = c("4", "5")), 
-                    labels = c("1"),
-                    nrow = 3)
-ggarrange(xgb_excl_dis_obs_vs_pred_plot,
-          ggarrange(xgb_dis_ind_obs_vs_pred_plot, xgb_dis_ind_obs_vs_pred_plot_zoom,  
-                    ncol = 2, labels = c("3", "4")), 
-                    labels = c("1"),
-                    nrow = 2)
 ```
 
 ```{r}
