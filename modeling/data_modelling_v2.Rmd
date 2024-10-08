@@ -430,23 +430,29 @@ hourly_linear_pred_str <- paste(hourly_predictors, collapse = ' + ')
 #     formula_str <- paste(everything_linear_pred_str,
 #                          hourly_linear_pred_str,
 #                          'disaster', sep = ' + ')
+#     print(paste0(smooth_models[[i, 'daterange']], ': everything hourly + ind'))
 #   } else if (smooth_models[[i, 'daterange']] == 'dis' &
 #              smooth_models[[i, 'response']] %in% hourly_responses) {
 #     formula_str <- paste(disaster_linear_pred_str,
 #                          hourly_linear_pred_str, sep = ' + ')
+#     print(paste0(smooth_models[[i, 'daterange']], ': disaster hourly'))
 #   } else if (smooth_models[[i, 'response']] %in% hourly_responses) {
 #     formula_str <- paste(everything_linear_pred_str,
 #                          hourly_linear_pred_str, sep = ' + ')
+#     print(paste0(smooth_models[[i, 'daterange']], ': everything hourly'))
 #   } else if (smooth_models[[i, 'daterange']] == 'dis_ind') {
 #     formula_str <- paste(everything_linear_pred_str,
 #                          daily_linear_pred_str,
 #                          'disaster', sep = ' + ')
+#     print(paste0(smooth_models[[i, 'daterange']], ': everything daily + ind'))
 #   } else if (smooth_models[[i, 'daterange']] == 'dis') {
 #     formula_str <- paste(disaster_linear_pred_str,
 #                          daily_linear_pred_str, sep = ' + ')
+#     print(paste0(smooth_models[[i, 'daterange']], ': disaster daily'))
 #   } else {
 #     formula_str <- paste(everything_linear_pred_str,
 #                          daily_linear_pred_str, sep = ' + ')
+#     print(paste0(smooth_models[[i, 'daterange']], ': everything daily'))
 #   }
 #   formula_str <- paste('residuals', formula_str, sep = ' ~ ')
 #   formula <- as.formula(formula_str)
@@ -479,388 +485,6 @@ for (i in 1:nrow(smooth_models)) {
          readRDS(paste0('regsubsets/', smooth_models$name[i], '_regsubsets.rds')))
 }
 ```
-
-
-<!-- ```{r} -->
-<!-- # prepare stepwise function -->
-<!-- # for this function, I will first have the set of features -->
-<!-- # at each step, find the variable to add/remove that improves model the most -->
-<!-- # using the GCV score (lower = better) -->
-<!-- get_best_feature_forward <- function(response, used_features, unused_features, data) { -->
-<!--     print('Adding...') -->
-<!--     if (length(unused_features) > 0) { -->
-<!--       change_GCV_forward <- tibble(feature = unused_features,  -->
-<!--                            GCV_new = NA) -->
-<!--       for (feature in unused_features) { -->
-<!--         new_features <- c(used_features, feature) -->
-<!--         formula_feature_str <- paste(new_features, collapse = ' + ') -->
-<!--         formula_str <- paste(response, formula_feature_str, sep = ' ~ ') -->
-<!--         print(formula_str) -->
-<!--         formula <- as.formula(formula_str) -->
-
-<!--         gam_model <- gam(formula, data = data, method = 'GCV.Cp', select = TRUE) -->
-<!--         summary <- summary(gam_model) -->
-
-<!--         # get the GCV of new model -->
-<!--         GCV_new <- summary$sp.criterion[[1]] -->
-<!--         print(GCV_new) -->
-<!--         change_GCV_forward$GCV_new[change_GCV_forward$feature == feature] <- GCV_new -->
-<!--       } -->
-<!--       best_feature_forward <- change_GCV_forward[which(change_GCV_forward$GCV_new == -->
-<!--                                                          min(change_GCV_forward$GCV_new)), ] -->
-<!--       best_feature_forward <- best_feature_forward[1, ] -->
-<!--     } else if (length(unused_features) == 0) { -->
-<!--       # no more feature to add so always prefer current model or backward -->
-<!--       best_feature_forward <- tibble(feature = 'FULLMODEL', GCV_new = Inf) -->
-<!--     } else { -->
-<!--       # no more feature to add in stepwise -->
-<!--       # backward should compare to last model -->
-<!--       best_feature_forward <- tibble(feature = NA, GCV_new = GCV) -->
-<!--     } -->
-<!--   return(best_feature_forward) -->
-<!-- } -->
-
-<!-- get_best_feature_backward <- function(response, used_features, unused_features, data) { -->
-<!--     print('Removing...') -->
-<!--     if (length(used_features) > 1) { -->
-<!--       change_GCV_backward <- tibble(feature = used_features,  -->
-<!--                                     GCV_new = NA) -->
-<!--       for (feature in used_features) { -->
-<!--         formula_feature_str <- paste(setdiff(used_features, feature), collapse = ' + ') -->
-<!--         formula_str <- paste(response, formula_feature_str, sep = ' ~ ') -->
-<!--         print(formula_str) -->
-<!--         formula <- as.formula(formula_str) -->
-
-<!--         gam_model <- gam(formula, data = data, method = 'GCV.Cp', select = TRUE) -->
-<!--         summary <- summary(gam_model) -->
-
-<!--         # get the GCV of new model -->
-<!--         GCV_new <- summary$sp.criterion[[1]] -->
-<!--         print(GCV_new) -->
-<!--         change_GCV_backward$GCV_new[change_GCV_backward$feature == feature] <- GCV_new -->
-<!--       } -->
-<!--       best_feature_backward <- change_GCV_backward[which(change_GCV_backward$GCV_new == -->
-<!--                                                            min(change_GCV_backward$GCV_new)), ] -->
-<!--       best_feature_backward <- best_feature_backward[1, ] -->
-<!--     } else if (length(used_features) == 1) { -->
-<!--       # only one feature left to remove, which gives intercept model -->
-<!--         formula_str <- paste(response, '1', sep = ' ~ ') -->
-
-<!--         print(formula_str) -->
-<!--         formula <- as.formula(formula_str) -->
-
-<!--         gam_model <- gam(formula, data = data, method = 'GCV.Cp', select = TRUE) -->
-<!--         summary <- summary(gam_model) -->
-
-<!--         # get the GCV of new model -->
-<!--         GCV_new <- summary$sp.criterion[[1]] -->
-<!--         print(GCV_new) -->
-<!--         best_feature_backward <- tibble(feature = 'Intercept', GCV_new = GCV_new) -->
-<!--     } else { -->
-<!--       # no feature to remove so always prefer last model or forward -->
-<!--        best_feature_backward <- tibble(feature = NA, GCV_new = Inf) -->
-<!--     } -->
-<!--   return(best_feature_backward) -->
-<!-- } -->
-
-<!-- get_init_gcv <- function(response, used_features, unused_features, data) { -->
-<!--   if (length(used_features) == 0) {used_features <- c('1')} -->
-<!--   formula_feature_str <- paste(used_features, collapse = ' + ') -->
-<!--   formula_str <- paste(response, formula_feature_str, sep = ' ~ ') -->
-<!--   formula <- as.formula(formula_str) -->
-
-<!--   # use select = TRUE to add penalty to null space (zero wiggliness) -->
-<!--   # so smooth term can be penalized to zero instead of linear -->
-<!--   gam_model <- gam(formula, data = data, method = 'GCV.Cp', select = TRUE) -->
-<!--   summary <- summary(gam_model) -->
-
-<!--   # get the GCV of init model -->
-<!--   GCV <- summary$sp.criterion[[1]] -->
-<!--   print(paste0('Starting GCV: ', GCV)) -->
-<!--   return(GCV) -->
-<!-- } -->
-
-<!-- step_gam <- function(response, features, init_features, direction, data) { -->
-<!--   step_i <- 1 -->
-<!--   convergence <- FALSE -->
-<!--   used_features <- init_features -->
-<!--   unused_features <- setdiff(features, init_features) -->
-
-<!--   GCV <- get_init_gcv(response, used_features, unused_features, data) -->
-
-<!--   step_summary <- setNames(c(GCV, features %in% used_features), c("GCV", features)) -->
-<!--   step_summary <- as_tibble(t(step_summary)) -->
-
-<!--   i <- 1 -->
-<!--   # until we reach convergence (GCV no longer decreases) -->
-<!--   while (convergence == FALSE) { -->
-<!--     print(paste0('Currently at ',i, ' iteration...')) -->
-<!--     # forward selection -->
-<!--     if (direction %in% c('forward', 'stepwise')) { -->
-<!--       best_feature_forward <- get_best_feature_forward(response, used_features,  -->
-<!--                                                        unused_features, data) -->
-<!--     } -->
-
-<!--     # backward selection -->
-<!--     if (direction %in% c('backward', 'stepwise')) { -->
-<!--       best_feature_backward <- get_best_feature_backward(response, used_features,  -->
-<!--                                                          unused_features, data) -->
-<!--     } -->
-
-<!--     if (direction == 'forward') { -->
-<!--       # compare the best feature to add with current GCV -->
-<!--       if (best_feature_forward$GCV_new <= GCV) { -->
-<!--         # add this feature to used feature vector and remove from unused -->
-<!--         used_features <- append(used_features, best_feature_forward$feature) -->
-<!--         unused_features <- setdiff(unused_features, best_feature_forward$feature) -->
-<!--         GCV <- best_feature_forward$GCV_new # update GCV -->
-<!--       } else { -->
-<!--         convergence == TRUE -->
-<!--         break -->
-<!--       } -->
-<!--     } else if (direction == 'backward') { -->
-<!--       if (best_feature_backward$GCV_new <= GCV) { -->
-<!--         # if this is intercept model and adding anything won't improve the model -->
-<!--         if (best_feature_backward$feature == 'Intercept') { -->
-<!--           convergence == TRUE -->
-<!--         } -->
-<!--         # add this feature to unused feature vector and remove from used -->
-<!--         unused_features <- append(unused_features, best_feature_backward$feature) -->
-<!--         used_features <- setdiff(used_features, best_feature_backward$feature) -->
-<!--         GCV <- best_feature_backward$GCV_new # update GCV -->
-<!--       } else { -->
-<!--         convergence == TRUE -->
-<!--         break -->
-<!--       } -->
-<!--     } else if (direction == 'stepwise') { -->
-<!--       # for this, need compare both directions -->
-<!--       # choose direction/feature that decreases GCV the most -->
-<!--       if (best_feature_forward$GCV_new < best_feature_backward$GCV_new) { -->
-<!--         # if forward is better (lower GCV) -->
-<!--         if (best_feature_forward$GCV_new <= GCV) { -->
-<!--           used_features <- append(used_features, best_feature_forward$feature) -->
-<!--           unused_features <- setdiff(unused_features, best_feature_forward$feature) -->
-<!--           GCV <- best_feature_forward$GCV_new -->
-<!--         } else { -->
-<!--           convergence == TRUE -->
-<!--         break -->
-<!--         } -->
-<!--       } else if (best_feature_forward$GCV_new == best_feature_backward$GCV_new) { -->
-<!--         # randomly choose step -->
-<!--         random_coin <- sample(c(1, 2), 1) -->
-<!--         if (random_coin == 1) { -->
-<!--           if (best_feature_forward$GCV_new < GCV) { -->
-<!--           # add this feature to used feature vector and remove from unused -->
-<!--             used_features <- append(used_features, best_feature_forward$feature) -->
-<!--             unused_features <- setdiff(unused_features, best_feature_forward$feature) -->
-<!--             GCV <- best_feature_forward$GCV_new # update GCV -->
-<!--           } -->
-<!--         } else { -->
-<!--             if (best_feature_backward$GCV_new < GCV) { -->
-<!--               # if this is intercept model and adding anything won't improve the model -->
-<!--               if (best_feature_backward$feature == 'Intercept') { -->
-<!--                 convergence == TRUE -->
-<!--               } -->
-<!--               # add this feature to unused feature vector and remove from used -->
-<!--               unused_features <- append(unused_features, best_feature_backward$feature) -->
-<!--               used_features <- setdiff(used_features, best_feature_backward$feature) -->
-<!--               GCV <- best_feature_backward$GCV_new # update GCV -->
-<!--             } -->
-<!--           } -->
-<!--       } else { -->
-<!--         # else backward is better -->
-<!--         # if this new model gives better GCV than last model -->
-<!--         if (best_feature_backward$GCV_new <= GCV) { -->
-<!--           # if this is intercept model and adding anything won't improve the model -->
-<!--           if (best_feature_backward$feature == 'Intercept') { -->
-<!--             convergence == TRUE -->
-<!--           } -->
-<!--           # add this feature to unused feature vector and remove from used -->
-<!--           unused_features <- append(unused_features, best_feature_backward$feature) -->
-<!--           used_features <- setdiff(used_features, best_feature_backward$feature) -->
-<!--           GCV <- best_feature_backward$GCV_new # update GCV -->
-<!--         } else { -->
-<!--           convergence == TRUE -->
-<!--           break -->
-<!--         } -->
-<!--       } -->
-<!--     } -->
-
-<!--     # update step summary -->
-<!--     new_step_summary <- setNames(c(GCV, rep(TRUE, length(used_features))), c("GCV", used_features)) -->
-<!--     new_step_summary <- as_tibble(t(new_step_summary)) -->
-<!--     step_summary <- bind_rows(step_summary, new_step_summary) -->
-
-<!--     i <- i + 1 -->
-<!--   } -->
-<!--   step_summary[is.na(step_summary)] <- 0 -->
-<!--   return(step_summary) -->
-<!-- } -->
-<!-- ``` -->
-
-<!-- Daily Avg -->
-<!-- ```{r} -->
-<!-- # since feb 2022 stepwise -->
-<!-- # da_step_gam_table_empty_init_sincefeb2022 <-  -->
-<!-- #   step_gam('H2S_daily_avg', predictors_sincefeb2022, c(), 'stepwise', data_sincefeb2022) -->
-<!-- # da_step_gam_table_full_init_sincefeb2022 <-  -->
-<!-- #   step_gam('H2S_daily_avg', predictors_sincefeb2022, predictors_sincefeb2022, 'stepwise', data_sincefeb2022) -->
-<!-- ``` -->
-
-<!-- ```{r} -->
-<!-- # Disaster stepwise -->
-<!-- # da_step_gam_table_empty_init_dis <- -->
-<!-- #   step_gam('H2S_daily_avg', predictors_dis, c(), 'stepwise', data_dis) -->
-<!-- # da_step_gam_table_full_init_dis <-  -->
-<!-- #   step_gam('H2S_daily_avg', predictors_dis, predictors_dis, 'stepwise', data_dis) -->
-<!-- ``` -->
-
-<!-- ```{r} -->
-<!-- # Exclude disaster stepwise -->
-<!-- # da_step_gam_table_empty_init_excl_dis <-  -->
-<!-- #   step_gam('H2S_daily_avg', predictors_excl_dis, c(), 'stepwise', data_excl_dis) -->
-<!-- # da_step_gam_table_full_init_excl_dis <-  -->
-<!-- #   step_gam('H2S_daily_avg', predictors_excl_dis, predictors_excl_dis, 'stepwise', data_excl_dis) -->
-<!-- ``` -->
-
-<!-- ```{r} -->
-<!-- # full with disaster indicator -->
-<!-- # da_step_gam_table_empty_init_dis_ind <-  -->
-<!-- #   step_gam('H2S_daily_avg', predictors_dis_ind, c(), 'stepwise', data_dis_ind) -->
-<!-- # da_step_gam_table_full_init_dis_ind <-  -->
-<!-- #   step_gam('H2S_daily_avg', predictors_dis_ind, predictors_dis_ind, 'stepwise', data_dis_ind) -->
-<!-- ``` -->
-
-<!-- ```{r} -->
-<!-- # full without disaster indicator -->
-<!-- # da_step_gam_table_empty_init_full <-  -->
-<!-- #   step_gam('H2S_daily_avg', predictors_full, c(), 'stepwise', daily_full) -->
-<!-- # da_step_gam_table_full_init_full <-  -->
-<!-- #   step_gam('H2S_daily_avg', predictors_full, predictors_full, 'stepwise', daily_full) -->
-<!-- ``` -->
-
-<!-- Log Daily Average -->
-<!-- ```{r} -->
-<!-- # since feb 2022 stepwise -->
-<!-- # log_da_step_gam_table_empty_init_sincefeb2022 <-  -->
-<!-- #   step_gam('log(H2S_daily_avg)', predictors_sincefeb2022, c(), 'stepwise', data_sincefeb2022) -->
-<!-- # log_da_step_gam_table_full_init_sincefeb2022 <-  -->
-<!-- #   step_gam('log(H2S_daily_avg)', predictors_sincefeb2022, predictors_sincefeb2022, 'stepwise', data_sincefeb2022) -->
-<!-- ``` -->
-
-<!-- ```{r} -->
-<!-- # Disaster stepwise -->
-<!-- # log_da_step_gam_table_empty_init_dis <-  -->
-<!-- #   step_gam('log(H2S_daily_avg)', predictors_dis, c(), 'stepwise', data_dis) -->
-<!-- # log_da_step_gam_table_full_init_dis <-  -->
-<!-- #   step_gam('log(H2S_daily_avg)', predictors_dis, predictors_dis, 'stepwise', data_dis) -->
-<!-- ``` -->
-
-<!-- ```{r} -->
-<!-- # Exclude disaster stepwise -->
-<!-- # log_da_step_gam_table_empty_init_excl_dis <-  -->
-<!-- #   step_gam('log(H2S_daily_avg)', predictors_excl_dis, c(), 'stepwise', data_excl_dis) -->
-<!-- # log_da_step_gam_table_full_init_excl_dis <-  -->
-<!-- #   step_gam('log(H2S_daily_avg)', predictors_excl_dis, predictors_excl_dis, 'stepwise', data_excl_dis) -->
-<!-- ``` -->
-
-<!-- ```{r} -->
-<!-- # full with disaster indicator -->
-<!-- # log_da_step_gam_table_empty_init_dis_ind <-  -->
-<!-- #   step_gam('log(H2S_daily_avg)', predictors_dis_ind, c(), 'stepwise', data_dis_ind) -->
-<!-- # log_da_step_gam_table_full_init_dis_ind <-  -->
-<!-- #   step_gam('log(H2S_daily_avg)', predictors_dis_ind, predictors_dis_ind, 'stepwise', data_dis_ind) -->
-<!-- ``` -->
-
-<!-- ```{r} -->
-<!-- # full without disaster indicator -->
-<!-- # log_da_step_gam_table_empty_init_full <-  -->
-<!-- #   step_gam('log(H2S_daily_avg)', predictors_full, c(), 'stepwise', daily_full) -->
-<!-- # log_da_step_gam_table_full_init_full <-  -->
-<!-- #   step_gam('log(H2S_daily_avg)', predictors_full, predictors_full, 'stepwise', daily_full) -->
-<!-- ``` -->
-
-<!-- Daily Max -->
-<!-- ```{r} -->
-<!-- # since feb 2022 stepwise -->
-<!-- # dm_step_gam_table_empty_init_sincefeb2022 <-  -->
-<!-- #   step_gam('H2S_daily_max', predictors_sincefeb2022, c(), 'stepwise', data_sincefeb2022) -->
-<!-- # dm_step_gam_table_full_init_sincefeb2022 <-  -->
-<!-- #   step_gam('H2S_daily_max', predictors_sincefeb2022, predictors_sincefeb2022, 'stepwise', data_sincefeb2022) -->
-<!-- ``` -->
-
-<!-- ```{r} -->
-<!-- # Disaster stepwise -->
-<!-- # dm_step_gam_table_empty_init_dis <-  -->
-<!-- #   step_gam('H2S_daily_max', predictors_dis, c(), 'stepwise', data_dis) -->
-<!-- # dm_step_gam_table_full_init_dis <-  -->
-<!-- #   step_gam('H2S_daily_max', predictors_dis, predictors_dis, 'stepwise', data_dis) -->
-<!-- ``` -->
-
-<!-- ```{r} -->
-<!-- # Exclude disaster stepwise -->
-<!-- # dm_step_gam_table_empty_init_excl_dis <-  -->
-<!-- #   step_gam('H2S_daily_max', predictors_excl_dis, c(), 'stepwise', data_excl_dis) -->
-<!-- # dm_step_gam_table_full_init_excl_dis <-  -->
-<!-- #   step_gam('H2S_daily_max', predictors_excl_dis, predictors_excl_dis, 'stepwise', data_excl_dis) -->
-<!-- ``` -->
-
-<!-- ```{r} -->
-<!-- # full with disaster indicator -->
-<!-- # dm_step_gam_table_empty_init_dis_ind <-  -->
-<!-- #   step_gam('H2S_daily_max', predictors_dis_ind, c(), 'stepwise', data_dis_ind) -->
-<!-- # dm_step_gam_table_full_init_dis_ind <-  -->
-<!-- #   step_gam('H2S_daily_max', predictors_dis_ind, predictors_dis_ind, 'stepwise', data_dis_ind) -->
-<!-- ``` -->
-
-<!-- ```{r} -->
-<!-- # full without disaster indicator -->
-<!-- # dm_step_gam_table_empty_init_full <-  -->
-<!-- #   step_gam('H2S_daily_max', predictors_full, c(), 'stepwise', daily_full) -->
-<!-- # dm_step_gam_table_full_init_full <-  -->
-<!-- #   step_gam('H2S_daily_max', predictors_full, predictors_full, 'stepwise', daily_full) -->
-<!-- ``` -->
-
-<!-- Log Daily Max -->
-<!-- ```{r} -->
-<!-- # since feb 2022 stepwise -->
-<!-- # log_dm_step_gam_table_empty_init_sincefeb2022 <-  -->
-<!-- #   step_gam('log(H2S_daily_max)', predictors_sincefeb2022, c(), 'stepwise', data_sincefeb2022) -->
-<!-- # log_dm_step_gam_table_full_init_sincefeb2022 <-  -->
-<!-- #   step_gam('log(H2S_daily_max)', predictors_sincefeb2022, predictors_sincefeb2022, 'stepwise', data_sincefeb2022) -->
-<!-- ``` -->
-
-<!-- ```{r} -->
-<!-- # Disaster stepwise -->
-<!-- # log_dm_step_gam_table_empty_init_dis <-  -->
-<!-- #   step_gam('log(H2S_daily_max)', predictors_dis, c(), 'stepwise', data_dis) -->
-<!-- # log_dm_step_gam_table_full_init_dis <-  -->
-<!-- #   step_gam('log(H2S_daily_max)', predictors_dis, predictors_dis, 'stepwise', data_dis) -->
-<!-- ``` -->
-
-<!-- ```{r} -->
-<!-- # Exclude disaster stepwise -->
-<!-- # log_dm_step_gam_table_empty_init_excl_dis <-  -->
-<!-- #   step_gam('log(H2S_daily_max)', predictors_excl_dis, c(), 'stepwise', data_excl_dis) -->
-<!-- # log_dm_step_gam_table_full_init_excl_dis <-  -->
-<!-- #   step_gam('log(H2S_daily_max)', predictors_excl_dis, predictors_excl_dis, 'stepwise', data_excl_dis) -->
-<!-- ``` -->
-
-<!-- ```{r} -->
-<!-- # full with disaster indicator -->
-<!-- # log_dm_step_gam_table_empty_init_dis_ind <-  -->
-<!-- #   step_gam('log(H2S_daily_max)', predictors_dis_ind, c(), 'stepwise', data_dis_ind) -->
-<!-- # log_dm_step_gam_table_full_init_dis_ind <-  -->
-<!-- #   step_gam('log(H2S_daily_max)', predictors_dis_ind, predictors_dis_ind, 'stepwise', data_dis_ind) -->
-<!-- ``` -->
-
-<!-- ```{r} -->
-<!-- # full without disaster indicator -->
-<!-- # log_dm_step_gam_table_empty_init_full <-  -->
-<!-- #   step_gam('log(H2S_daily_max)', predictors_full, c(), 'stepwise', daily_full) -->
-<!-- # log_dm_step_gam_table_full_init_full <-  -->
-<!-- #   step_gam('log(H2S_daily_max)', predictors_full, predictors_full, 'stepwise', daily_full) -->
-<!-- ``` -->
 
 ### Get best model size for each model
 ```{r}
@@ -900,49 +524,6 @@ for (i in 1:nrow(smooth_models)) {
 # saveRDS(best_models, 'best_gam_models.rds')
 
 best_gam_models <- readRDS('best_gam_models.rds')
-```
-
-### Save step tables
-```{r}
-# for (model_table_name in model_table_names) {
-#   model_table <- get(model_table_name)
-#   write_csv(model_table, paste0('step_gam_tables/', model_table_name, '.csv'))
-# }
-```
-
-```{r}
-# read model tables
-# for (model_table_name in model_table_names) {
-#   assign(model_table_name, 
-#          read_csv(paste0('step_gam_tables/', model_table_name, '.csv')))
-# }
-```
-
-
-```{r}
-# model_features_table <- tibble(model_name = character(),
-#                                GCV = numeric(),
-#                                p = numeric(),
-#                                features = list())
-# 
-# # for each model, find the best set of predictors
-# for (model in model_table_names) {
-#   step_gam_table <- get(model)
-#   best_model <- step_gam_table[nrow(step_gam_table), ]
-#   best_model_features <-names(best_model)[as.logical(c(0, unname(unlist(c(best_model[1,-1])))))]
-#   model_features_table <- rbind(model_features_table, 
-#                                 tibble(model_name = model,
-#                                        GCV = best_model$GCV,
-#                                        p = length(best_model_features),
-#                                        features = list(best_model_features)))
-# }
-# 
-# meta <- expand.grid(stat, init, date)
-# names(meta) <- c('stat', 'init', 'date')
-# model_features_table <- cbind(meta, model_features_table)
-# 
-# saveRDS(model_features_table, 'step_gam_tables/model_features_table.rds')
-# model_features_table <- readRDS('step_gam_tables/model_features_table.rds')
 ```
 
 ## Final models
@@ -987,12 +568,12 @@ get_gam_model <- function(response, daterange) {
   return(gam_model)
 }
 
-# for (i in 1:nrow(best_gam_models)) {
-#   model <- get_gam_model(best_gam_models$response[i],
-#                          best_gam_models$daterange[i])
-#   assign(paste0(best_gam_models$name[i], '_', best_gam_models$daterange[i], '_gam'), model)
-#   saveRDS(model, paste0('gam_models/', paste0(best_gam_models$name[i], '_gam.rds')))
-# }
+for (i in 1:nrow(best_gam_models)) {
+  model <- get_gam_model(best_gam_models$response[i],
+                         best_gam_models$daterange[i])
+  assign(paste0(best_gam_models$name[i], '_', best_gam_models$daterange[i], '_gam'), model)
+  saveRDS(model, paste0('gam_models/', paste0(best_gam_models$name[i], '_gam.rds')))
+}
 ```
 
 
@@ -1053,6 +634,29 @@ Since February 2022
 ```{r}
 # Since feb 2022
 summary(log_da_sincefeb2022_gam)
+```
+```{r}
+get_gam_result <- function(model_obj, model_name){
+  p <- summary(model_obj)$p.pv
+  coef <- tibble(Term = names(summary(model_obj)$p.coeff), x = summary(model_obj)$p.coeff) %>%
+              mutate(x = paste0(formatC(x, format = 'e', digits = 2), 
+                              case_when(p < 0.001 ~ '***', 
+                                        0.001 <= p & p < 0.01 ~ '**', 
+                                        0.01 <= p & p < 0.05 ~ '*', 
+                                        0.05 <= p & p < 0.1 ~ '.', 
+                                        TRUE ~ '')))  %>%
+              rename({{model_name}} := x)
+  coef <- rbind(coef, tibble(Term = 'Adj.R-sq', {{model_name}} := 
+                             formatC(summary(model_obj)$r.sq, format = 'e', 
+                             digits = 2)))
+  return(coef)
+}
+sincefeb2022_model_stat <- get_gam_result(log_da_sincefeb2022_gam, 'Daily Average H2S Since Feb 2022') 
+
+sincefeb2022_model_stat_latex <- knitr::kable(sincefeb2022_model_stat, format = 'latex', digits = 2)
+writeLines(sincefeb2022_model_stat_latex, 'figures/sincefeb2022_log_model.tex')
+
+knitr::kable(sincefeb2022_model_stat, format = 'html', digits = 2)
 ```
 
 Disaster Only
@@ -1485,7 +1089,7 @@ names <- c("Longitude" = "mon_utm_x",
            "Friday" = "weekday_Fri",
            "Saturday" = "weekday_Sat",
            "Sunday" = "weekday_Sun",
-           "Disaster" = "disaster")
+           "Odor Event" = "disaster")
 
 imp<-varImp(fit.xgb_da_sincefeb2022,scale=FALSE)
 
@@ -1764,7 +1368,9 @@ imp %>%
   ylab("importance") +
   xlab("Variable") +
   coord_flip() +
-  theme_minimal()
+  theme_light()
+
+ggsave('../figures/dis_ind_da_fi.png', width = 20, height = 12, units = "cm")
 ```
 
 ```{r}
@@ -1779,29 +1385,42 @@ test_rmse <- mean(fold_stat$RMSE)
 ```
 
 ```{r}
-xgb_dis_ind_obs_vs_pred_plot <- ggplot(tibble(obs = test_result_data$obs, 
-                                                   pred = test_result_data$pred,
-                                            disaster = test_result_data$disaster),
-                             aes(x = pred, y = obs)) +
-                        geom_point(aes(col = factor(disaster)), show.legend = FALSE) +
-                        labs(y = 'Observed', x = 'Predicted', 
-                             title = 'Observed vs Predicted for everything with disaster indicator XGBoost') +
-                        stat_poly_line() +
-                        stat_poly_eq(use_label(c("eq", "R2", "n"))) +
-                        theme_bw()
+da_dis_ind_obs_vs_pred_plot <- 
+  ggplot(tibble(obs = test_result_data$obs, 
+                pred = test_result_data$pred,
+                disaster = test_result_data$disaster),
+         aes(x = pred, y = obs)) +
+  geom_point(aes(col = factor(disaster)), show.legend = FALSE) +
+  geom_abline(slope = 1, intercept = 0, linetype = 'dashed') +    
+  labs(y = 'Observed', x = 'Predicted', title = '') +
+  stat_poly_line() +
+  stat_poly_eq(use_label(c("eq")), label.x = "left", label.y = 0.95) +
+  stat_poly_eq(use_label(c("R2")), label.x = "left", label.y = 0.91) +        
+  stat_poly_eq(use_label(c("n")), label.x = "left", label.y = 0.85) +
+  theme_bw()
 
-xgb_dis_ind_obs_vs_pred_plot_zoom <- ggplot(tibble(obs = test_result_data$obs, 
-                                                   pred = test_result_data$pred,
-                                            disaster = test_result_data$disaster),
-                             aes(x = pred, y = obs)) +
-                        geom_point(aes(col = factor(disaster)), show.legend = FALSE) +
-                        stat_poly_line() +
-                        stat_poly_eq(use_label(c("eq", "R2", "n"))) +
-                        labs(y = 'Observed', x = 'Predicted', 
-                             title = 'Zoomed In') +
-                        coord_cartesian(xlim = c(0, 30), ylim = c(0, 30)) +
-                        theme_bw()
+da_dis_ind_obs_vs_pred_plot_zoom <- 
+  ggplot(tibble(obs = test_result_data$obs, 
+                pred = test_result_data$pred,
+                disaster = test_result_data$disaster),
+         aes(x = pred, y = obs)) +
+  geom_point(aes(col = factor(disaster)), show.legend = FALSE) +
+  geom_abline(slope = 1, intercept = 0, linetype = 'dashed') +    
+  labs(y = 'Observed', x = 'Predicted', title = '') +
+  stat_poly_line() +
+  stat_poly_eq(use_label(c("eq")), label.x = "left", label.y = 0.95) +
+  stat_poly_eq(use_label(c("R2")), label.x = "left", label.y = 0.91) +        
+  stat_poly_eq(use_label(c("n")), label.x = "left", label.y = 0.85) +
+  coord_cartesian(xlim = c(0, 10), ylim = c(0, 10)) +
+  theme_bw()
 ```
+
+```{r}
+ggarrange(da_dis_ind_obs_vs_pred_plot, da_dis_ind_obs_vs_pred_plot_zoom,
+          labels = c("1", "2"), nrow = 1)
+ggsave('../figures/dis_ind_da_ovp.png', width = 22, height = 12, units = "cm")
+```
+
 
 ```{r}
 validation_result <- rbind(validation_result,  
@@ -2712,7 +2331,9 @@ imp %>%
   ylab("importance") +
   xlab("Variable") +
   coord_flip() +
-  theme_minimal()
+  theme_light()
+
+ggsave('../figures/dis_ind_dm_fi.png', width = 20, height = 12, units = "cm")
 ```
 
 ```{r}
@@ -2726,29 +2347,41 @@ test_r2 <- mean(fold_stat$R2)
 test_rmse <- mean(fold_stat$RMSE)
 ```
 
-```{r}
-xgb_dis_ind_obs_vs_pred_plot <- ggplot(tibble(obs = test_result_data$obs, 
-                                                   pred = test_result_data$pred,
-                                            disaster = test_result_data$disaster),
-                             aes(x = pred, y = obs)) +
-                        geom_point(aes(col = factor(disaster)), show.legend = FALSE) +
-                        labs(y = 'Observed', x = 'Predicted', 
-                             title = 'Observed vs Predicted for everything with disaster indicator XGBoost') +
-                        stat_poly_line() +
-                        stat_poly_eq(use_label(c("eq", "R2", "n"))) +
-                        theme_bw()
+```{r, warning=FALSE}
+dm_dis_ind_obs_vs_pred_plot <- 
+  ggplot(tibble(obs = test_result_data$obs, 
+                pred = test_result_data$pred,
+                disaster = test_result_data$disaster),
+         aes(x = pred, y = obs)) +
+  geom_point(aes(col = factor(disaster)), show.legend = FALSE) +
+  geom_abline(slope = 1, intercept = 0, linetype = 'dashed') +    
+  labs(y = 'Observed', x = 'Predicted', title = '') +
+  stat_poly_line() +
+  stat_poly_eq(use_label(c("eq")), label.x = "left", label.y = 0.95) +
+  stat_poly_eq(use_label(c("R2")), label.x = "left", label.y = 0.91) +        
+  stat_poly_eq(use_label(c("n")), label.x = "left", label.y = 0.85) +
+  theme_bw()
 
-xgb_dis_ind_obs_vs_pred_plot_zoom <- ggplot(tibble(obs = test_result_data$obs, 
-                                                   pred = test_result_data$pred,
-                                            disaster = test_result_data$disaster),
-                             aes(x = pred, y = obs)) +
-                        geom_point(aes(col = factor(disaster)), show.legend = FALSE) +
-                        stat_poly_line() +
-                        stat_poly_eq(use_label(c("eq", "R2", "n"))) +
-                        labs(y = 'Observed', x = 'Predicted', 
-                             title = 'Zoomed In') +
-                        coord_cartesian(xlim = c(0, 30), ylim = c(0, 30)) +
-                        theme_bw()
+dm_dis_ind_obs_vs_pred_plot_zoom <- 
+  ggplot(tibble(obs = test_result_data$obs, 
+                pred = test_result_data$pred,
+                disaster = test_result_data$disaster),
+         aes(x = pred, y = obs)) +
+  geom_point(aes(col = factor(disaster)), show.legend = FALSE) +
+  geom_abline(slope = 1, intercept = 0, linetype = 'dashed') +    
+  labs(y = 'Observed', x = 'Predicted', title = '') +
+  stat_poly_line() +
+  stat_poly_eq(use_label(c("eq")), label.x = "left", label.y = 0.95) +
+  stat_poly_eq(use_label(c("R2")), label.x = "left", label.y = 0.91) +        
+  stat_poly_eq(use_label(c("n")), label.x = "left", label.y = 0.85) +
+  coord_cartesian(xlim = c(0, 50), ylim = c(0, 50)) +
+  theme_bw()
+```
+
+```{r, warning=FALSE}
+ggarrange(dm_dis_ind_obs_vs_pred_plot, dm_dis_ind_obs_vs_pred_plot_zoom,
+          labels = c("1", "2"), nrow = 1)
+ggsave('../figures/dis_ind_dm_ovp.png', width = 22, height = 12, units = "cm")
 ```
 
 ```{r}
@@ -3409,7 +3042,7 @@ names <- c("Longitude" = "mon_utm_x",
            "Friday" = "weekday_Fri",
            "Saturday" = "weekday_Sat",
            "Sunday" = "weekday_Sun",
-           "Disaster" = "disaster")
+           "Odor Event" = "disaster")
 
 imp<-varImp(fit.xgb_ha_sincefeb2022,scale=FALSE)
 
@@ -3688,7 +3321,9 @@ imp %>%
   ylab("importance") +
   xlab("Variable") +
   coord_flip() +
-  theme_minimal()
+  theme_light()
+
+ggsave('../figures/dis_ind_ha_fi.png', width = 20, height = 12, units = "cm")
 ```
 
 ```{r}
@@ -3702,29 +3337,41 @@ test_r2 <- mean(fold_stat$R2)
 test_rmse <- mean(fold_stat$RMSE)
 ```
 
-```{r}
-xgb_dis_ind_obs_vs_pred_plot <- ggplot(tibble(obs = test_result_data$obs, 
-                                                   pred = test_result_data$pred,
-                                            disaster = test_result_data$disaster),
-                             aes(x = pred, y = obs)) +
-                        geom_point(aes(col = factor(disaster)), show.legend = FALSE) +
-                        labs(y = 'Observed', x = 'Predicted', 
-                             title = 'Observed vs Predicted for everything with disaster indicator XGBoost') +
-                        stat_poly_line() +
-                        stat_poly_eq(use_label(c("eq", "R2", "n"))) +
-                        theme_bw()
+```{r, warning=FALSE}
+ha_dis_ind_obs_vs_pred_plot <- 
+  ggplot(tibble(obs = test_result_data$obs, 
+                pred = test_result_data$pred,
+                disaster = test_result_data$disaster),
+         aes(x = pred, y = obs)) +
+  geom_point(aes(col = factor(disaster)), show.legend = FALSE) +
+  geom_abline(slope = 1, intercept = 0, linetype = 'dashed') +    
+  labs(y = 'Observed', x = 'Predicted', title = '') +
+  stat_poly_line() +
+  stat_poly_eq(use_label(c("eq")), label.x = "left", label.y = 0.95) +
+  stat_poly_eq(use_label(c("R2")), label.x = "left", label.y = 0.91) +        
+  stat_poly_eq(use_label(c("n")), label.x = "left", label.y = 0.85) +
+  theme_bw()
 
-xgb_dis_ind_obs_vs_pred_plot_zoom <- ggplot(tibble(obs = test_result_data$obs, 
-                                                   pred = test_result_data$pred,
-                                            disaster = test_result_data$disaster),
-                             aes(x = pred, y = obs)) +
-                        geom_point(aes(col = factor(disaster)), show.legend = FALSE) +
-                        stat_poly_line() +
-                        stat_poly_eq(use_label(c("eq", "R2", "n"))) +
-                        labs(y = 'Observed', x = 'Predicted', 
-                             title = 'Zoomed In') +
-                        coord_cartesian(xlim = c(0, 30), ylim = c(0, 30)) +
-                        theme_bw()
+ha_dis_ind_obs_vs_pred_plot_zoom <- 
+  ggplot(tibble(obs = test_result_data$obs, 
+                pred = test_result_data$pred,
+                disaster = test_result_data$disaster),
+         aes(x = pred, y = obs)) +
+  geom_point(aes(col = factor(disaster)), show.legend = FALSE) +
+  geom_abline(slope = 1, intercept = 0, linetype = 'dashed') +    
+  labs(y = 'Observed', x = 'Predicted', title = '') +
+  stat_poly_line() +
+  stat_poly_eq(use_label(c("eq")), label.x = "left", label.y = 0.95) +
+  stat_poly_eq(use_label(c("R2")), label.x = "left", label.y = 0.91) +        
+  stat_poly_eq(use_label(c("n")), label.x = "left", label.y = 0.85) +
+  coord_cartesian(xlim = c(0, 20), ylim = c(0, 20)) +
+  theme_bw()
+```
+
+```{r, warning=FALSE}
+ggarrange(ha_dis_ind_obs_vs_pred_plot, ha_dis_ind_obs_vs_pred_plot_zoom,
+          labels = c("1", "2"), nrow = 1)
+ggsave('../figures/dis_ind_ha_ovp.png', width = 22, height = 12, units = "cm")
 ```
 
 ```{r}
@@ -4617,7 +4264,9 @@ imp %>%
   ylab("importance") +
   xlab("Variable") +
   coord_flip() +
-  theme_minimal()
+  theme_light()
+
+ggsave('../figures/dis_ind_hm_fi.png', width = 20, height = 12, units = "cm")
 ```
 
 ```{r}
@@ -4631,29 +4280,41 @@ test_r2 <- mean(fold_stat$R2)
 test_rmse <- mean(fold_stat$RMSE)
 ```
 
-```{r}
-xgb_dis_ind_obs_vs_pred_plot <- ggplot(tibble(obs = test_result_data$obs, 
-                                                   pred = test_result_data$pred,
-                                            disaster = test_result_data$disaster),
-                             aes(x = pred, y = obs)) +
-                        geom_point(aes(col = factor(disaster)), show.legend = FALSE) +
-                        labs(y = 'Observed', x = 'Predicted', 
-                             title = 'Observed vs Predicted for everything with disaster indicator XGBoost') +
-                        stat_poly_line() +
-                        stat_poly_eq(use_label(c("eq", "R2", "n"))) +
-                        theme_bw()
+```{r, warning=FALSE}
+hm_dis_ind_obs_vs_pred_plot <- 
+  ggplot(tibble(obs = test_result_data$obs, 
+                pred = test_result_data$pred,
+                disaster = test_result_data$disaster),
+         aes(x = pred, y = obs)) +
+  geom_point(aes(col = factor(disaster)), show.legend = FALSE) +
+  geom_abline(slope = 1, intercept = 0, linetype = 'dashed') +    
+  labs(y = 'Observed', x = 'Predicted', title = '') +
+  stat_poly_line() +
+  stat_poly_eq(use_label(c("eq")), label.x = "left", label.y = 0.95) +
+  stat_poly_eq(use_label(c("R2")), label.x = "left", label.y = 0.91) +        
+  stat_poly_eq(use_label(c("n")), label.x = "left", label.y = 0.85) +
+  theme_bw()
 
-xgb_dis_ind_obs_vs_pred_plot_zoom <- ggplot(tibble(obs = test_result_data$obs, 
-                                                   pred = test_result_data$pred,
-                                            disaster = test_result_data$disaster),
-                             aes(x = pred, y = obs)) +
-                        geom_point(aes(col = factor(disaster)), show.legend = FALSE) +
-                        stat_poly_line() +
-                        stat_poly_eq(use_label(c("eq", "R2", "n"))) +
-                        labs(y = 'Observed', x = 'Predicted', 
-                             title = 'Zoomed In') +
-                        coord_cartesian(xlim = c(0, 30), ylim = c(0, 30)) +
-                        theme_bw()
+hm_dis_ind_obs_vs_pred_plot_zoom <- 
+  ggplot(tibble(obs = test_result_data$obs, 
+                pred = test_result_data$pred,
+                disaster = test_result_data$disaster),
+         aes(x = pred, y = obs)) +
+  geom_point(aes(col = factor(disaster)), show.legend = FALSE) +
+  geom_abline(slope = 1, intercept = 0, linetype = 'dashed') +    
+  labs(y = 'Observed', x = 'Predicted', title = '') +
+  stat_poly_line() +
+  stat_poly_eq(use_label(c("eq")), label.x = "left", label.y = 0.95) +
+  stat_poly_eq(use_label(c("R2")), label.x = "left", label.y = 0.91) +        
+  stat_poly_eq(use_label(c("n")), label.x = "left", label.y = 0.85) +
+  coord_cartesian(xlim = c(0, 100), ylim = c(0, 100)) +
+  theme_bw()
+```
+
+```{r, warning=FALSE}
+ggarrange(hm_dis_ind_obs_vs_pred_plot, hm_dis_ind_obs_vs_pred_plot_zoom,
+          labels = c("1", "2"), nrow = 1)
+ggsave('../figures/dis_ind_hm_ovp.png', width = 22, height = 12, units = "cm")
 ```
 
 ```{r}

@@ -11,7 +11,7 @@ select <- dplyr::select
 
 savedir <- '../rfiles/xgboost_v2/'
 #savedir <- 'xgboost/'
-daily_full <- readRDS('daily_full_20230930.rds')
+daily_full <- readRDS('../data/daily_full_20230930.rds')
 
 daily_full <- daily_full %>%
   mutate(Monitor = str_replace_all(Monitor, ' ', '_'),
